@@ -32,6 +32,9 @@ import {
   Copy,
   Share2,
   Users,
+  Search,
+  Filter,
+  Crown,
 } from "lucide-react";
 import {
   BarChart,
@@ -108,6 +111,14 @@ const PAST_DAYS = [
   { day: "Jeu", volume: 460000 },
   { day: "Ven", volume: 610000 },
   { day: "Sam", volume: 705000 },
+];
+
+const TEAM_ROSTER = [
+  { name: "Awa Koné", agency: "Agence Marcory", transactions: 18, volume: 612000, status: "actif" },
+  { name: "Ibrahim Traoré", agency: "Agence Yopougon", transactions: 12, volume: 398000, status: "actif" },
+  { name: "Fatou Diabaté", agency: "Agence Cocody", transactions: 21, volume: 745000, status: "actif" },
+  { name: "Yao Kouassi", agency: "Agence Adjamé", transactions: 6, volume: 154000, status: "inactif" },
+  { name: "Mariam Sylla", agency: "Agence Treichville", transactions: 15, volume: 501000, status: "actif" },
 ];
 
 const FAQ_ITEMS = [
@@ -235,6 +246,8 @@ export default function GuichetApp() {
   const [signupAgency, setSignupAgency] = useState("");
   const [signupPassword, setSignupPassword] = useState("");
   const [signupPin, setSignupPin] = useState("");
+  const [signupRole, setSignupRole] = useState("agent");
+  const [loginRole, setLoginRole] = useState("agent");
   const [authError, setAuthError] = useState("");
 
   // PIN confirmation modal state
@@ -249,7 +262,7 @@ export default function GuichetApp() {
       setAuthError("Renseigne ton numéro et ton mot de passe.");
       return;
     }
-    setAgent({ name: "Agent " + loginPhone.slice(-4), phone: loginPhone, agency: "Agence démo", pin: DEMO_PIN });
+    setAgent({ name: "Agent " + loginPhone.slice(-4), phone: loginPhone, agency: "Agence démo", pin: DEMO_PIN, role: loginRole });
     setIsAuthenticated(true);
     setAuthError("");
   }
@@ -260,7 +273,7 @@ export default function GuichetApp() {
       setAuthError(signupPin.length !== 4 ? "Le code PIN doit contenir exactement 4 chiffres." : "Merci de remplir tous les champs.");
       return;
     }
-    setAgent({ name: signupName, phone: signupPhone, agency: signupAgency, pin: signupPin });
+    setAgent({ name: signupName, phone: signupPhone, agency: signupAgency, pin: signupPin, role: signupRole });
     setIsAuthenticated(true);
     setAuthError("");
   }
@@ -270,6 +283,18 @@ export default function GuichetApp() {
     setAgent(null);
     setTab("dashboard");
   }
+
+  // Historique : recherche et filtres
+  const [historySearch, setHistorySearch] = useState("");
+  const [historyNetworkFilter, setHistoryNetworkFilter] = useState("all");
+  const [historyStatusFilter, setHistoryStatusFilter] = useState("all");
+
+  const filteredHistory = history.filter((h) => {
+    const matchSearch = historySearch.trim() === "" || h.phone.toLowerCase().includes(historySearch.trim().toLowerCase());
+    const matchNetwork = historyNetworkFilter === "all" || h.net === historyNetworkFilter;
+    const matchStatus = historyStatusFilter === "all" || h.status === historyStatusFilter;
+    return matchSearch && matchNetwork && matchStatus;
+  });
 
   // Parrainage state
   const [referralCopied, setReferralCopied] = useState(false);
@@ -679,6 +704,24 @@ export default function GuichetApp() {
                     className="w-full px-3.5 py-2.5 rounded-lg text-sm mb-4 outline-none"
                     style={{ background: COLORS.bgSoft, border: `1px solid ${COLORS.surfaceLine}`, color: COLORS.text }}
                   />
+                  <label className="text-xs mb-2 block" style={{ color: COLORS.textMuted }}>Type de compte</label>
+                  <div className="flex gap-2 mb-4">
+                    {[{ id: "agent", label: "Agent terrain" }, { id: "manager", label: "Chef d'agence" }].map((r) => (
+                      <button
+                        key={r.id}
+                        type="button"
+                        onClick={() => setLoginRole(r.id)}
+                        className="gc-btn flex-1 py-2 rounded-lg text-xs font-medium"
+                        style={
+                          loginRole === r.id
+                            ? { background: COLORS.gold, color: "#241800" }
+                            : { background: COLORS.bgSoft, color: COLORS.textMuted, border: `1px solid ${COLORS.surfaceLine}` }
+                        }
+                      >
+                        {r.label}
+                      </button>
+                    ))}
+                  </div>
                   {authError && <p className="text-xs mb-4" style={{ color: COLORS.danger }}>{authError}</p>}
                   <button
                     type="submit"
@@ -736,6 +779,24 @@ export default function GuichetApp() {
                   <p className="text-xs mb-4" style={{ color: COLORS.textMuted }}>
                     Ce code te sera demandé pour confirmer chaque transaction.
                   </p>
+                  <label className="text-xs mb-2 block" style={{ color: COLORS.textMuted }}>Type de compte</label>
+                  <div className="flex gap-2 mb-4">
+                    {[{ id: "agent", label: "Agent terrain" }, { id: "manager", label: "Chef d'agence" }].map((r) => (
+                      <button
+                        key={r.id}
+                        type="button"
+                        onClick={() => setSignupRole(r.id)}
+                        className="gc-btn flex-1 py-2 rounded-lg text-xs font-medium"
+                        style={
+                          signupRole === r.id
+                            ? { background: COLORS.gold, color: "#241800" }
+                            : { background: COLORS.bgSoft, color: COLORS.textMuted, border: `1px solid ${COLORS.surfaceLine}` }
+                        }
+                      >
+                        {r.label}
+                      </button>
+                    ))}
+                  </div>
                   {authError && <p className="text-xs mb-4" style={{ color: COLORS.danger }}>{authError}</p>}
                   <button
                     type="submit"
@@ -766,7 +827,17 @@ export default function GuichetApp() {
               {agent?.name?.charAt(0)}
             </div>
             <div>
-              <div className="text-sm font-medium">Bonjour, {agent?.name}</div>
+              <div className="text-sm font-medium flex items-center gap-2">
+                Bonjour, {agent?.name}
+                {agent?.role === "manager" && (
+                  <span
+                    className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full"
+                    style={{ background: "rgba(232,169,59,0.15)", color: COLORS.goldSoft }}
+                  >
+                    <Crown size={10} /> Chef d'agence
+                  </span>
+                )}
+              </div>
               <div className="text-xs" style={{ color: COLORS.textMuted }}>{agent?.agency}</div>
             </div>
           </div>
@@ -789,6 +860,7 @@ export default function GuichetApp() {
             { id: "historique", label: "Historique", icon: Clock },
             { id: "annonceurs", label: "Espace annonceurs", icon: Megaphone },
             { id: "parrainage", label: "Parrainage", icon: Users },
+            ...(agent?.role === "manager" ? [{ id: "equipe", label: "Équipe", icon: Crown }] : []),
           ].map((t) => (
             <button
               key={t.id}
@@ -1034,7 +1106,56 @@ export default function GuichetApp() {
 
         {/* Historique tab */}
         {tab === "historique" && (
-          <div className="gc-fade-in rounded-xl overflow-hidden" style={{ border: `1px solid ${COLORS.surfaceLine}` }}>
+          <div className="gc-fade-in">
+            <div className="flex flex-col md:flex-row gap-2 mb-4">
+              <div className="relative flex-1">
+                <Search size={14} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: COLORS.textMuted }} />
+                <input
+                  value={historySearch}
+                  onChange={(e) => setHistorySearch(e.target.value)}
+                  placeholder="Rechercher par numéro / référence…"
+                  className="w-full pl-9 pr-3.5 py-2.5 rounded-lg text-sm outline-none"
+                  style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}`, color: COLORS.text }}
+                />
+              </div>
+              <select
+                value={historyNetworkFilter}
+                onChange={(e) => setHistoryNetworkFilter(e.target.value)}
+                className="px-3.5 py-2.5 rounded-lg text-sm outline-none"
+                style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}`, color: COLORS.text }}
+              >
+                <option value="all">Tous les services</option>
+                {NETWORKS.map((n) => (
+                  <option key={n.id} value={n.id}>{n.name}</option>
+                ))}
+              </select>
+              <select
+                value={historyStatusFilter}
+                onChange={(e) => setHistoryStatusFilter(e.target.value)}
+                className="px-3.5 py-2.5 rounded-lg text-sm outline-none"
+                style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}`, color: COLORS.text }}
+              >
+                <option value="all">Tous les statuts</option>
+                <option value="Terminé">Terminé</option>
+                <option value="En cours">En cours</option>
+              </select>
+            </div>
+
+            {(historySearch || historyNetworkFilter !== "all" || historyStatusFilter !== "all") && (
+              <div className="flex items-center gap-2 mb-3 text-xs" style={{ color: COLORS.textMuted }}>
+                <Filter size={12} />
+                {filteredHistory.length} résultat{filteredHistory.length > 1 ? "s" : ""}
+                <button
+                  onClick={() => { setHistorySearch(""); setHistoryNetworkFilter("all"); setHistoryStatusFilter("all"); }}
+                  className="underline"
+                  style={{ color: COLORS.goldSoft }}
+                >
+                  Réinitialiser
+                </button>
+              </div>
+            )}
+
+          <div className="rounded-xl overflow-hidden" style={{ border: `1px solid ${COLORS.surfaceLine}` }}>
             <table className="w-full text-sm">
               <thead>
                 <tr style={{ background: COLORS.surface, color: COLORS.textMuted }}>
@@ -1046,7 +1167,14 @@ export default function GuichetApp() {
                 </tr>
               </thead>
               <tbody>
-                {history.map((h) => {
+                {filteredHistory.length === 0 && (
+                  <tr>
+                    <td colSpan={5} className="px-4 py-8 text-center text-sm" style={{ color: COLORS.textMuted }}>
+                      Aucune transaction ne correspond à ces filtres.
+                    </td>
+                  </tr>
+                )}
+                {filteredHistory.map((h) => {
                   const n = NETWORKS.find((x) => x.id === h.net);
                   return (
                     <tr key={h.id} style={{ borderTop: `1px solid ${COLORS.surfaceLine}` }}>
@@ -1076,6 +1204,7 @@ export default function GuichetApp() {
                 })}
               </tbody>
             </table>
+          </div>
           </div>
         )}
 
@@ -1178,6 +1307,87 @@ export default function GuichetApp() {
                 Fais scanner ce code par une connaissance — elle arrivera directement sur la page d'inscription.
               </p>
             </div>
+          </div>
+        )}
+
+        {tab === "equipe" && agent?.role === "manager" && (
+          <div className="gc-fade-in">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+              {[
+                { label: "Agents dans l'équipe", value: TEAM_ROSTER.length },
+                { label: "Agents actifs", value: TEAM_ROSTER.filter((a) => a.status === "actif").length },
+                { label: "Transactions équipe (jour)", value: TEAM_ROSTER.reduce((s, a) => s + a.transactions, 0) },
+                { label: "Volume équipe (jour)", value: formatFCFA(TEAM_ROSTER.reduce((s, a) => s + a.volume, 0)) },
+              ].map((s) => (
+                <div key={s.label} className="p-4 rounded-xl" style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}` }}>
+                  <div className="text-xs mb-1.5" style={{ color: COLORS.textMuted }}>{s.label}</div>
+                  <div className="gc-display gc-mono text-lg md:text-xl font-semibold">{s.value}</div>
+                </div>
+              ))}
+            </div>
+
+            <div className="p-5 rounded-xl mb-4" style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}` }}>
+              <div className="text-sm font-medium mb-4">Volume par agent — aujourd'hui</div>
+              <ResponsiveContainer width="100%" height={220}>
+                <BarChart data={TEAM_ROSTER.map((a) => ({ name: a.name.split(" ")[0], volume: a.volume }))}>
+                  <CartesianGrid stroke={COLORS.chartGrid} strokeDasharray="3 4" vertical={false} />
+                  <XAxis dataKey="name" tick={{ fill: COLORS.textMuted, fontSize: 10 }} axisLine={{ stroke: COLORS.surfaceLine }} tickLine={false} />
+                  <YAxis
+                    tick={{ fill: COLORS.textMuted, fontSize: 10 }}
+                    axisLine={false}
+                    tickLine={false}
+                    tickFormatter={(v) => `${Math.round(v / 1000)}k`}
+                    width={38}
+                  />
+                  <Tooltip
+                    contentStyle={{ background: COLORS.bgSoft, border: `1px solid ${COLORS.surfaceLine}`, borderRadius: 8, fontSize: 12 }}
+                    labelStyle={{ color: COLORS.text }}
+                    formatter={(v) => [formatFCFA(v), "Volume"]}
+                  />
+                  <Bar dataKey="volume" radius={[6, 6, 0, 0]} fill={COLORS.gold} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+
+            <div className="rounded-xl overflow-hidden" style={{ border: `1px solid ${COLORS.surfaceLine}` }}>
+              <table className="w-full text-sm">
+                <thead>
+                  <tr style={{ background: COLORS.surface, color: COLORS.textMuted }}>
+                    <th className="text-left font-normal px-4 py-3">Agent</th>
+                    <th className="text-left font-normal px-4 py-3">Agence</th>
+                    <th className="text-right font-normal px-4 py-3">Transactions</th>
+                    <th className="text-right font-normal px-4 py-3">Volume</th>
+                    <th className="text-left font-normal px-4 py-3">Statut</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {TEAM_ROSTER.map((a) => (
+                    <tr key={a.name} style={{ borderTop: `1px solid ${COLORS.surfaceLine}` }}>
+                      <td className="px-4 py-3">{a.name}</td>
+                      <td className="px-4 py-3" style={{ color: COLORS.textMuted }}>{a.agency}</td>
+                      <td className="px-4 py-3 text-right gc-mono">{a.transactions}</td>
+                      <td className="px-4 py-3 text-right gc-mono">{formatFCFA(a.volume)}</td>
+                      <td className="px-4 py-3">
+                        <span
+                          className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-md"
+                          style={
+                            a.status === "actif"
+                              ? { background: "rgba(43,191,138,0.12)", color: COLORS.teal }
+                              : { background: "rgba(226,104,94,0.12)", color: COLORS.danger }
+                          }
+                        >
+                          {a.status === "actif" ? "Actif" : "Inactif"}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <p className="text-xs mt-3" style={{ color: COLORS.textMuted }}>
+              Données d'équipe simulées à titre de démonstration.
+            </p>
           </div>
         )}
         </>
