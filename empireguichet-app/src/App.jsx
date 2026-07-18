@@ -28,6 +28,10 @@ import {
   Car,
   Sun,
   Moon,
+  QrCode,
+  Copy,
+  Share2,
+  Users,
 } from "lucide-react";
 import {
   BarChart,
@@ -265,6 +269,34 @@ export default function GuichetApp() {
     setIsAuthenticated(false);
     setAgent(null);
     setTab("dashboard");
+  }
+
+  // Parrainage state
+  const [referralCopied, setReferralCopied] = useState(false);
+  const referralLink =
+    typeof window !== "undefined"
+      ? `${window.location.origin}${window.location.pathname}?parrain=${encodeURIComponent(agent?.phone || "demo")}`
+      : "";
+
+  function handleCopyReferral() {
+    if (typeof navigator !== "undefined" && navigator.clipboard) {
+      navigator.clipboard.writeText(referralLink).then(() => {
+        setReferralCopied(true);
+        setTimeout(() => setReferralCopied(false), 2000);
+      });
+    }
+  }
+
+  function handleShareReferral() {
+    if (typeof navigator !== "undefined" && navigator.share) {
+      navigator.share({
+        title: "EmpireGuichet",
+        text: "Rejoins-moi sur EmpireGuichet — mobile money, factures et crypto au même endroit.",
+        url: referralLink,
+      }).catch(() => {});
+    } else {
+      handleCopyReferral();
+    }
   }
 
   // Support widget state
@@ -756,6 +788,7 @@ export default function GuichetApp() {
             { id: "transaction", label: "Nouvelle transaction", icon: ArrowRightLeft },
             { id: "historique", label: "Historique", icon: Clock },
             { id: "annonceurs", label: "Espace annonceurs", icon: Megaphone },
+            { id: "parrainage", label: "Parrainage", icon: Users },
           ].map((t) => (
             <button
               key={t.id}
@@ -1082,6 +1115,69 @@ export default function GuichetApp() {
             <p className="text-xs" style={{ color: COLORS.textMuted, maxWidth: 560 }}>
               En production, ces emplacements se connectent à une régie publicitaire (ex. Google AdSense) ou à des annonceurs locaux directs — opérateurs, boutiques partenaires, services de transfert international.
             </p>
+          </div>
+        )}
+
+        {tab === "parrainage" && (
+          <div className="gc-fade-in grid md:grid-cols-2 gap-4">
+            <div className="p-6 rounded-xl" style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}` }}>
+              <div className="flex items-center gap-2 mb-3">
+                <Users size={16} style={{ color: COLORS.goldSoft }} />
+                <span className="text-sm font-medium">Invite tes connaissances</span>
+              </div>
+              <p className="text-xs mb-5" style={{ color: COLORS.textMuted }}>
+                Partage ton lien ou ton QR code personnel — tes connaissances pourront rejoindre EmpireGuichet en un clic depuis leur téléphone.
+              </p>
+
+              <div
+                className="px-3 py-2.5 rounded-lg text-xs gc-mono mb-3 break-all"
+                style={{ background: COLORS.bgSoft, border: `1px solid ${COLORS.surfaceLine}`, color: COLORS.text }}
+              >
+                {referralLink}
+              </div>
+
+              <div className="flex gap-2 mb-5">
+                <button
+                  onClick={handleCopyReferral}
+                  className="gc-btn flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg text-sm font-medium border"
+                  style={{ borderColor: COLORS.surfaceLine, color: COLORS.text }}
+                >
+                  <Copy size={14} /> {referralCopied ? "Copié !" : "Copier le lien"}
+                </button>
+                <button
+                  onClick={handleShareReferral}
+                  className="gc-btn flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg text-sm font-medium"
+                  style={{ background: COLORS.gold, color: "#241800" }}
+                >
+                  <Share2 size={14} /> Partager
+                </button>
+              </div>
+
+              <div className="p-4 rounded-lg" style={{ background: "rgba(43,191,138,0.1)", border: `1px solid ${COLORS.surfaceLine}` }}>
+                <div className="text-xs mb-1" style={{ color: COLORS.textMuted }}>Connaissances invitées (simulé)</div>
+                <div className="gc-display gc-mono text-xl font-semibold" style={{ color: COLORS.teal }}>4</div>
+              </div>
+            </div>
+
+            <div className="p-6 rounded-xl flex flex-col items-center justify-center text-center" style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}` }}>
+              <div className="flex items-center gap-2 mb-4">
+                <QrCode size={16} style={{ color: COLORS.goldSoft }} />
+                <span className="text-sm font-medium">Ton QR code personnel</span>
+              </div>
+              <div className="p-3 rounded-xl mb-3" style={{ background: "#FFFFFF" }}>
+                {referralLink && (
+                  <img
+                    src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(referralLink)}`}
+                    alt="QR code de parrainage EmpireGuichet"
+                    width={180}
+                    height={180}
+                  />
+                )}
+              </div>
+              <p className="text-xs" style={{ color: COLORS.textMuted, maxWidth: 260 }}>
+                Fais scanner ce code par une connaissance — elle arrivera directement sur la page d'inscription.
+              </p>
+            </div>
           </div>
         )}
         </>
