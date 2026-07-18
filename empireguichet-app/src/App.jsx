@@ -35,6 +35,13 @@ import {
   Search,
   Filter,
   Crown,
+  FileText,
+  Table,
+  Settings,
+  Bell,
+  KeyRound,
+  Save,
+  Check,
 } from "lucide-react";
 import {
   BarChart,
@@ -297,6 +304,112 @@ export default function GuichetApp() {
     return matchSearch && matchNetwork && matchStatus;
   });
 
+  function exportHistoryExcel() {
+    const rows = filteredHistory.map((h) => {
+      const n = NETWORKS.find((x) => x.id === h.net);
+      return {
+        Ticket: "#" + String(h.id).padStart(5, "0"),
+        Service: n.name,
+        "Numéro / référence": h.phone,
+        "Montant (FCFA)": h.amount,
+        Statut: h.status,
+      };
+    });
+    import("xlsx").then((XLSX) => {
+      const ws = XLSX.utils.json_to_sheet(rows);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Historique");
+      XLSX.writeFile(wb, "empireguichet-historique.xlsx");
+    });
+  }
+
+  function exportHistoryPDF() {
+    Promise.all([import("jspdf"), import("jspdf-autotable")]).then(([{ default: jsPDF }, autoTable]) => {
+      const doc = new jsPDF();
+      doc.setFontSize(14);
+      doc.text("EmpireGuichet — Historique des transactions", 14, 16);
+      doc.setFontSize(9);
+      doc.text(`Agent : ${agent?.name || ""}  —  Agence : ${agent?.agency || ""}`, 14, 23);
+      const rows = filteredHistory.map((h) => {
+        const n = NETWORKS.find((x) => x.id === h.net);
+        return ["#" + String(h.id).padStart(5, "0"), n.name, h.phone, formatFCFA(h.amount), h.status];
+      });
+      (autoTable.default || autoTable)(doc, {
+        head: [["Ticket", "Service", "Numéro / référence", "Montant", "Statut"]],
+        body: rows,
+        startY: 28,
+        styles: { fontSize: 8 },
+        headStyles: { fillColor: [232, 169, 59] },
+      });
+      doc.save("empireguichet-historique.pdf");
+    });
+  }
+
+  // Paramètres du compte : changer PIN / mot de passe
+  const [currentPinInput, setCurrentPinInput] = useState("");
+  const [newPinInput, setNewPinInput] = useState("");
+  const [confirmPinInput, setConfirmPinInput] = useState("");
+  const [pinChangeMsg, setPinChangeMsg] = useState({ type: "", text: "" });
+  const [newPasswordInput, setNewPasswordInput] = useState("");
+  const [confirmPasswordInput, setConfirmPasswordInput] = useState("");
+  const [passwordChangeMsg, setPasswordChangeMsg] = useState({ type: "", text: "" });
+
+  function handleChangePin(e) {
+    e.preventDefault();
+    if (currentPinInput !== (agent?.pin || DEMO_PIN)) {
+      setPinChangeMsg({ type: "error", text: "Code PIN actuel incorrect." });
+      return;
+    }
+    if (newPinInput.length !== 4) {
+      setPinChangeMsg({ type: "error", text: "Le nouveau code doit contenir 4 chiffres." });
+      return;
+    }
+    if (newPinInput !== confirmPinInput) {
+      setPinChangeMsg({ type: "error", text: "Les deux codes ne correspondent pas." });
+      return;
+    }
+    setAgent((a) => ({ ...a, pin: newPinInput }));
+    setCurrentPinInput("");
+    setNewPinInput("");
+    setConfirmPinInput("");
+    setPinChangeMsg({ type: "success", text: "Code PIN mis à jour." });
+  }
+
+  function handleChangePassword(e) {
+    e.preventDefault();
+    if (newPasswordInput.length < 6) {
+      setPasswordChangeMsg({ type: "error", text: "Le mot de passe doit contenir au moins 6 caractères." });
+      return;
+    }
+    if (newPasswordInput !== confirmPasswordInput) {
+      setPasswordChangeMsg({ type: "error", text: "Les deux mots de passe ne correspondent pas." });
+      return;
+    }
+    setNewPasswordInput("");
+    setConfirmPasswordInput("");
+    setPasswordChangeMsg({ type: "success", text: "Mot de passe mis à jour." });
+  }
+
+  // Notifications
+  const [notifOpen, setNotifOpen] = useState(false);
+  const [notifications, setNotifications] = useState([
+    { id: 1, text: "Bienvenue sur EmpireGuichet 👋", time: "Aujourd'hui", read: true },
+  ]);
+  const notifCounter = useRef(2);
+
+  function pushNotification(text) {
+    setNotifications((list) => [
+      { id: notifCounter.current++, text, time: "À l'instant", read: false },
+      ...list,
+    ]);
+  }
+
+  function markAllNotificationsRead() {
+    setNotifications((list) => list.map((n) => ({ ...n, read: true })));
+  }
+
+  const unreadCount = notifications.filter((n) => !n.read).length;
+
   // Parrainage state
   const [referralCopied, setReferralCopied] = useState(false);
   const referralLink =
@@ -369,6 +482,7 @@ export default function GuichetApp() {
       setHistory((h) => [completed, ...h]);
       setLastReceipt(completed);
       setPending(null);
+      pushNotification(`Transaction confirmée — Ticket #${String(completed.id).padStart(5, "0")} (${formatFCFA(completed.amount)})`);
     }, 1400);
     return () => clearTimeout(t);
   }, [pending]);
@@ -469,6 +583,13 @@ export default function GuichetApp() {
   }, 0);
   const floatBalance = Math.max(INITIAL_FLOAT - todayVolume, 0);
 
+  useEffect(() => {
+    if (floatBalance > 0 && floatBalance < 50000) {
+      pushNotification("Solde bas — pense à réapprovisionner ton compte agent.");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [floatBalance < 50000]);
+
   function scrollToDemo() {
     demoRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
@@ -545,6 +666,56 @@ export default function GuichetApp() {
               >
                 Se connecter <ChevronRight size={15} />
               </button>
+            )}
+            {isAuthenticated && (
+              <div className="relative">
+                <button
+                  onClick={() => setNotifOpen((v) => !v)}
+                  aria-label="Notifications"
+                  className="gc-btn w-9 h-9 rounded-lg flex items-center justify-center relative"
+                  style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}`, color: COLORS.goldSoft }}
+                >
+                  <Bell size={16} />
+                  {unreadCount > 0 && (
+                    <span
+                      className="absolute -top-1 -right-1 flex items-center justify-center text-[9px] font-semibold rounded-full"
+                      style={{ width: 15, height: 15, background: COLORS.danger, color: "#fff" }}
+                    >
+                      {unreadCount}
+                    </span>
+                  )}
+                </button>
+                {notifOpen && (
+                  <div
+                    className="gc-fade-in absolute right-0 mt-2 rounded-xl overflow-hidden z-30"
+                    style={{ width: 300, background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}`, boxShadow: "0 20px 50px -20px rgba(0,0,0,0.6)" }}
+                  >
+                    <div className="flex items-center justify-between px-4 py-3" style={{ borderBottom: `1px solid ${COLORS.surfaceLine}` }}>
+                      <span className="text-sm font-medium">Notifications</span>
+                      {unreadCount > 0 && (
+                        <button onClick={markAllNotificationsRead} className="text-xs flex items-center gap-1" style={{ color: COLORS.goldSoft }}>
+                          <Check size={12} /> Tout marquer lu
+                        </button>
+                      )}
+                    </div>
+                    <div style={{ maxHeight: 280, overflowY: "auto" }}>
+                      {notifications.length === 0 && (
+                        <p className="text-xs px-4 py-6 text-center" style={{ color: COLORS.textMuted }}>Aucune notification.</p>
+                      )}
+                      {notifications.map((n) => (
+                        <div
+                          key={n.id}
+                          className="px-4 py-3 text-xs"
+                          style={{ borderTop: `1px solid ${COLORS.surfaceLine}`, background: n.read ? "transparent" : "rgba(232,169,59,0.06)", color: COLORS.text }}
+                        >
+                          <div>{n.text}</div>
+                          <div style={{ color: COLORS.textMuted }} className="mt-1">{n.time}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
             )}
             <button
               onClick={() => setTheme((t) => (t === "dark" ? "light" : "dark"))}
@@ -898,6 +1069,7 @@ export default function GuichetApp() {
             { id: "annonceurs", label: "Espace annonceurs", icon: Megaphone },
             { id: "parrainage", label: "Parrainage", icon: Users },
             ...(agent?.role === "manager" ? [{ id: "equipe", label: "Équipe", icon: Crown }] : []),
+            { id: "parametres", label: "Paramètres", icon: Settings },
           ].map((t) => (
             <button
               key={t.id}
@@ -1178,6 +1350,23 @@ export default function GuichetApp() {
               </select>
             </div>
 
+            <div className="flex gap-2 mb-4">
+              <button
+                onClick={exportHistoryExcel}
+                className="gc-btn flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-medium border"
+                style={{ borderColor: COLORS.surfaceLine, color: COLORS.text }}
+              >
+                <Table size={13} /> Exporter en Excel
+              </button>
+              <button
+                onClick={exportHistoryPDF}
+                className="gc-btn flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-medium border"
+                style={{ borderColor: COLORS.surfaceLine, color: COLORS.text }}
+              >
+                <FileText size={13} /> Exporter en PDF
+              </button>
+            </div>
+
             {(historySearch || historyNetworkFilter !== "all" || historyStatusFilter !== "all") && (
               <div className="flex items-center gap-2 mb-3 text-xs" style={{ color: COLORS.textMuted }}>
                 <Filter size={12} />
@@ -1425,6 +1614,104 @@ export default function GuichetApp() {
             <p className="text-xs mt-3" style={{ color: COLORS.textMuted }}>
               Données d'équipe simulées à titre de démonstration.
             </p>
+          </div>
+        )}
+
+        {tab === "parametres" && (
+          <div className="gc-fade-in grid md:grid-cols-2 gap-4 max-w-3xl">
+            <form
+              onSubmit={handleChangePin}
+              className="p-6 rounded-xl"
+              style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}` }}
+            >
+              <div className="flex items-center gap-2 mb-4">
+                <KeyRound size={16} style={{ color: COLORS.goldSoft }} />
+                <span className="text-sm font-medium">Changer le code PIN</span>
+              </div>
+              <label className="text-xs mb-2 block" style={{ color: COLORS.textMuted }}>Code PIN actuel</label>
+              <input
+                value={currentPinInput}
+                onChange={(e) => setCurrentPinInput(e.target.value.replace(/\D/g, "").slice(0, 4))}
+                inputMode="numeric"
+                maxLength={4}
+                className="w-full px-3.5 py-2.5 rounded-lg text-sm mb-3 outline-none gc-mono tracking-widest"
+                style={{ background: COLORS.bgSoft, border: `1px solid ${COLORS.surfaceLine}`, color: COLORS.text }}
+              />
+              <label className="text-xs mb-2 block" style={{ color: COLORS.textMuted }}>Nouveau code PIN</label>
+              <input
+                value={newPinInput}
+                onChange={(e) => setNewPinInput(e.target.value.replace(/\D/g, "").slice(0, 4))}
+                inputMode="numeric"
+                maxLength={4}
+                className="w-full px-3.5 py-2.5 rounded-lg text-sm mb-3 outline-none gc-mono tracking-widest"
+                style={{ background: COLORS.bgSoft, border: `1px solid ${COLORS.surfaceLine}`, color: COLORS.text }}
+              />
+              <label className="text-xs mb-2 block" style={{ color: COLORS.textMuted }}>Confirmer le nouveau code</label>
+              <input
+                value={confirmPinInput}
+                onChange={(e) => setConfirmPinInput(e.target.value.replace(/\D/g, "").slice(0, 4))}
+                inputMode="numeric"
+                maxLength={4}
+                className="w-full px-3.5 py-2.5 rounded-lg text-sm mb-4 outline-none gc-mono tracking-widest"
+                style={{ background: COLORS.bgSoft, border: `1px solid ${COLORS.surfaceLine}`, color: COLORS.text }}
+              />
+              {pinChangeMsg.text && (
+                <p className="text-xs mb-4" style={{ color: pinChangeMsg.type === "error" ? COLORS.danger : COLORS.teal }}>
+                  {pinChangeMsg.text}
+                </p>
+              )}
+              <button
+                type="submit"
+                className="gc-btn w-full flex items-center justify-center gap-1.5 py-2.5 rounded-lg text-sm font-medium"
+                style={{ background: COLORS.gold, color: "#241800" }}
+              >
+                <Save size={14} /> Mettre à jour le PIN
+              </button>
+            </form>
+
+            <form
+              onSubmit={handleChangePassword}
+              className="p-6 rounded-xl"
+              style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}` }}
+            >
+              <div className="flex items-center gap-2 mb-4">
+                <LogIn size={16} style={{ color: COLORS.goldSoft }} />
+                <span className="text-sm font-medium">Changer le mot de passe</span>
+              </div>
+              <label className="text-xs mb-2 block" style={{ color: COLORS.textMuted }}>Nouveau mot de passe</label>
+              <input
+                type="password"
+                value={newPasswordInput}
+                onChange={(e) => setNewPasswordInput(e.target.value)}
+                placeholder="••••••••"
+                className="w-full px-3.5 py-2.5 rounded-lg text-sm mb-3 outline-none"
+                style={{ background: COLORS.bgSoft, border: `1px solid ${COLORS.surfaceLine}`, color: COLORS.text }}
+              />
+              <label className="text-xs mb-2 block" style={{ color: COLORS.textMuted }}>Confirmer le mot de passe</label>
+              <input
+                type="password"
+                value={confirmPasswordInput}
+                onChange={(e) => setConfirmPasswordInput(e.target.value)}
+                placeholder="••••••••"
+                className="w-full px-3.5 py-2.5 rounded-lg text-sm mb-4 outline-none"
+                style={{ background: COLORS.bgSoft, border: `1px solid ${COLORS.surfaceLine}`, color: COLORS.text }}
+              />
+              {passwordChangeMsg.text && (
+                <p className="text-xs mb-4" style={{ color: passwordChangeMsg.type === "error" ? COLORS.danger : COLORS.teal }}>
+                  {passwordChangeMsg.text}
+                </p>
+              )}
+              <button
+                type="submit"
+                className="gc-btn w-full flex items-center justify-center gap-1.5 py-2.5 rounded-lg text-sm font-medium"
+                style={{ background: COLORS.gold, color: "#241800" }}
+              >
+                <Save size={14} /> Mettre à jour le mot de passe
+              </button>
+              <p className="text-xs mt-4" style={{ color: COLORS.textMuted }}>
+                Simulation — rien n'est stocké de façon permanente ni transmis à un serveur.
+              </p>
+            </form>
           </div>
         )}
         </>
