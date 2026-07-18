@@ -232,6 +232,7 @@ export default function GuichetApp() {
     { id: 1, net: "orange", amount: 8000, phone: "07 XX XX 40 21", status: "Terminé", time: "Lun, 09:12" },
   ]);
   const [pending, setPending] = useState(null);
+  const [lastReceipt, setLastReceipt] = useState(null);
   const [formError, setFormError] = useState("");
   const demoRef = useRef(null);
 
@@ -364,7 +365,9 @@ export default function GuichetApp() {
   useEffect(() => {
     if (!pending) return;
     const t = setTimeout(() => {
-      setHistory((h) => [{ ...pending, status: "Terminé" }, ...h]);
+      const completed = { ...pending, status: "Terminé" };
+      setHistory((h) => [completed, ...h]);
+      setLastReceipt(completed);
       setPending(null);
     }, 1400);
     return () => clearTimeout(t);
@@ -423,6 +426,40 @@ export default function GuichetApp() {
     setDraftEntry(null);
     setPinInput("");
     setPinError("");
+  }
+
+  function buildReceiptText(receipt) {
+    const n = NETWORKS.find((x) => x.id === receipt.net);
+    const rFee = receipt.amount * n.fee;
+    return [
+      "Reçu EmpireGuichet",
+      `Ticket #${String(receipt.id).padStart(5, "0")}`,
+      `Service : ${n.name}`,
+      `Référence : ${receipt.phone}`,
+      `Montant : ${formatFCFA(receipt.amount)}`,
+      `Frais : ${formatFCFA(rFee)}`,
+      `Total : ${formatFCFA(receipt.amount + rFee)}`,
+      `Statut : ${receipt.status}`,
+    ].join("\n");
+  }
+
+  function shareReceiptWhatsApp(receipt) {
+    const text = buildReceiptText(receipt);
+    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, "_blank");
+  }
+
+  function shareReceiptSMS(receipt) {
+    const text = buildReceiptText(receipt);
+    window.location.href = `sms:?body=${encodeURIComponent(text)}`;
+  }
+
+  function shareReceiptNative(receipt) {
+    const text = buildReceiptText(receipt);
+    if (typeof navigator !== "undefined" && navigator.share) {
+      navigator.share({ title: "Reçu EmpireGuichet", text }).catch(() => {});
+    } else {
+      shareReceiptWhatsApp(receipt);
+    }
   }
 
   const todayVolume = history.reduce((sum, h) => sum + h.amount, 0);
@@ -1466,6 +1503,103 @@ export default function GuichetApp() {
               </button>
             </div>
           </form>
+        </div>
+      )}
+
+      {/* ===== Reçu partageable ===== */}
+      {lastReceipt && (
+        <div
+          className="gc-fade-in"
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(6,7,20,0.7)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 40,
+            padding: 16,
+          }}
+        >
+          <div
+            className="w-full"
+            style={{
+              maxWidth: 360,
+              background: COLORS.surface,
+              border: `1px solid ${COLORS.surfaceLine}`,
+              borderRadius: 16,
+              padding: 24,
+            }}
+          >
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-sm font-medium">Transaction confirmée</span>
+              <button onClick={() => setLastReceipt(null)} aria-label="Fermer le reçu">
+                <X size={18} style={{ color: COLORS.textMuted }} />
+              </button>
+            </div>
+            <p className="text-xs mb-4" style={{ color: COLORS.textMuted }}>
+              Partage le reçu avec le client pour preuve de paiement.
+            </p>
+
+            {(() => {
+              const n = NETWORKS.find((x) => x.id === lastReceipt.net);
+              const rFee = lastReceipt.amount * n.fee;
+              return (
+                <div className="p-4 rounded-lg mb-4" style={{ background: COLORS.bgSoft, border: `1px dashed ${COLORS.surfaceLine}` }}>
+                  <div className="flex items-center gap-3 mb-3">
+                    <NetworkBadge net={n} colors={COLORS} />
+                    <div>
+                      <div className="text-sm font-medium">{n.name}</div>
+                      <div className="text-xs gc-mono" style={{ color: COLORS.textMuted }}>{lastReceipt.phone}</div>
+                    </div>
+                  </div>
+                  <div className="flex justify-between text-sm mb-1">
+                    <span style={{ color: COLORS.textMuted }}>Ticket</span>
+                    <span className="gc-mono"><TicketNumber n={lastReceipt.id} /></span>
+                  </div>
+                  <div className="flex justify-between text-sm mb-1">
+                    <span style={{ color: COLORS.textMuted }}>Montant</span>
+                    <span className="gc-mono">{formatFCFA(lastReceipt.amount)}</span>
+                  </div>
+                  <div className="flex justify-between text-sm font-medium">
+                    <span>Total</span>
+                    <span className="gc-mono">{formatFCFA(lastReceipt.amount + rFee)}</span>
+                  </div>
+                </div>
+              );
+            })()}
+
+            <div className="grid grid-cols-2 gap-2 mb-2">
+              <button
+                onClick={() => shareReceiptWhatsApp(lastReceipt)}
+                className="gc-btn flex items-center justify-center gap-1.5 py-2.5 rounded-lg text-xs font-medium"
+                style={{ background: COLORS.teal, color: "#08221A" }}
+              >
+                <MessageCircle size={14} /> WhatsApp
+              </button>
+              <button
+                onClick={() => shareReceiptSMS(lastReceipt)}
+                className="gc-btn flex items-center justify-center gap-1.5 py-2.5 rounded-lg text-xs font-medium border"
+                style={{ borderColor: COLORS.surfaceLine, color: COLORS.text }}
+              >
+                <Send size={14} /> SMS
+              </button>
+            </div>
+            <button
+              onClick={() => shareReceiptNative(lastReceipt)}
+              className="gc-btn w-full flex items-center justify-center gap-1.5 py-2.5 rounded-lg text-xs font-medium mb-2"
+              style={{ background: COLORS.gold, color: "#241800" }}
+            >
+              <Share2 size={14} /> Autre application
+            </button>
+            <button
+              onClick={() => setLastReceipt(null)}
+              className="gc-btn w-full py-2 rounded-lg text-xs"
+              style={{ color: COLORS.textMuted }}
+            >
+              Fermer
+            </button>
+          </div>
         </div>
       )}
 
