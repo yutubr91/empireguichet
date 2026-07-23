@@ -227,6 +227,12 @@ function NetworkBadge({ net, size = 40, colors = DARK_COLORS }) {
 export default function GuichetApp() {
   const [theme, setTheme] = useState("dark");
   const COLORS = theme === "light" ? LIGHT_COLORS : DARK_COLORS;
+  const [introStep, setIntroStep] = useState(0); // 0 = splash logo, 1-3 = carousel, 4 = done
+  useEffect(() => {
+    if (introStep !== 0) return;
+    const t = setTimeout(() => setIntroStep(1), 2400);
+    return () => clearTimeout(t);
+  }, [introStep]);
   const [tab, setTab] = useState("dashboard");
   const [menuOpen, setMenuOpen] = useState(false);
   const [selectedNetwork, setSelectedNetwork] = useState(NETWORKS[0].id);
@@ -253,10 +259,77 @@ export default function GuichetApp() {
   const [signupPhone, setSignupPhone] = useState("");
   const [signupAgency, setSignupAgency] = useState("");
   const [signupPassword, setSignupPassword] = useState("");
+  const [signupEmail, setSignupEmail] = useState("");
   const [signupPin, setSignupPin] = useState("");
   const [signupRole, setSignupRole] = useState("agent");
   const [loginRole, setLoginRole] = useState("agent");
   const [authError, setAuthError] = useState("");
+
+  // Mot de passe oublié
+  const [recoveryStep, setRecoveryStep] = useState(1);
+  const [recoveryPhone, setRecoveryPhone] = useState("");
+  const [recoveryEmail, setRecoveryEmail] = useState("");
+  const [recoveryCode, setRecoveryCode] = useState("");
+  const [recoveryNewPassword, setRecoveryNewPassword] = useState("");
+  const [recoveryConfirmPassword, setRecoveryConfirmPassword] = useState("");
+  const [recoveryError, setRecoveryError] = useState("");
+  const DEMO_RECOVERY_CODE = "852741";
+
+  function maskEmail(email) {
+    const [user, domain] = email.split("@");
+    if (!domain) return email;
+    const visible = user.slice(0, 2);
+    return `${visible}${"*".repeat(Math.max(user.length - 2, 2))}@${domain}`;
+  }
+
+  function handleRecoveryRequestCode(e) {
+    e.preventDefault();
+    if (!recoveryPhone || !recoveryEmail) {
+      setRecoveryError("Renseigne ton numéro et ton adresse Gmail.");
+      return;
+    }
+    if (!recoveryEmail.toLowerCase().endsWith("@gmail.com")) {
+      setRecoveryError("Utilise l'adresse Gmail associée à ton compte.");
+      return;
+    }
+    setRecoveryError("");
+    setRecoveryStep(2);
+  }
+
+  function handleRecoveryVerifyCode(e) {
+    e.preventDefault();
+    if (recoveryCode !== DEMO_RECOVERY_CODE) {
+      setRecoveryError("Code incorrect. Réessaie.");
+      return;
+    }
+    setRecoveryError("");
+    setRecoveryStep(3);
+  }
+
+  function handleRecoveryReset(e) {
+    e.preventDefault();
+    if (recoveryNewPassword.length < 6) {
+      setRecoveryError("Le mot de passe doit contenir au moins 6 caractères.");
+      return;
+    }
+    if (recoveryNewPassword !== recoveryConfirmPassword) {
+      setRecoveryError("Les deux mots de passe ne correspondent pas.");
+      return;
+    }
+    setRecoveryError("");
+    setRecoveryStep(4);
+  }
+
+  function backToLoginFromRecovery() {
+    setAuthMode("login");
+    setRecoveryStep(1);
+    setRecoveryPhone("");
+    setRecoveryEmail("");
+    setRecoveryCode("");
+    setRecoveryNewPassword("");
+    setRecoveryConfirmPassword("");
+    setRecoveryError("");
+  }
 
   // PIN confirmation modal state
   const [pinModalOpen, setPinModalOpen] = useState(false);
@@ -277,11 +350,15 @@ export default function GuichetApp() {
 
   function handleSignup(e) {
     e.preventDefault();
-    if (!signupName || !signupPhone || !signupAgency || !signupPassword || signupPin.length !== 4) {
+    if (!signupName || !signupPhone || !signupEmail || !signupAgency || !signupPassword || signupPin.length !== 4) {
       setAuthError(signupPin.length !== 4 ? "Le code PIN doit contenir exactement 4 chiffres." : "Merci de remplir tous les champs.");
       return;
     }
-    setAgent({ name: signupName, phone: signupPhone, agency: signupAgency, pin: signupPin, role: signupRole });
+    if (!signupEmail.toLowerCase().endsWith("@gmail.com")) {
+      setAuthError("Merci d'utiliser une adresse Gmail (ex. toncompte@gmail.com).");
+      return;
+    }
+    setAgent({ name: signupName, phone: signupPhone, email: signupEmail, agency: signupAgency, pin: signupPin, role: signupRole });
     setIsAuthenticated(true);
     setAuthError("");
   }
@@ -594,6 +671,117 @@ export default function GuichetApp() {
     demoRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
+  const INTRO_SLIDES = [
+    {
+      icon: Wallet,
+      title: "Tous vos réseaux, un seul endroit",
+      text: "MTN, Orange, Moov, Wave, Djamo, crypto, CIE, SODECI et péages réunis dans une seule interface.",
+    },
+    {
+      icon: ShieldCheck,
+      title: "Sécurisé à chaque transaction",
+      text: "Un code PIN personnel confirme chaque envoi, pour protéger l'agent et le client.",
+    },
+    {
+      icon: BarChart3,
+      title: "Pilote ton activité",
+      text: "Suis ton volume, tes commissions et ton équipe en temps réel depuis le tableau de bord.",
+    },
+  ];
+
+  if (introStep < 4) {
+    return (
+      <div
+        style={{
+          background: COLORS.bg,
+          color: COLORS.text,
+          minHeight: "100%",
+          fontFamily: "'IBM Plex Sans', sans-serif",
+          display: "flex",
+          flexDirection: "column",
+        }}
+      >
+        <style>{`
+          @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap');
+          .gc-display { font-family: 'Space Grotesk', sans-serif; }
+          @keyframes gcSplashIn { from { opacity:0; } to { opacity:1; } }
+          @keyframes gcPulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.08); } }
+          @keyframes gcSlideIn { from { opacity:0; transform: translateX(16px); } to { opacity:1; transform: translateX(0); } }
+          .gc-splash-wrap { animation: gcSplashIn .5s ease; }
+          .gc-splash-logo { animation: gcPulse 1.6s ease-in-out infinite; }
+          .gc-slide { animation: gcSlideIn .35s ease; }
+          @media (prefers-reduced-motion: reduce) {
+            .gc-splash-logo, .gc-slide, .gc-splash-wrap { animation: none !important; }
+          }
+        `}</style>
+
+        {introStep === 0 && (
+          <div className="flex-1 flex flex-col items-center justify-center gc-splash-wrap">
+            <img
+              src={LOGO_DATA_URI}
+              alt="EmpireGuichet"
+              className="gc-splash-logo"
+              style={{ height: 96, width: "auto", objectFit: "contain", marginBottom: 20 }}
+            />
+            <div className="gc-display text-2xl font-semibold">EmpireGuichet</div>
+            <div className="text-xs mt-1" style={{ color: COLORS.textMuted }}>par Empire Digital CI</div>
+          </div>
+        )}
+
+        {introStep >= 1 && introStep <= 3 && (
+          <div className="flex-1 flex flex-col">
+            <div className="flex justify-end p-5">
+              <button onClick={() => setIntroStep(4)} className="text-sm" style={{ color: COLORS.textMuted }}>
+                Passer
+              </button>
+            </div>
+            <div className="flex-1 flex flex-col items-center justify-center px-8 text-center gc-slide" key={introStep}>
+              {(() => {
+                const slide = INTRO_SLIDES[introStep - 1];
+                const Icon = slide.icon;
+                return (
+                  <>
+                    <div
+                      className="rounded-2xl flex items-center justify-center mb-6"
+                      style={{ width: 84, height: 84, background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}` }}
+                    >
+                      <Icon size={34} style={{ color: COLORS.goldSoft }} />
+                    </div>
+                    <h2 className="gc-display text-xl font-semibold mb-3" style={{ maxWidth: 320 }}>{slide.title}</h2>
+                    <p className="text-sm" style={{ color: COLORS.textMuted, maxWidth: 320 }}>{slide.text}</p>
+                  </>
+                );
+              })()}
+            </div>
+            <div className="flex flex-col items-center gap-6 pb-10 px-8">
+              <div className="flex gap-2">
+                {[1, 2, 3].map((i) => (
+                  <div
+                    key={i}
+                    style={{
+                      width: i === introStep ? 20 : 6,
+                      height: 6,
+                      borderRadius: 999,
+                      background: i === introStep ? COLORS.gold : COLORS.surfaceLine,
+                      transition: "width .2s ease",
+                    }}
+                  />
+                ))}
+              </div>
+              <button
+                onClick={() => setIntroStep((s) => (s === 3 ? 4 : s + 1))}
+                className="gc-btn w-full max-w-xs py-3 rounded-lg text-sm font-medium"
+                style={{ background: COLORS.gold, color: "#241800" }}
+              >
+                {introStep === 3 ? "Commencer" : "Suivant"}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div
       style={{
@@ -868,30 +1056,40 @@ export default function GuichetApp() {
               className="p-6 rounded-xl md:col-span-2"
               style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}` }}
             >
-              <div className="flex gap-2 mb-6">
+              {authMode !== "recovery" ? (
+                <div className="flex gap-2 mb-6">
+                  <button
+                    onClick={() => { setAuthMode("login"); setAuthError(""); }}
+                    className="gc-btn flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg text-sm font-medium"
+                    style={
+                      authMode === "login"
+                        ? { background: COLORS.gold, color: "#241800" }
+                        : { background: COLORS.bgSoft, color: COLORS.textMuted, border: `1px solid ${COLORS.surfaceLine}` }
+                    }
+                  >
+                    <LogIn size={15} /> Connexion
+                  </button>
+                  <button
+                    onClick={() => { setAuthMode("signup"); setAuthError(""); }}
+                    className="gc-btn flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg text-sm font-medium"
+                    style={
+                      authMode === "signup"
+                        ? { background: COLORS.gold, color: "#241800" }
+                        : { background: COLORS.bgSoft, color: COLORS.textMuted, border: `1px solid ${COLORS.surfaceLine}` }
+                    }
+                  >
+                    <UserPlus size={15} /> Créer un compte agent
+                  </button>
+                </div>
+              ) : (
                 <button
-                  onClick={() => { setAuthMode("login"); setAuthError(""); }}
-                  className="gc-btn flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg text-sm font-medium"
-                  style={
-                    authMode === "login"
-                      ? { background: COLORS.gold, color: "#241800" }
-                      : { background: COLORS.bgSoft, color: COLORS.textMuted, border: `1px solid ${COLORS.surfaceLine}` }
-                  }
+                  onClick={backToLoginFromRecovery}
+                  className="text-xs mb-6 flex items-center gap-1"
+                  style={{ color: COLORS.goldSoft }}
                 >
-                  <LogIn size={15} /> Connexion
+                  ← Retour à la connexion
                 </button>
-                <button
-                  onClick={() => { setAuthMode("signup"); setAuthError(""); }}
-                  className="gc-btn flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg text-sm font-medium"
-                  style={
-                    authMode === "signup"
-                      ? { background: COLORS.gold, color: "#241800" }
-                      : { background: COLORS.bgSoft, color: COLORS.textMuted, border: `1px solid ${COLORS.surfaceLine}` }
-                  }
-                >
-                  <UserPlus size={15} /> Créer un compte agent
-                </button>
-              </div>
+              )}
 
               {authMode === "login" ? (
                 <form onSubmit={handleLogin} className="max-w-sm">
@@ -909,9 +1107,17 @@ export default function GuichetApp() {
                     value={loginPassword}
                     onChange={(e) => setLoginPassword(e.target.value)}
                     placeholder="••••••••"
-                    className="w-full px-3.5 py-2.5 rounded-lg text-sm mb-4 outline-none"
+                    className="w-full px-3.5 py-2.5 rounded-lg text-sm mb-2 outline-none"
                     style={{ background: COLORS.bgSoft, border: `1px solid ${COLORS.surfaceLine}`, color: COLORS.text }}
                   />
+                  <button
+                    type="button"
+                    onClick={() => { setAuthMode("recovery"); setRecoveryError(""); }}
+                    className="text-xs mb-4 block"
+                    style={{ color: COLORS.goldSoft }}
+                  >
+                    Mot de passe oublié ?
+                  </button>
                   <label className="text-xs mb-2 block" style={{ color: COLORS.textMuted }}>Type de compte</label>
                   <div className="flex gap-2 mb-4">
                     {[{ id: "agent", label: "Agent terrain" }, { id: "manager", label: "Chef d'agence" }].map((r) => (
@@ -939,7 +1145,7 @@ export default function GuichetApp() {
                     Se connecter
                   </button>
                 </form>
-              ) : (
+              ) : authMode === "signup" ? (
                 <form onSubmit={handleSignup} className="max-w-sm">
                   <label className="text-xs mb-2 block" style={{ color: COLORS.textMuted }}>Nom complet</label>
                   <input
@@ -957,6 +1163,18 @@ export default function GuichetApp() {
                     className="w-full px-3.5 py-2.5 rounded-lg text-sm mb-4 outline-none"
                     style={{ background: COLORS.bgSoft, border: `1px solid ${COLORS.surfaceLine}`, color: COLORS.text }}
                   />
+                  <label className="text-xs mb-2 block" style={{ color: COLORS.textMuted }}>Adresse Gmail</label>
+                  <input
+                    type="email"
+                    value={signupEmail}
+                    onChange={(e) => setSignupEmail(e.target.value)}
+                    placeholder="toncompte@gmail.com"
+                    className="w-full px-3.5 py-2.5 rounded-lg text-sm mb-1 outline-none"
+                    style={{ background: COLORS.bgSoft, border: `1px solid ${COLORS.surfaceLine}`, color: COLORS.text }}
+                  />
+                  <p className="text-xs mb-4" style={{ color: COLORS.textMuted }}>
+                    Utilisée pour récupérer ton compte en cas de mot de passe oublié.
+                  </p>
                   <label className="text-xs mb-2 block" style={{ color: COLORS.textMuted }}>Agence / ville</label>
                   <input
                     value={signupAgency}
@@ -1014,6 +1232,117 @@ export default function GuichetApp() {
                     Créer mon compte agent
                   </button>
                 </form>
+              ) : (
+                <div className="max-w-sm">
+                  {recoveryStep === 1 && (
+                    <form onSubmit={handleRecoveryRequestCode}>
+                      <p className="text-xs mb-4" style={{ color: COLORS.textMuted }}>
+                        Confirme ton numéro et l'adresse Gmail associée à ton compte — un code de vérification y sera envoyé.
+                      </p>
+                      <label className="text-xs mb-2 block" style={{ color: COLORS.textMuted }}>Numéro de téléphone</label>
+                      <input
+                        value={recoveryPhone}
+                        onChange={(e) => setRecoveryPhone(e.target.value)}
+                        placeholder="07 XX XX XX XX"
+                        className="w-full px-3.5 py-2.5 rounded-lg text-sm mb-4 outline-none"
+                        style={{ background: COLORS.bgSoft, border: `1px solid ${COLORS.surfaceLine}`, color: COLORS.text }}
+                      />
+                      <label className="text-xs mb-2 block" style={{ color: COLORS.textMuted }}>Adresse Gmail</label>
+                      <input
+                        type="email"
+                        value={recoveryEmail}
+                        onChange={(e) => setRecoveryEmail(e.target.value)}
+                        placeholder="toncompte@gmail.com"
+                        className="w-full px-3.5 py-2.5 rounded-lg text-sm mb-4 outline-none"
+                        style={{ background: COLORS.bgSoft, border: `1px solid ${COLORS.surfaceLine}`, color: COLORS.text }}
+                      />
+                      {recoveryError && <p className="text-xs mb-4" style={{ color: COLORS.danger }}>{recoveryError}</p>}
+                      <button
+                        type="submit"
+                        className="gc-btn w-full py-3 rounded-lg text-sm font-medium"
+                        style={{ background: COLORS.gold, color: "#241800" }}
+                      >
+                        Envoyer le code
+                      </button>
+                    </form>
+                  )}
+
+                  {recoveryStep === 2 && (
+                    <form onSubmit={handleRecoveryVerifyCode}>
+                      <p className="text-xs mb-4" style={{ color: COLORS.textMuted }}>
+                        Un code à 6 chiffres a été envoyé à <strong>{maskEmail(recoveryEmail)}</strong>. Entre-le ci-dessous.
+                      </p>
+                      <label className="text-xs mb-2 block" style={{ color: COLORS.textMuted }}>Code de vérification</label>
+                      <input
+                        value={recoveryCode}
+                        onChange={(e) => setRecoveryCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                        inputMode="numeric"
+                        maxLength={6}
+                        placeholder="••••••"
+                        className="w-full px-3.5 py-2.5 rounded-lg text-sm mb-2 outline-none gc-mono tracking-widest text-center"
+                        style={{ background: COLORS.bgSoft, border: `1px solid ${COLORS.surfaceLine}`, color: COLORS.text }}
+                      />
+                      <p className="text-xs mb-4" style={{ color: COLORS.textMuted }}>Code démo : {DEMO_RECOVERY_CODE}</p>
+                      {recoveryError && <p className="text-xs mb-4" style={{ color: COLORS.danger }}>{recoveryError}</p>}
+                      <button
+                        type="submit"
+                        className="gc-btn w-full py-3 rounded-lg text-sm font-medium"
+                        style={{ background: COLORS.gold, color: "#241800" }}
+                      >
+                        Vérifier le code
+                      </button>
+                    </form>
+                  )}
+
+                  {recoveryStep === 3 && (
+                    <form onSubmit={handleRecoveryReset}>
+                      <label className="text-xs mb-2 block" style={{ color: COLORS.textMuted }}>Nouveau mot de passe</label>
+                      <input
+                        type="password"
+                        value={recoveryNewPassword}
+                        onChange={(e) => setRecoveryNewPassword(e.target.value)}
+                        placeholder="••••••••"
+                        className="w-full px-3.5 py-2.5 rounded-lg text-sm mb-4 outline-none"
+                        style={{ background: COLORS.bgSoft, border: `1px solid ${COLORS.surfaceLine}`, color: COLORS.text }}
+                      />
+                      <label className="text-xs mb-2 block" style={{ color: COLORS.textMuted }}>Confirmer le mot de passe</label>
+                      <input
+                        type="password"
+                        value={recoveryConfirmPassword}
+                        onChange={(e) => setRecoveryConfirmPassword(e.target.value)}
+                        placeholder="••••••••"
+                        className="w-full px-3.5 py-2.5 rounded-lg text-sm mb-4 outline-none"
+                        style={{ background: COLORS.bgSoft, border: `1px solid ${COLORS.surfaceLine}`, color: COLORS.text }}
+                      />
+                      {recoveryError && <p className="text-xs mb-4" style={{ color: COLORS.danger }}>{recoveryError}</p>}
+                      <button
+                        type="submit"
+                        className="gc-btn w-full py-3 rounded-lg text-sm font-medium"
+                        style={{ background: COLORS.gold, color: "#241800" }}
+                      >
+                        Réinitialiser le mot de passe
+                      </button>
+                    </form>
+                  )}
+
+                  {recoveryStep === 4 && (
+                    <div>
+                      <div
+                        className="flex items-center gap-2 p-4 rounded-lg mb-4 text-sm"
+                        style={{ background: "rgba(43,191,138,0.1)", color: COLORS.teal }}
+                      >
+                        <CheckCircle2 size={16} /> Mot de passe réinitialisé avec succès.
+                      </div>
+                      <button
+                        onClick={backToLoginFromRecovery}
+                        className="gc-btn w-full py-3 rounded-lg text-sm font-medium"
+                        style={{ background: COLORS.gold, color: "#241800" }}
+                      >
+                        Retour à la connexion
+                      </button>
+                    </div>
+                  )}
+                </div>
               )}
               <p className="text-xs mt-5" style={{ color: COLORS.textMuted }}>
                 Simulation — aucune donnée n'est enregistrée ni transmise. En production, ceci serait relié à un vrai système d'authentification sécurisé.
