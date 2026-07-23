@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef } from "react";
 import {
   Wallet,
   ArrowRightLeft,
+  ArrowDownCircle,
+  ArrowUpCircle,
   Smartphone,
   BarChart3,
   Megaphone,
@@ -42,6 +44,9 @@ import {
   KeyRound,
   Save,
   Check,
+  Upload,
+  FileCheck,
+  AlertTriangle,
 } from "lucide-react";
 import {
   BarChart,
@@ -236,13 +241,14 @@ export default function GuichetApp() {
   const [tab, setTab] = useState("dashboard");
   const [menuOpen, setMenuOpen] = useState(false);
   const [selectedNetwork, setSelectedNetwork] = useState(NETWORKS[0].id);
+  const [txDirection, setTxDirection] = useState("depot"); // "depot" (envoi) ou "retrait" (réception)
   const [amount, setAmount] = useState("");
   const [phone, setPhone] = useState("");
   const [ticketCounter, setTicketCounter] = useState(4);
   const [history, setHistory] = useState([
-    { id: 3, net: "wave", amount: 15000, phone: "07 XX XX 12 34", status: "Terminé", time: "Hier, 18:42" },
-    { id: 2, net: "mtn", amount: 32000, phone: "05 XX XX 88 10", status: "Terminé", time: "Hier, 14:05" },
-    { id: 1, net: "orange", amount: 8000, phone: "07 XX XX 40 21", status: "Terminé", time: "Lun, 09:12" },
+    { id: 3, net: "wave", amount: 15000, phone: "07 XX XX 12 34", status: "Terminé", time: "Hier, 18:42", direction: "retrait" },
+    { id: 2, net: "mtn", amount: 32000, phone: "05 XX XX 88 10", status: "Terminé", time: "Hier, 14:05", direction: "depot" },
+    { id: 1, net: "orange", amount: 8000, phone: "07 XX XX 40 21", status: "Terminé", time: "Lun, 09:12", direction: "depot" },
   ]);
   const [pending, setPending] = useState(null);
   const [lastReceipt, setLastReceipt] = useState(null);
@@ -331,6 +337,55 @@ export default function GuichetApp() {
     setRecoveryError("");
   }
 
+  // Vérification KYC (obligatoire avant transaction)
+  const DEMO_KYC_CODE = "147852";
+  const [kycEmailCode, setKycEmailCode] = useState("");
+  const [kycEmailSent, setKycEmailSent] = useState(false);
+  const [kycEmailError, setKycEmailError] = useState("");
+  const [kycIdFileName, setKycIdFileName] = useState("");
+  const [kycIdPreview, setKycIdPreview] = useState("");
+  const [kycIdError, setKycIdError] = useState("");
+
+  const kycVerified = !!(agent?.kycEmailVerified && agent?.kycIdVerified);
+
+  function handleKycSendCode(e) {
+    e.preventDefault();
+    setKycEmailSent(true);
+    setKycEmailError("");
+  }
+
+  function handleKycVerifyEmail(e) {
+    e.preventDefault();
+    if (kycEmailCode !== DEMO_KYC_CODE) {
+      setKycEmailError("Code incorrect. Réessaie.");
+      return;
+    }
+    setKycEmailError("");
+    setAgent((a) => ({ ...a, kycEmailVerified: true }));
+    pushNotification("Adresse Gmail vérifiée ✅");
+  }
+
+  function handleKycIdUpload(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setKycIdFileName(file.name);
+    if (file.type.startsWith("image/")) {
+      setKycIdPreview(URL.createObjectURL(file));
+    } else {
+      setKycIdPreview("");
+    }
+    setKycIdError("");
+  }
+
+  function handleKycConfirmId() {
+    if (!kycIdFileName) {
+      setKycIdError("Sélectionne d'abord un fichier (pièce d'identité).");
+      return;
+    }
+    setAgent((a) => ({ ...a, kycIdVerified: true, kycIdFileName }));
+    pushNotification("Pièce d'identité envoyée pour vérification ✅");
+  }
+
   // PIN confirmation modal state
   const [pinModalOpen, setPinModalOpen] = useState(false);
   const [pinInput, setPinInput] = useState("");
@@ -343,7 +398,7 @@ export default function GuichetApp() {
       setAuthError("Renseigne ton numéro et ton mot de passe.");
       return;
     }
-    setAgent({ name: "Agent " + loginPhone.slice(-4), phone: loginPhone, agency: "Agence démo", pin: DEMO_PIN, role: loginRole });
+    setAgent({ name: "Agent " + loginPhone.slice(-4), phone: loginPhone, agency: "Agence démo", pin: DEMO_PIN, role: loginRole, kycEmailVerified: false, kycIdVerified: false });
     setIsAuthenticated(true);
     setAuthError("");
   }
@@ -358,9 +413,10 @@ export default function GuichetApp() {
       setAuthError("Merci d'utiliser une adresse Gmail (ex. toncompte@gmail.com).");
       return;
     }
-    setAgent({ name: signupName, phone: signupPhone, email: signupEmail, agency: signupAgency, pin: signupPin, role: signupRole });
+    setAgent({ name: signupName, phone: signupPhone, email: signupEmail, agency: signupAgency, pin: signupPin, role: signupRole, kycEmailVerified: false, kycIdVerified: false });
     setIsAuthenticated(true);
     setAuthError("");
+    setTab("kyc");
   }
 
   function handleLogout() {
@@ -368,6 +424,62 @@ export default function GuichetApp() {
     setAgent(null);
     setTab("dashboard");
   }
+
+  // Déconnexion automatique après inactivité
+  const INACTIVITY_TIMEOUT_MS = 3 * 60 * 1000; // 3 minutes
+  const INACTIVITY_WARNING_MS = 20 * 1000; // avertir 20s avant
+  const [showInactivityWarning, setShowInactivityWarning] = useState(false);
+  const [inactivityCountdown, setInactivityCountdown] = useState(20);
+  const warningTimerRef = useRef(null);
+  const logoutTimerRef = useRef(null);
+  const countdownIntervalRef = useRef(null);
+
+  function clearInactivityTimers() {
+    clearTimeout(warningTimerRef.current);
+    clearTimeout(logoutTimerRef.current);
+    clearInterval(countdownIntervalRef.current);
+  }
+
+  function resetInactivityTimers() {
+    clearInactivityTimers();
+    setShowInactivityWarning(false);
+    warningTimerRef.current = setTimeout(() => {
+      setShowInactivityWarning(true);
+      setInactivityCountdown(Math.round(INACTIVITY_WARNING_MS / 1000));
+      countdownIntervalRef.current = setInterval(() => {
+        setInactivityCountdown((c) => (c > 0 ? c - 1 : 0));
+      }, 1000);
+    }, INACTIVITY_TIMEOUT_MS - INACTIVITY_WARNING_MS);
+    logoutTimerRef.current = setTimeout(() => {
+      clearInactivityTimers();
+      setShowInactivityWarning(false);
+      handleLogout();
+      pushNotification("Déconnecté automatiquement pour inactivité 🔒");
+    }, INACTIVITY_TIMEOUT_MS);
+  }
+
+  function staySignedIn() {
+    resetInactivityTimers();
+  }
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      clearInactivityTimers();
+      setShowInactivityWarning(false);
+      return;
+    }
+    resetInactivityTimers();
+    const events = ["mousemove", "keydown", "click", "touchstart", "scroll"];
+    const handleActivity = () => {
+      if (!showInactivityWarning) resetInactivityTimers();
+    };
+    events.forEach((ev) => window.addEventListener(ev, handleActivity));
+    return () => {
+      events.forEach((ev) => window.removeEventListener(ev, handleActivity));
+      clearInactivityTimers();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthenticated]);
 
   // Historique : recherche et filtres
   const [historySearch, setHistorySearch] = useState("");
@@ -387,6 +499,7 @@ export default function GuichetApp() {
       return {
         Ticket: "#" + String(h.id).padStart(5, "0"),
         Service: n.name,
+        Type: h.direction === "retrait" ? "Retrait" : h.direction === "depot" ? "Dépôt" : "Paiement",
         "Numéro / référence": h.phone,
         "Montant (FCFA)": h.amount,
         Statut: h.status,
@@ -409,10 +522,11 @@ export default function GuichetApp() {
       doc.text(`Agent : ${agent?.name || ""}  —  Agence : ${agent?.agency || ""}`, 14, 23);
       const rows = filteredHistory.map((h) => {
         const n = NETWORKS.find((x) => x.id === h.net);
-        return ["#" + String(h.id).padStart(5, "0"), n.name, h.phone, formatFCFA(h.amount), h.status];
+        const typeLabel = h.direction === "retrait" ? "Retrait" : h.direction === "depot" ? "Dépôt" : "Paiement";
+        return ["#" + String(h.id).padStart(5, "0"), n.name, typeLabel, h.phone, formatFCFA(h.amount), h.status];
       });
       (autoTable.default || autoTable)(doc, {
-        head: [["Ticket", "Service", "Numéro / référence", "Montant", "Statut"]],
+        head: [["Ticket", "Service", "Type", "Numéro / référence", "Montant", "Statut"]],
         body: rows,
         startY: 28,
         styles: { fontSize: 8 },
@@ -591,6 +705,7 @@ export default function GuichetApp() {
       phone,
       status: "En cours",
       time: "À l'instant",
+      direction: net.type === "momo" || net.type === "crypto" ? txDirection : "paiement",
     });
     setPinInput("");
     setPinError("");
@@ -658,7 +773,8 @@ export default function GuichetApp() {
     const hNet = NETWORKS.find((n) => n.id === h.net);
     return sum + h.amount * hNet.fee * AGENT_COMMISSION_RATE;
   }, 0);
-  const floatBalance = Math.max(INITIAL_FLOAT - todayVolume, 0);
+  const floatChange = history.reduce((sum, h) => sum + (h.direction === "retrait" ? h.amount : -h.amount), 0);
+  const floatBalance = Math.max(INITIAL_FLOAT + floatChange, 0);
 
   useEffect(() => {
     if (floatBalance > 0 && floatBalance < 50000) {
@@ -1393,6 +1509,7 @@ export default function GuichetApp() {
         <div className="flex gap-2 mb-6 flex-wrap">
           {[
             { id: "dashboard", label: "Tableau de bord", icon: BarChart3 },
+            { id: "kyc", label: kycVerified ? "Vérification KYC" : "Vérification KYC ⚠", icon: kycVerified ? FileCheck : AlertTriangle },
             { id: "transaction", label: "Nouvelle transaction", icon: ArrowRightLeft },
             { id: "historique", label: "Historique", icon: Clock },
             { id: "annonceurs", label: "Espace annonceurs", icon: Megaphone },
@@ -1501,7 +1618,128 @@ export default function GuichetApp() {
           </div>
         )}
 
-        {tab === "transaction" && (
+        {tab === "kyc" && (
+          <div className="gc-fade-in grid md:grid-cols-2 gap-4 max-w-3xl">
+            {/* Étape email */}
+            <div className="p-6 rounded-xl" style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}` }}>
+              <div className="flex items-center gap-2 mb-1">
+                <Mail size={16} style={{ color: COLORS.goldSoft }} />
+                <span className="text-sm font-medium">Vérifier ton adresse Gmail</span>
+                {agent?.kycEmailVerified && <CheckCircle2 size={15} style={{ color: COLORS.teal }} />}
+              </div>
+              <p className="text-xs mb-4" style={{ color: COLORS.textMuted }}>{agent?.email || "Aucune adresse renseignée"}</p>
+
+              {agent?.kycEmailVerified ? (
+                <div className="flex items-center gap-2 p-3 rounded-lg text-xs" style={{ background: "rgba(43,191,138,0.1)", color: COLORS.teal }}>
+                  <CheckCircle2 size={14} /> Adresse vérifiée
+                </div>
+              ) : !kycEmailSent ? (
+                <form onSubmit={handleKycSendCode}>
+                  <button
+                    type="submit"
+                    className="gc-btn w-full flex items-center justify-center gap-1.5 py-2.5 rounded-lg text-sm font-medium"
+                    style={{ background: COLORS.gold, color: "#241800" }}
+                  >
+                    <Send size={14} /> Envoyer le code de vérification
+                  </button>
+                </form>
+              ) : (
+                <form onSubmit={handleKycVerifyEmail}>
+                  <label className="text-xs mb-2 block" style={{ color: COLORS.textMuted }}>Code reçu par Gmail</label>
+                  <input
+                    value={kycEmailCode}
+                    onChange={(e) => setKycEmailCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                    inputMode="numeric"
+                    maxLength={6}
+                    placeholder="••••••"
+                    className="w-full px-3.5 py-2.5 rounded-lg text-sm mb-2 outline-none gc-mono tracking-widest text-center"
+                    style={{ background: COLORS.bgSoft, border: `1px solid ${COLORS.surfaceLine}`, color: COLORS.text }}
+                  />
+                  <p className="text-xs mb-3" style={{ color: COLORS.textMuted }}>Code démo : {DEMO_KYC_CODE}</p>
+                  {kycEmailError && <p className="text-xs mb-3" style={{ color: COLORS.danger }}>{kycEmailError}</p>}
+                  <button
+                    type="submit"
+                    className="gc-btn w-full py-2.5 rounded-lg text-sm font-medium"
+                    style={{ background: COLORS.gold, color: "#241800" }}
+                  >
+                    Vérifier le code
+                  </button>
+                </form>
+              )}
+            </div>
+
+            {/* Étape pièce d'identité */}
+            <div className="p-6 rounded-xl" style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}` }}>
+              <div className="flex items-center gap-2 mb-1">
+                <FileCheck size={16} style={{ color: COLORS.goldSoft }} />
+                <span className="text-sm font-medium">Pièce d'identité</span>
+                {agent?.kycIdVerified && <CheckCircle2 size={15} style={{ color: COLORS.teal }} />}
+              </div>
+              <p className="text-xs mb-4" style={{ color: COLORS.textMuted }}>CNI, passeport ou attestation d'identité (image ou PDF).</p>
+
+              {agent?.kycIdVerified ? (
+                <div className="flex items-center gap-2 p-3 rounded-lg text-xs" style={{ background: "rgba(43,191,138,0.1)", color: COLORS.teal }}>
+                  <CheckCircle2 size={14} /> Document envoyé — {agent.kycIdFileName}
+                </div>
+              ) : (
+                <>
+                  <label
+                    className="flex flex-col items-center justify-center gap-2 p-6 rounded-lg mb-3 cursor-pointer"
+                    style={{ background: COLORS.bgSoft, border: `1px dashed ${COLORS.surfaceLine}` }}
+                  >
+                    <Upload size={20} style={{ color: COLORS.textMuted }} />
+                    <span className="text-xs text-center" style={{ color: COLORS.textMuted }}>
+                      {kycIdFileName || "Clique pour choisir un fichier"}
+                    </span>
+                    <input type="file" accept="image/*,.pdf" onChange={handleKycIdUpload} className="hidden" />
+                  </label>
+                  {kycIdPreview && (
+                    <img src={kycIdPreview} alt="Aperçu pièce d'identité" className="w-full rounded-lg mb-3" style={{ maxHeight: 140, objectFit: "cover" }} />
+                  )}
+                  {kycIdError && <p className="text-xs mb-3" style={{ color: COLORS.danger }}>{kycIdError}</p>}
+                  <button
+                    onClick={handleKycConfirmId}
+                    className="gc-btn w-full py-2.5 rounded-lg text-sm font-medium"
+                    style={{ background: COLORS.gold, color: "#241800" }}
+                  >
+                    Envoyer le document
+                  </button>
+                </>
+              )}
+            </div>
+
+            {kycVerified && (
+              <div
+                className="md:col-span-2 flex items-center gap-2 p-4 rounded-xl text-sm"
+                style={{ background: "rgba(43,191,138,0.1)", color: COLORS.teal, border: `1px solid ${COLORS.surfaceLine}` }}
+              >
+                <CheckCircle2 size={16} /> Vérification KYC complète — tu peux maintenant effectuer des transactions.
+              </div>
+            )}
+            <p className="md:col-span-2 text-xs" style={{ color: COLORS.textMuted }}>
+              Simulation — aucun document n'est réellement transmis ou stocké. En production, ce document serait chiffré et transmis à un prestataire de vérification d'identité agréé.
+            </p>
+          </div>
+        )}
+
+        {tab === "transaction" && !kycVerified && (
+          <div className="gc-fade-in p-8 rounded-xl text-center" style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}` }}>
+            <AlertTriangle size={28} style={{ color: COLORS.goldSoft, margin: "0 auto 12px" }} />
+            <p className="text-sm font-medium mb-2">Vérification KYC requise</p>
+            <p className="text-xs mb-5" style={{ color: COLORS.textMuted, maxWidth: 380, margin: "0 auto 20px" }}>
+              Pour la sécurité des transactions, tu dois d'abord vérifier ton adresse Gmail et envoyer une pièce d'identité.
+            </p>
+            <button
+              onClick={() => setTab("kyc")}
+              className="gc-btn px-5 py-2.5 rounded-lg text-sm font-medium"
+              style={{ background: COLORS.gold, color: "#241800" }}
+            >
+              Compléter la vérification KYC
+            </button>
+          </div>
+        )}
+
+        {tab === "transaction" && kycVerified && (
           <div className="grid md:grid-cols-2 gap-6 gc-fade-in">
             <form
               onSubmit={handleSubmit}
@@ -1526,6 +1764,43 @@ export default function GuichetApp() {
                   </button>
                 ))}
               </div>
+
+              {(net.type === "momo" || net.type === "crypto") && (
+                <>
+                  <label className="text-xs mb-2 block" style={{ color: COLORS.textMuted }}>Type d'opération</label>
+                  <div className="grid grid-cols-2 gap-2 mb-5">
+                    <button
+                      type="button"
+                      onClick={() => setTxDirection("depot")}
+                      className="gc-btn flex items-center justify-center gap-1.5 py-2.5 rounded-lg text-xs font-medium"
+                      style={
+                        txDirection === "depot"
+                          ? { background: COLORS.gold, color: "#241800" }
+                          : { background: COLORS.bgSoft, color: COLORS.textMuted, border: `1px solid ${COLORS.surfaceLine}` }
+                      }
+                    >
+                      <ArrowUpCircle size={14} /> Dépôt (envoi)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setTxDirection("retrait")}
+                      className="gc-btn flex items-center justify-center gap-1.5 py-2.5 rounded-lg text-xs font-medium"
+                      style={
+                        txDirection === "retrait"
+                          ? { background: COLORS.gold, color: "#241800" }
+                          : { background: COLORS.bgSoft, color: COLORS.textMuted, border: `1px solid ${COLORS.surfaceLine}` }
+                      }
+                    >
+                      <ArrowDownCircle size={14} /> Retrait (réception)
+                    </button>
+                  </div>
+                  <p className="text-xs mb-5 -mt-3" style={{ color: COLORS.textMuted }}>
+                    {txDirection === "depot"
+                      ? "Le client te donne du cash, tu lui envoies du mobile money."
+                      : "Le client te donne du mobile money, tu lui remets du cash."}
+                  </p>
+                </>
+              )}
 
               <label className="text-xs mb-2 block" style={{ color: COLORS.textMuted }}>
                 {NETWORK_TYPE_LABELS[net.type].field}
@@ -1618,7 +1893,21 @@ export default function GuichetApp() {
                 <div className="flex items-center gap-3 mb-3">
                   <NetworkBadge net={net} colors={COLORS} />
                   <div>
-                    <div className="text-sm font-medium">{net.name}</div>
+                    <div className="text-sm font-medium flex items-center gap-2">
+                      {net.name}
+                      {(net.type === "momo" || net.type === "crypto") && (
+                        <span
+                          className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full"
+                          style={
+                            txDirection === "retrait"
+                              ? { background: "rgba(232,169,59,0.15)", color: COLORS.goldSoft }
+                              : { background: "rgba(43,191,138,0.15)", color: COLORS.teal }
+                          }
+                        >
+                          {txDirection === "retrait" ? "Retrait" : "Dépôt"}
+                        </span>
+                      )}
+                    </div>
                     <div className="text-xs gc-mono" style={{ color: COLORS.textMuted }}>
                       {phone || "—"}
                     </div>
@@ -1716,6 +2005,7 @@ export default function GuichetApp() {
                 <tr style={{ background: COLORS.surface, color: COLORS.textMuted }}>
                   <th className="text-left font-normal px-4 py-3">Ticket</th>
                   <th className="text-left font-normal px-4 py-3">Réseau</th>
+                  <th className="text-left font-normal px-4 py-3">Type</th>
                   <th className="text-left font-normal px-4 py-3">Numéro</th>
                   <th className="text-right font-normal px-4 py-3">Montant</th>
                   <th className="text-left font-normal px-4 py-3">Statut</th>
@@ -1724,7 +2014,7 @@ export default function GuichetApp() {
               <tbody>
                 {filteredHistory.length === 0 && (
                   <tr>
-                    <td colSpan={5} className="px-4 py-8 text-center text-sm" style={{ color: COLORS.textMuted }}>
+                    <td colSpan={6} className="px-4 py-8 text-center text-sm" style={{ color: COLORS.textMuted }}>
                       Aucune transaction ne correspond à ces filtres.
                     </td>
                   </tr>
@@ -1739,6 +2029,23 @@ export default function GuichetApp() {
                           <NetworkBadge net={n} size={24} colors={COLORS} />
                           {n.name}
                         </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        {h.direction === "paiement" ? (
+                          <span className="text-xs" style={{ color: COLORS.textMuted }}>Paiement</span>
+                        ) : (
+                          <span
+                            className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-md"
+                            style={
+                              h.direction === "retrait"
+                                ? { background: "rgba(232,169,59,0.12)", color: COLORS.goldSoft }
+                                : { background: "rgba(43,191,138,0.12)", color: COLORS.teal }
+                            }
+                          >
+                            {h.direction === "retrait" ? <ArrowDownCircle size={12} /> : <ArrowUpCircle size={12} />}
+                            {h.direction === "retrait" ? "Retrait" : "Dépôt"}
+                          </span>
+                        )}
                       </td>
                       <td className="px-4 py-3 gc-mono text-xs" style={{ color: COLORS.textMuted }}>{h.phone}</td>
                       <td className="px-4 py-3 text-right gc-mono">{formatFCFA(h.amount)}</td>
@@ -2054,6 +2361,56 @@ export default function GuichetApp() {
           <span>Intégration réseaux réelle requiert un agrégateur de paiement agréé (CinetPay, PayDunya…) et conformité réglementaire locale.</span>
         </div>
       </footer>
+
+      {/* ===== Avertissement d'inactivité ===== */}
+      {showInactivityWarning && (
+        <div
+          className="gc-fade-in"
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(6,7,20,0.7)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 45,
+            padding: 16,
+          }}
+        >
+          <div
+            className="w-full text-center"
+            style={{
+              maxWidth: 340,
+              background: COLORS.surface,
+              border: `1px solid ${COLORS.surfaceLine}`,
+              borderRadius: 16,
+              padding: 24,
+            }}
+          >
+            <Clock size={28} style={{ color: COLORS.goldSoft, margin: "0 auto 12px" }} />
+            <div className="text-sm font-medium mb-2">Toujours là ?</div>
+            <p className="text-xs mb-5" style={{ color: COLORS.textMuted }}>
+              Par sécurité, tu vas être déconnecté dans <strong className="gc-mono">{inactivityCountdown}s</strong> pour inactivité.
+            </p>
+            <div className="flex gap-2">
+              <button
+                onClick={handleLogout}
+                className="gc-btn flex-1 py-2.5 rounded-lg text-sm font-medium border"
+                style={{ borderColor: COLORS.surfaceLine, color: COLORS.textMuted }}
+              >
+                Se déconnecter
+              </button>
+              <button
+                onClick={staySignedIn}
+                className="gc-btn flex-1 py-2.5 rounded-lg text-sm font-medium"
+                style={{ background: COLORS.gold, color: "#241800" }}
+              >
+                Rester connecté
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ===== Modal PIN de confirmation ===== */}
       {pinModalOpen && (
