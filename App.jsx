@@ -47,6 +47,10 @@ import {
   Upload,
   FileCheck,
   AlertTriangle,
+  Camera,
+  MapPin,
+  Calendar,
+  Fingerprint,
 } from "lucide-react";
 import {
   BarChart,
@@ -102,6 +106,19 @@ const NETWORKS = [
   { id: "cie", name: "CIE (Électricité)", color: "#F5A623", fg: "#241800", fee: 0.01, letter: "CIE", type: "facture" },
   { id: "sodeci", name: "SODECI (Eau)", color: "#29B6C7", fg: "#04262B", fee: 0.01, letter: "SDC", type: "facture" },
   { id: "peage", name: "Péage (Pont HKB)", color: "#8D6E63", fg: "#F3F0E8", fee: 0.02, letter: "PG", type: "peage" },
+];
+
+const COUNTRY_CODES = [
+  { code: "+225", flag: "🇨🇮", name: "Côte d'Ivoire" },
+  { code: "+221", flag: "🇸🇳", name: "Sénégal" },
+  { code: "+223", flag: "🇲🇱", name: "Mali" },
+  { code: "+226", flag: "🇧🇫", name: "Burkina Faso" },
+  { code: "+229", flag: "🇧🇯", name: "Bénin" },
+  { code: "+228", flag: "🇹🇬", name: "Togo" },
+  { code: "+224", flag: "🇬🇳", name: "Guinée" },
+  { code: "+227", flag: "🇳🇪", name: "Niger" },
+  { code: "+237", flag: "🇨🇲", name: "Cameroun" },
+  { code: "+33", flag: "🇫🇷", name: "France" },
 ];
 
 const NETWORK_TYPE_LABELS = {
@@ -264,6 +281,7 @@ export default function GuichetApp() {
   const [loginPassword, setLoginPassword] = useState("");
   const [signupName, setSignupName] = useState("");
   const [signupPhone, setSignupPhone] = useState("");
+  const [signupCountryCode, setSignupCountryCode] = useState("+225");
   const [signupAgency, setSignupAgency] = useState("");
   const [signupAgencyCode, setSignupAgencyCode] = useState("");
   const [signupPassword, setSignupPassword] = useState("");
@@ -293,13 +311,21 @@ export default function GuichetApp() {
       pin: data.pin_hash,
       role: data.role,
       kycEmailVerified: data.kyc_email_verified,
-      kycIdVerified: data.kyc_id_verified,
+      kycStatus: data.kyc_status || "incomplete",
+      firstName: data.first_name,
+      lastName: data.last_name,
+      country: data.country,
+      address: data.address,
+      idNumber: data.id_number,
+      dob: data.date_of_birth,
+      documentType: data.document_type,
     };
   }
 
   // Mot de passe oublié
   const [recoveryStep, setRecoveryStep] = useState(1);
   const [recoveryPhone, setRecoveryPhone] = useState("");
+  const [recoveryCountryCode, setRecoveryCountryCode] = useState("+225");
   const [recoveryEmail, setRecoveryEmail] = useState("");
   const [recoveryCode, setRecoveryCode] = useState("");
   const [recoveryNewPassword, setRecoveryNewPassword] = useState("");
@@ -368,13 +394,31 @@ export default function GuichetApp() {
   const [kycEmailCode, setKycEmailCode] = useState("");
   const [kycEmailSent, setKycEmailSent] = useState(false);
   const [kycEmailError, setKycEmailError] = useState("");
+
+  // Étape "Compléter votre profil"
+  const [kycFirstName, setKycFirstName] = useState("");
+  const [kycLastName, setKycLastName] = useState("");
+  const [kycCountry, setKycCountry] = useState("Côte d'Ivoire");
+  const [kycAddress, setKycAddress] = useState("");
+  const [kycIdNumber, setKycIdNumber] = useState("");
+  const [kycDob, setKycDob] = useState("");
+  const [kycProfileError, setKycProfileError] = useState("");
+
+  // Étape "Vérification d'identité"
+  const [kycDocType, setKycDocType] = useState("cni");
   const [kycIdRectoName, setKycIdRectoName] = useState("");
   const [kycIdRectoPreview, setKycIdRectoPreview] = useState("");
   const [kycIdVersoName, setKycIdVersoName] = useState("");
   const [kycIdVersoPreview, setKycIdVersoPreview] = useState("");
+  const [kycSelfieName, setKycSelfieName] = useState("");
+  const [kycSelfiePreview, setKycSelfiePreview] = useState("");
+  const [kycSelfieIdName, setKycSelfieIdName] = useState("");
+  const [kycSelfieIdPreview, setKycSelfieIdPreview] = useState("");
   const [kycIdError, setKycIdError] = useState("");
 
-  const kycVerified = !!(agent?.kycEmailVerified && agent?.kycIdVerified);
+  const kycProfileDone = !!(agent?.firstName && agent?.lastName && agent?.country && agent?.address && agent?.idNumber && agent?.dob);
+  const kycStatus = agent?.kycStatus || "incomplete"; // incomplete | pending | validated
+  const kycVerified = !!(agent?.kycEmailVerified && kycStatus === "validated");
 
   function handleKycSendCode(e) {
     e.preventDefault();
@@ -394,28 +438,68 @@ export default function GuichetApp() {
     pushNotification("Adresse Gmail vérifiée ✅");
   }
 
-  function handleKycIdUpload(side, e) {
+  async function handleKycSaveProfile(e) {
+    e.preventDefault();
+    if (!kycFirstName || !kycLastName || !kycCountry || !kycAddress || !kycIdNumber || !kycDob) {
+      setKycProfileError("Merci de remplir tous les champs.");
+      return;
+    }
+    setKycProfileError("");
+    const { error } = await supabase
+      .from("agents")
+      .update({
+        first_name: kycFirstName,
+        last_name: kycLastName,
+        country: kycCountry,
+        address: kycAddress,
+        id_number: kycIdNumber,
+        date_of_birth: kycDob,
+      })
+      .eq("id", agent.id);
+    if (error) {
+      setKycProfileError("Erreur : " + error.message);
+      return;
+    }
+    setAgent((a) => ({
+      ...a,
+      firstName: kycFirstName,
+      lastName: kycLastName,
+      country: kycCountry,
+      address: kycAddress,
+      idNumber: kycIdNumber,
+      dob: kycDob,
+    }));
+    pushNotification("Profil complété ✅");
+  }
+
+  function handleKycFileUpload(kind, e) {
     const file = e.target.files?.[0];
     if (!file) return;
     const preview = file.type.startsWith("image/") ? URL.createObjectURL(file) : "";
-    if (side === "recto") {
-      setKycIdRectoName(file.name);
-      setKycIdRectoPreview(preview);
-    } else {
-      setKycIdVersoName(file.name);
-      setKycIdVersoPreview(preview);
-    }
+    if (kind === "recto") { setKycIdRectoName(file.name); setKycIdRectoPreview(preview); }
+    if (kind === "verso") { setKycIdVersoName(file.name); setKycIdVersoPreview(preview); }
+    if (kind === "selfie") { setKycSelfieName(file.name); setKycSelfiePreview(preview); }
+    if (kind === "selfieId") { setKycSelfieIdName(file.name); setKycSelfieIdPreview(preview); }
     setKycIdError("");
   }
 
-  async function handleKycConfirmId() {
-    if (!kycIdRectoName || !kycIdVersoName) {
-      setKycIdError("Ajoute le recto ET le verso de ta pièce d'identité.");
+  async function handleKycSubmitDocuments() {
+    const needsVerso = kycDocType !== "passeport";
+    if (!kycIdRectoName || (needsVerso && !kycIdVersoName) || !kycSelfieName || !kycSelfieIdName) {
+      setKycIdError("Ajoute tous les documents demandés avant d'envoyer.");
       return;
     }
-    await supabase.from("agents").update({ kyc_id_verified: true }).eq("id", agent.id);
-    setAgent((a) => ({ ...a, kycIdVerified: true, kycIdRectoName, kycIdVersoName }));
-    pushNotification("Pièce d'identité (recto/verso) envoyée pour vérification ✅");
+    setKycIdError("");
+    await supabase.from("agents").update({ document_type: kycDocType, kyc_status: "pending" }).eq("id", agent.id);
+    setAgent((a) => ({ ...a, kycStatus: "pending" }));
+    pushNotification("Documents envoyés — vérification en cours (jusqu'à 24h) ⏳");
+
+    // Simulation de la vérification (en production : jusqu'à 24h, traitée manuellement ou par un prestataire)
+    setTimeout(async () => {
+      await supabase.from("agents").update({ kyc_status: "validated" }).eq("id", agent.id);
+      setAgent((a) => (a ? { ...a, kycStatus: "validated" } : a));
+      pushNotification("Identité vérifiée — ton compte est validé ✅");
+    }, 10000);
   }
 
   // PIN confirmation modal state
@@ -518,17 +602,18 @@ export default function GuichetApp() {
       agencyName = foundAgency.name;
     }
 
+    const fullPhone = `${signupCountryCode} ${signupPhone}`.trim();
+
     const { error: insertErr } = await supabase.from("agents").insert({
       id: userId,
       full_name: signupName,
-      phone: signupPhone,
+      phone: fullPhone,
       email: signupEmail,
       agency_id: agencyId,
       agency_name: agencyName,
       role: signupRole,
       pin_hash: signupPin,
       kyc_email_verified: false,
-      kyc_id_verified: false,
     });
     setAuthLoading(false);
     if (insertErr) {
@@ -539,14 +624,14 @@ export default function GuichetApp() {
     setAgent({
       id: userId,
       name: signupName,
-      phone: signupPhone,
+      phone: fullPhone,
       email: signupEmail,
       agency: agencyName,
       agencyId,
       pin: signupPin,
       role: signupRole,
       kycEmailVerified: false,
-      kycIdVerified: false,
+      kycStatus: "incomplete",
     });
     setIsAuthenticated(true);
     setAuthError("");
@@ -1415,13 +1500,26 @@ export default function GuichetApp() {
                     style={{ background: COLORS.bgSoft, border: `1px solid ${COLORS.surfaceLine}`, color: COLORS.text }}
                   />
                   <label className="text-xs mb-2 block" style={{ color: COLORS.textMuted }}>Numéro de téléphone</label>
-                  <input
-                    value={signupPhone}
-                    onChange={(e) => setSignupPhone(e.target.value)}
-                    placeholder="07 XX XX XX XX"
-                    className="w-full px-3.5 py-2.5 rounded-lg text-sm mb-4 outline-none"
-                    style={{ background: COLORS.bgSoft, border: `1px solid ${COLORS.surfaceLine}`, color: COLORS.text }}
-                  />
+                  <div className="flex gap-2 mb-4">
+                    <select
+                      value={signupCountryCode}
+                      onChange={(e) => setSignupCountryCode(e.target.value)}
+                      className="px-2 py-2.5 rounded-lg text-sm outline-none"
+                      style={{ background: COLORS.bgSoft, border: `1px solid ${COLORS.surfaceLine}`, color: COLORS.text, width: 100 }}
+                    >
+                      {COUNTRY_CODES.map((c) => (
+                        <option key={c.code} value={c.code}>{c.flag} {c.code}</option>
+                      ))}
+                    </select>
+                    <input
+                      value={signupPhone}
+                      onChange={(e) => setSignupPhone(e.target.value)}
+                      placeholder="07 XX XX XX XX"
+                      type="tel"
+                      className="flex-1 px-3.5 py-2.5 rounded-lg text-sm outline-none"
+                      style={{ background: COLORS.bgSoft, border: `1px solid ${COLORS.surfaceLine}`, color: COLORS.text }}
+                    />
+                  </div>
                   <label className="text-xs mb-2 block" style={{ color: COLORS.textMuted }}>Adresse Gmail</label>
                   <input
                     type="email"
@@ -1512,13 +1610,26 @@ export default function GuichetApp() {
                         Confirme ton numéro et l'adresse Gmail associée à ton compte — un code de vérification y sera envoyé.
                       </p>
                       <label className="text-xs mb-2 block" style={{ color: COLORS.textMuted }}>Numéro de téléphone</label>
-                      <input
-                        value={recoveryPhone}
-                        onChange={(e) => setRecoveryPhone(e.target.value)}
-                        placeholder="07 XX XX XX XX"
-                        className="w-full px-3.5 py-2.5 rounded-lg text-sm mb-4 outline-none"
-                        style={{ background: COLORS.bgSoft, border: `1px solid ${COLORS.surfaceLine}`, color: COLORS.text }}
-                      />
+                      <div className="flex gap-2 mb-4">
+                        <select
+                          value={recoveryCountryCode}
+                          onChange={(e) => setRecoveryCountryCode(e.target.value)}
+                          className="px-2 py-2.5 rounded-lg text-sm outline-none"
+                          style={{ background: COLORS.bgSoft, border: `1px solid ${COLORS.surfaceLine}`, color: COLORS.text, width: 100 }}
+                        >
+                          {COUNTRY_CODES.map((c) => (
+                            <option key={c.code} value={c.code}>{c.flag} {c.code}</option>
+                          ))}
+                        </select>
+                        <input
+                          value={recoveryPhone}
+                          onChange={(e) => setRecoveryPhone(e.target.value)}
+                          placeholder="07 XX XX XX XX"
+                          type="tel"
+                          className="flex-1 px-3.5 py-2.5 rounded-lg text-sm outline-none"
+                          style={{ background: COLORS.bgSoft, border: `1px solid ${COLORS.surfaceLine}`, color: COLORS.text }}
+                        />
+                      </div>
                       <label className="text-xs mb-2 block" style={{ color: COLORS.textMuted }}>Adresse Gmail</label>
                       <input
                         type="email"
@@ -1792,9 +1903,9 @@ export default function GuichetApp() {
         )}
 
         {tab === "kyc" && (
-          <div className="gc-fade-in grid md:grid-cols-2 gap-4 max-w-3xl">
+          <div className="gc-fade-in max-w-3xl">
             {/* Étape email */}
-            <div className="p-6 rounded-xl" style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}` }}>
+            <div className="p-6 rounded-xl mb-4" style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}` }}>
               <div className="flex items-center gap-2 mb-1">
                 <Mail size={16} style={{ color: COLORS.goldSoft }} />
                 <span className="text-sm font-medium">Vérifier ton adresse Gmail</span>
@@ -1841,60 +1952,234 @@ export default function GuichetApp() {
               )}
             </div>
 
-            {/* Étape pièce d'identité */}
-            <div className="p-6 rounded-xl" style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}` }}>
+            {/* Étape profil */}
+            <div className="p-6 rounded-xl mb-4" style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}` }}>
               <div className="flex items-center gap-2 mb-1">
-                <FileCheck size={16} style={{ color: COLORS.goldSoft }} />
-                <span className="text-sm font-medium">Pièce d'identité — recto/verso</span>
-                {agent?.kycIdVerified && <CheckCircle2 size={15} style={{ color: COLORS.teal }} />}
+                <User size={16} style={{ color: COLORS.goldSoft }} />
+                <span className="text-sm font-medium">Complétez votre profil</span>
+                {kycProfileDone && <CheckCircle2 size={15} style={{ color: COLORS.teal }} />}
               </div>
-              <p className="text-xs mb-4" style={{ color: COLORS.textMuted }}>CNI, passeport ou attestation d'identité — les deux faces sont nécessaires.</p>
+              <p className="text-xs mb-4" style={{ color: COLORS.textMuted }}>Ces informations doivent correspondre à ta pièce d'identité.</p>
 
-              {agent?.kycIdVerified ? (
+              {kycProfileDone ? (
                 <div className="flex items-center gap-2 p-3 rounded-lg text-xs" style={{ background: "rgba(43,191,138,0.1)", color: COLORS.teal }}>
-                  <CheckCircle2 size={14} /> Documents envoyés — {agent.kycIdRectoName} / {agent.kycIdVersoName}
+                  <CheckCircle2 size={14} /> Profil complété — {agent.firstName} {agent.lastName}
                 </div>
               ) : (
+                <form onSubmit={handleKycSaveProfile} className="grid md:grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs mb-2 block" style={{ color: COLORS.textMuted }}>Prénom</label>
+                    <input
+                      value={kycFirstName}
+                      onChange={(e) => setKycFirstName(e.target.value)}
+                      placeholder="Ex. Awa"
+                      className="w-full px-3.5 py-2.5 rounded-lg text-sm outline-none"
+                      style={{ background: COLORS.bgSoft, border: `1px solid ${COLORS.surfaceLine}`, color: COLORS.text }}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs mb-2 block" style={{ color: COLORS.textMuted }}>Nom</label>
+                    <input
+                      value={kycLastName}
+                      onChange={(e) => setKycLastName(e.target.value)}
+                      placeholder="Ex. Koné"
+                      className="w-full px-3.5 py-2.5 rounded-lg text-sm outline-none"
+                      style={{ background: COLORS.bgSoft, border: `1px solid ${COLORS.surfaceLine}`, color: COLORS.text }}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs mb-2 block" style={{ color: COLORS.textMuted }}>Pays</label>
+                    <select
+                      value={kycCountry}
+                      onChange={(e) => setKycCountry(e.target.value)}
+                      className="w-full px-3.5 py-2.5 rounded-lg text-sm outline-none"
+                      style={{ background: COLORS.bgSoft, border: `1px solid ${COLORS.surfaceLine}`, color: COLORS.text }}
+                    >
+                      {COUNTRY_CODES.map((c) => (
+                        <option key={c.code} value={c.name}>{c.flag} {c.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-xs mb-2 block" style={{ color: COLORS.textMuted }}>Date de naissance</label>
+                    <input
+                      type="date"
+                      value={kycDob}
+                      onChange={(e) => setKycDob(e.target.value)}
+                      className="w-full px-3.5 py-2.5 rounded-lg text-sm outline-none"
+                      style={{ background: COLORS.bgSoft, border: `1px solid ${COLORS.surfaceLine}`, color: COLORS.text }}
+                    />
+                  </div>
+                  <div className="md:col-span-2">
+                    <label className="text-xs mb-2 block" style={{ color: COLORS.textMuted }}>Adresse de résidence</label>
+                    <input
+                      value={kycAddress}
+                      onChange={(e) => setKycAddress(e.target.value)}
+                      placeholder="Ex. Rue des Jardins, Cocody, Abidjan"
+                      className="w-full px-3.5 py-2.5 rounded-lg text-sm outline-none"
+                      style={{ background: COLORS.bgSoft, border: `1px solid ${COLORS.surfaceLine}`, color: COLORS.text }}
+                    />
+                  </div>
+                  <div className="md:col-span-2">
+                    <label className="text-xs mb-2 block" style={{ color: COLORS.textMuted }}>Numéro d'identité (CNI, passeport...)</label>
+                    <input
+                      value={kycIdNumber}
+                      onChange={(e) => setKycIdNumber(e.target.value)}
+                      placeholder="Ex. CI0012345678"
+                      className="w-full px-3.5 py-2.5 rounded-lg text-sm outline-none gc-mono"
+                      style={{ background: COLORS.bgSoft, border: `1px solid ${COLORS.surfaceLine}`, color: COLORS.text }}
+                    />
+                  </div>
+                  {kycProfileError && <p className="md:col-span-2 text-xs" style={{ color: COLORS.danger }}>{kycProfileError}</p>}
+                  <button
+                    type="submit"
+                    className="md:col-span-2 gc-btn py-2.5 rounded-lg text-sm font-medium"
+                    style={{ background: COLORS.gold, color: "#241800" }}
+                  >
+                    Enregistrer mon profil
+                  </button>
+                </form>
+              )}
+            </div>
+
+            {/* Étape vérification d'identité */}
+            <div className="p-6 rounded-xl mb-4" style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}` }}>
+              <div className="flex items-center gap-2 mb-4">
+                <Fingerprint size={16} style={{ color: COLORS.goldSoft }} />
+                <span className="text-sm font-medium">Vérification d'identité</span>
+              </div>
+
+              {/* Stepper */}
+              <div className="flex items-center mb-6">
+                {[
+                  { n: 1, label: "Documents" },
+                  { n: 2, label: "Vérification" },
+                  { n: 3, label: "Validé" },
+                ].map((s, i) => {
+                  const currentStep = kycStatus === "validated" ? 3 : kycStatus === "pending" ? 2 : 1;
+                  const done = currentStep > s.n;
+                  const active = currentStep === s.n;
+                  return (
+                    <React.Fragment key={s.n}>
+                      <div className="flex flex-col items-center" style={{ minWidth: 70 }}>
+                        <div
+                          className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold mb-1.5"
+                          style={{
+                            background: done || active ? COLORS.gold : COLORS.bgSoft,
+                            color: done || active ? "#241800" : COLORS.textMuted,
+                            border: `1px solid ${done || active ? COLORS.gold : COLORS.surfaceLine}`,
+                          }}
+                        >
+                          {done ? <Check size={14} /> : s.n}
+                        </div>
+                        <span className="text-[11px] text-center" style={{ color: active ? COLORS.text : COLORS.textMuted }}>{s.label}</span>
+                      </div>
+                      {i < 2 && (
+                        <div style={{ flex: 1, height: 1, background: currentStep > s.n ? COLORS.gold : COLORS.surfaceLine, marginBottom: 18 }} />
+                      )}
+                    </React.Fragment>
+                  );
+                })}
+              </div>
+
+              {kycStatus === "validated" ? (
+                <div className="flex items-center gap-2 p-3 rounded-lg text-xs" style={{ background: "rgba(43,191,138,0.1)", color: COLORS.teal }}>
+                  <CheckCircle2 size={14} /> Identité vérifiée et validée.
+                </div>
+              ) : kycStatus === "pending" ? (
+                <div className="flex items-center gap-2 p-3 rounded-lg text-xs" style={{ background: "rgba(232,169,59,0.1)", color: COLORS.goldSoft }}>
+                  <Clock size={14} /> Vérification en cours — délai habituel jusqu'à 24h.
+                </div>
+              ) : !kycProfileDone ? (
+                <p className="text-xs" style={{ color: COLORS.textMuted }}>Complète d'abord ton profil ci-dessus pour continuer.</p>
+              ) : (
                 <>
+                  <label className="text-xs mb-2 block" style={{ color: COLORS.textMuted }}>Type de document</label>
+                  <div className="grid grid-cols-3 gap-2 mb-4">
+                    {[
+                      { id: "cni", label: "Pièce d'identité" },
+                      { id: "permis", label: "Permis de conduire" },
+                      { id: "passeport", label: "Passeport" },
+                    ].map((d) => (
+                      <button
+                        key={d.id}
+                        type="button"
+                        onClick={() => setKycDocType(d.id)}
+                        className="gc-btn py-2 rounded-lg text-xs font-medium"
+                        style={
+                          kycDocType === d.id
+                            ? { background: COLORS.gold, color: "#241800" }
+                            : { background: COLORS.bgSoft, color: COLORS.textMuted, border: `1px solid ${COLORS.surfaceLine}` }
+                        }
+                      >
+                        {d.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className={`grid ${kycDocType === "passeport" ? "grid-cols-1" : "grid-cols-2"} gap-2 mb-3`}>
+                    <label
+                      className="flex flex-col items-center justify-center gap-1.5 p-4 rounded-lg cursor-pointer"
+                      style={{ background: COLORS.bgSoft, border: `1px dashed ${COLORS.surfaceLine}` }}
+                    >
+                      <Upload size={18} style={{ color: COLORS.textMuted }} />
+                      <span className="text-[11px] text-center" style={{ color: COLORS.textMuted }}>
+                        {kycIdRectoName || (kycDocType === "passeport" ? "Page principale" : "Recto")}
+                      </span>
+                      <input type="file" accept="image/*,.pdf" onChange={(e) => handleKycFileUpload("recto", e)} className="hidden" />
+                    </label>
+                    {kycDocType !== "passeport" && (
+                      <label
+                        className="flex flex-col items-center justify-center gap-1.5 p-4 rounded-lg cursor-pointer"
+                        style={{ background: COLORS.bgSoft, border: `1px dashed ${COLORS.surfaceLine}` }}
+                      >
+                        <Upload size={18} style={{ color: COLORS.textMuted }} />
+                        <span className="text-[11px] text-center" style={{ color: COLORS.textMuted }}>
+                          {kycIdVersoName || "Verso"}
+                        </span>
+                        <input type="file" accept="image/*,.pdf" onChange={(e) => handleKycFileUpload("verso", e)} className="hidden" />
+                      </label>
+                    )}
+                  </div>
+
                   <div className="grid grid-cols-2 gap-2 mb-3">
                     <label
                       className="flex flex-col items-center justify-center gap-1.5 p-4 rounded-lg cursor-pointer"
                       style={{ background: COLORS.bgSoft, border: `1px dashed ${COLORS.surfaceLine}` }}
                     >
-                      <Upload size={18} style={{ color: COLORS.textMuted }} />
+                      <Camera size={18} style={{ color: COLORS.textMuted }} />
                       <span className="text-[11px] text-center" style={{ color: COLORS.textMuted }}>
-                        {kycIdRectoName || "Recto"}
+                        {kycSelfieName || "Selfie"}
                       </span>
-                      <input type="file" accept="image/*,.pdf" onChange={(e) => handleKycIdUpload("recto", e)} className="hidden" />
+                      <input type="file" accept="image/*" onChange={(e) => handleKycFileUpload("selfie", e)} className="hidden" />
                     </label>
                     <label
                       className="flex flex-col items-center justify-center gap-1.5 p-4 rounded-lg cursor-pointer"
                       style={{ background: COLORS.bgSoft, border: `1px dashed ${COLORS.surfaceLine}` }}
                     >
-                      <Upload size={18} style={{ color: COLORS.textMuted }} />
+                      <Camera size={18} style={{ color: COLORS.textMuted }} />
                       <span className="text-[11px] text-center" style={{ color: COLORS.textMuted }}>
-                        {kycIdVersoName || "Verso"}
+                        {kycSelfieIdName || "Selfie avec pièce"}
                       </span>
-                      <input type="file" accept="image/*,.pdf" onChange={(e) => handleKycIdUpload("verso", e)} className="hidden" />
+                      <input type="file" accept="image/*" onChange={(e) => handleKycFileUpload("selfieId", e)} className="hidden" />
                     </label>
                   </div>
-                  {(kycIdRectoPreview || kycIdVersoPreview) && (
-                    <div className="grid grid-cols-2 gap-2 mb-3">
-                      {kycIdRectoPreview && (
-                        <img src={kycIdRectoPreview} alt="Aperçu recto" className="w-full rounded-lg" style={{ maxHeight: 110, objectFit: "cover" }} />
-                      )}
-                      {kycIdVersoPreview && (
-                        <img src={kycIdVersoPreview} alt="Aperçu verso" className="w-full rounded-lg" style={{ maxHeight: 110, objectFit: "cover" }} />
-                      )}
+
+                  {(kycIdRectoPreview || kycIdVersoPreview || kycSelfiePreview || kycSelfieIdPreview) && (
+                    <div className="grid grid-cols-4 gap-2 mb-3">
+                      {[kycIdRectoPreview, kycIdVersoPreview, kycSelfiePreview, kycSelfieIdPreview].filter(Boolean).map((src, i) => (
+                        <img key={i} src={src} alt="Aperçu document" className="w-full rounded-lg" style={{ height: 70, objectFit: "cover" }} />
+                      ))}
                     </div>
                   )}
+
                   {kycIdError && <p className="text-xs mb-3" style={{ color: COLORS.danger }}>{kycIdError}</p>}
                   <button
-                    onClick={handleKycConfirmId}
+                    onClick={handleKycSubmitDocuments}
                     className="gc-btn w-full py-2.5 rounded-lg text-sm font-medium"
                     style={{ background: COLORS.gold, color: "#241800" }}
                   >
-                    Envoyer les documents
+                    Envoyer pour vérification
                   </button>
                 </>
               )}
@@ -1902,14 +2187,19 @@ export default function GuichetApp() {
 
             {kycVerified && (
               <div
-                className="md:col-span-2 flex items-center gap-2 p-4 rounded-xl text-sm"
+                className="flex items-center gap-2 p-4 rounded-xl text-sm mb-4"
                 style={{ background: "rgba(43,191,138,0.1)", color: COLORS.teal, border: `1px solid ${COLORS.surfaceLine}` }}
               >
                 <CheckCircle2 size={16} /> Vérification KYC complète — tu peux maintenant effectuer des transactions.
               </div>
             )}
-            <p className="md:col-span-2 text-xs" style={{ color: COLORS.textMuted }}>
-              Simulation — aucun document n'est réellement transmis ou stocké. En production, ce document serait chiffré et transmis à un prestataire de vérification d'identité agréé.
+
+            <p className="text-xs mb-1" style={{ color: COLORS.textMuted }}>
+              <MapPin size={11} className="inline mr-1" />
+              Justificatif de domicile : pas d'étape séparée pour l'instant — ton adresse Gmail et ton numéro de téléphone déjà fournis serviront à cette vérification.
+            </p>
+            <p className="text-xs" style={{ color: COLORS.textMuted }}>
+              Simulation — aucun document n'est réellement transmis ou stocké. En production, la vérification serait confiée à un prestataire agréé et prendrait jusqu'à 24h.
             </p>
           </div>
         )}
