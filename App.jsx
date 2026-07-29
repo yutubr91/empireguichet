@@ -109,17 +109,70 @@ const NETWORKS = [
 ];
 
 const COUNTRY_CODES = [
-  { code: "+225", flag: "🇨🇮", name: "Côte d'Ivoire" },
-  { code: "+221", flag: "🇸🇳", name: "Sénégal" },
-  { code: "+223", flag: "🇲🇱", name: "Mali" },
-  { code: "+226", flag: "🇧🇫", name: "Burkina Faso" },
-  { code: "+229", flag: "🇧🇯", name: "Bénin" },
-  { code: "+228", flag: "🇹🇬", name: "Togo" },
-  { code: "+224", flag: "🇬🇳", name: "Guinée" },
-  { code: "+227", flag: "🇳🇪", name: "Niger" },
-  { code: "+237", flag: "🇨🇲", name: "Cameroun" },
-  { code: "+33", flag: "🇫🇷", name: "France" },
+  { code: "+225", iso: "ci", flag: "🇨🇮", name: "Côte d'Ivoire" },
+  { code: "+221", iso: "sn", flag: "🇸🇳", name: "Sénégal" },
+  { code: "+223", iso: "ml", flag: "🇲🇱", name: "Mali" },
+  { code: "+226", iso: "bf", flag: "🇧🇫", name: "Burkina Faso" },
+  { code: "+229", iso: "bj", flag: "🇧🇯", name: "Bénin" },
+  { code: "+228", iso: "tg", flag: "🇹🇬", name: "Togo" },
+  { code: "+224", iso: "gn", flag: "🇬🇳", name: "Guinée" },
+  { code: "+227", iso: "ne", flag: "🇳🇪", name: "Niger" },
+  { code: "+237", iso: "cm", flag: "🇨🇲", name: "Cameroun" },
+  { code: "+33", iso: "fr", flag: "🇫🇷", name: "France" },
 ];
+
+function FlagIcon({ iso, size = 16 }) {
+  return (
+    <img
+      src={`https://flagcdn.com/24x18/${iso}.png`}
+      alt=""
+      width={size}
+      height={Math.round(size * 0.75)}
+      style={{ borderRadius: 2, objectFit: "cover", flexShrink: 0 }}
+    />
+  );
+}
+
+function CountryDropdown({ value, onChange, showLabel, colors, width }) {
+  const [open, setOpen] = useState(false);
+  const current = COUNTRY_CODES.find((c) => (showLabel ? c.name === value : c.code === value)) || COUNTRY_CODES[0];
+  return (
+    <div style={{ position: "relative", width: width || (showLabel ? "100%" : 118), flexShrink: 0 }}>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm w-full"
+        style={{ background: colors.bgSoft, border: `1px solid ${colors.surfaceLine}`, color: colors.text }}
+      >
+        <FlagIcon iso={current.iso} />
+        <span className="gc-mono" style={{ fontSize: 13 }}>{showLabel ? current.name : current.code}</span>
+        <ChevronDown size={13} style={{ marginLeft: "auto", color: colors.textMuted }} />
+      </button>
+      {open && (
+        <>
+          <div style={{ position: "fixed", inset: 0, zIndex: 29 }} onClick={() => setOpen(false)} />
+          <div
+            className="absolute mt-1 rounded-lg overflow-hidden"
+            style={{ top: "100%", left: 0, width: showLabel ? "100%" : 200, maxHeight: 240, overflowY: "auto", background: colors.surface, border: `1px solid ${colors.surfaceLine}`, zIndex: 30, boxShadow: "0 12px 30px -10px rgba(0,0,0,0.5)" }}
+          >
+            {COUNTRY_CODES.map((c) => (
+              <button
+                key={c.code}
+                type="button"
+                onClick={() => { onChange(showLabel ? c.name : c.code); setOpen(false); }}
+                className="flex items-center gap-2 px-3 py-2 text-sm w-full text-left"
+                style={{ color: colors.text, background: (showLabel ? c.name === value : c.code === value) ? colors.bgSoft : "transparent" }}
+              >
+                <FlagIcon iso={c.iso} />
+                <span>{showLabel ? c.name : `${c.name} (${c.code})`}</span>
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
 
 const NETWORK_TYPE_LABELS = {
   momo: { field: "Numéro de téléphone", placeholder: "07 XX XX XX XX" },
@@ -1501,16 +1554,7 @@ export default function GuichetApp() {
                   />
                   <label className="text-xs mb-2 block" style={{ color: COLORS.textMuted }}>Numéro de téléphone</label>
                   <div className="flex gap-2 mb-4">
-                    <select
-                      value={signupCountryCode}
-                      onChange={(e) => setSignupCountryCode(e.target.value)}
-                      className="px-2 py-2.5 rounded-lg text-sm outline-none"
-                      style={{ background: COLORS.bgSoft, border: `1px solid ${COLORS.surfaceLine}`, color: COLORS.text, width: 100 }}
-                    >
-                      {COUNTRY_CODES.map((c) => (
-                        <option key={c.code} value={c.code}>{c.flag} {c.code}</option>
-                      ))}
-                    </select>
+                    <CountryDropdown value={signupCountryCode} onChange={setSignupCountryCode} colors={COLORS} />
                     <input
                       value={signupPhone}
                       onChange={(e) => setSignupPhone(e.target.value)}
@@ -1611,16 +1655,7 @@ export default function GuichetApp() {
                       </p>
                       <label className="text-xs mb-2 block" style={{ color: COLORS.textMuted }}>Numéro de téléphone</label>
                       <div className="flex gap-2 mb-4">
-                        <select
-                          value={recoveryCountryCode}
-                          onChange={(e) => setRecoveryCountryCode(e.target.value)}
-                          className="px-2 py-2.5 rounded-lg text-sm outline-none"
-                          style={{ background: COLORS.bgSoft, border: `1px solid ${COLORS.surfaceLine}`, color: COLORS.text, width: 100 }}
-                        >
-                          {COUNTRY_CODES.map((c) => (
-                            <option key={c.code} value={c.code}>{c.flag} {c.code}</option>
-                          ))}
-                        </select>
+                        <CountryDropdown value={recoveryCountryCode} onChange={setRecoveryCountryCode} colors={COLORS} />
                         <input
                           value={recoveryPhone}
                           onChange={(e) => setRecoveryPhone(e.target.value)}
@@ -1989,16 +2024,7 @@ export default function GuichetApp() {
                   </div>
                   <div>
                     <label className="text-xs mb-2 block" style={{ color: COLORS.textMuted }}>Pays</label>
-                    <select
-                      value={kycCountry}
-                      onChange={(e) => setKycCountry(e.target.value)}
-                      className="w-full px-3.5 py-2.5 rounded-lg text-sm outline-none"
-                      style={{ background: COLORS.bgSoft, border: `1px solid ${COLORS.surfaceLine}`, color: COLORS.text }}
-                    >
-                      {COUNTRY_CODES.map((c) => (
-                        <option key={c.code} value={c.name}>{c.flag} {c.name}</option>
-                      ))}
-                    </select>
+                    <CountryDropdown value={kycCountry} onChange={setKycCountry} colors={COLORS} showLabel width="100%" />
                   </div>
                   <div>
                     <label className="text-xs mb-2 block" style={{ color: COLORS.textMuted }}>Date de naissance</label>
