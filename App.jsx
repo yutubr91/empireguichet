@@ -67,33 +67,33 @@ import {
 import { supabase } from "./supabaseClient";
 
 const DARK_COLORS = {
-  bg: "#0F1024",
-  bgSoft: "#161835",
-  surface: "#1D1F45",
-  surfaceLine: "#2B2E5E",
-  text: "#F3F0E8",
-  textMuted: "#9C9FC4",
+  bg: "#0B1B33",
+  bgSoft: "#102844",
+  surface: "#153355",
+  surfaceLine: "#204A72",
+  text: "#F1F5F9",
+  textMuted: "#8CA3BE",
   gold: "#E8A93B",
   goldSoft: "#F5D89A",
   teal: "#2BBF8A",
   danger: "#E2685E",
-  headerBg: "rgba(15,16,36,0.92)",
-  chartGrid: "#2B2E5E",
+  headerBg: "rgba(11,27,51,0.92)",
+  chartGrid: "#204A72",
 };
 
 const LIGHT_COLORS = {
-  bg: "#F6F3EC",
-  bgSoft: "#EDE8DC",
+  bg: "#F2F6FA",
+  bgSoft: "#E5EDF5",
   surface: "#FFFFFF",
-  surfaceLine: "#E1DACB",
-  text: "#221F35",
-  textMuted: "#6B6680",
+  surfaceLine: "#D2E0EC",
+  text: "#122032",
+  textMuted: "#5C7089",
   gold: "#C9821F",
   goldSoft: "#8A5A12",
   teal: "#1D8F63",
   danger: "#C43D34",
-  headerBg: "rgba(246,243,236,0.92)",
-  chartGrid: "#E1DACB",
+  headerBg: "rgba(242,246,250,0.92)",
+  chartGrid: "#D2E0EC",
 };
 
 const NETWORKS = [
