@@ -69,21 +69,21 @@ import {
 import { supabase } from "./supabaseClient";
 
 const DARK_COLORS = {
-  bg: "#0B1220",
-  bgSoft: "#101A2E",
-  surface: "#152238",
-  surfaceLine: "#213655",
+  bg: "#1B2A41",
+  bgSoft: "#22354F",
+  surface: "#2A405E",
+  surfaceLine: "#3C567A",
   text: "#F1F5F9",
-  textMuted: "#8CA3BE",
+  textMuted: "#A8BBD2",
   gold: "#22D3EE",
   goldSoft: "#67E8F9",
   teal: "#2BBF8A",
   danger: "#E2685E",
   deposit: "#2BBF8A",
   withdraw: "#E8935A",
-  transfer: "#3B82F6",
-  headerBg: "rgba(11,18,32,0.92)",
-  chartGrid: "#213655",
+  transfer: "#5B9DF9",
+  headerBg: "rgba(27,42,65,0.92)",
+  chartGrid: "#3C567A",
 };
 
 const LIGHT_COLORS = {
@@ -333,7 +333,7 @@ function NetworkBadge({ net, size = 40, colors = DARK_COLORS }) {
 }
 
 export default function GuichetApp() {
-  const [theme, setTheme] = useState("dark");
+  const [theme, setTheme] = useState("light");
   const COLORS = theme === "light" ? LIGHT_COLORS : DARK_COLORS;
   const [introStep, setIntroStep] = useState(0); // 0 = splash logo, 1-3 = carousel, 4 = done
   useEffect(() => {
@@ -1628,6 +1628,7 @@ export default function GuichetApp() {
                   <label className="text-xs mb-2 block" style={{ color: COLORS.textMuted }}>Code PIN de transaction (4 chiffres)</label>
                   <input
                     value={signupPin}
+                    type="password"
                     onChange={(e) => setSignupPin(e.target.value.replace(/\D/g, "").slice(0, 4))}
                     placeholder="••••"
                     inputMode="numeric"
@@ -2807,6 +2808,7 @@ export default function GuichetApp() {
               <label className="text-xs mb-2 block" style={{ color: COLORS.textMuted }}>Code PIN actuel</label>
               <input
                 value={currentPinInput}
+                type="password"
                 onChange={(e) => setCurrentPinInput(e.target.value.replace(/\D/g, "").slice(0, 4))}
                 inputMode="numeric"
                 maxLength={4}
@@ -2816,6 +2818,7 @@ export default function GuichetApp() {
               <label className="text-xs mb-2 block" style={{ color: COLORS.textMuted }}>Nouveau code PIN</label>
               <input
                 value={newPinInput}
+                type="password"
                 onChange={(e) => setNewPinInput(e.target.value.replace(/\D/g, "").slice(0, 4))}
                 inputMode="numeric"
                 maxLength={4}
@@ -2825,6 +2828,7 @@ export default function GuichetApp() {
               <label className="text-xs mb-2 block" style={{ color: COLORS.textMuted }}>Confirmer le nouveau code</label>
               <input
                 value={confirmPinInput}
+                type="password"
                 onChange={(e) => setConfirmPinInput(e.target.value.replace(/\D/g, "").slice(0, 4))}
                 inputMode="numeric"
                 maxLength={4}
@@ -2984,6 +2988,7 @@ export default function GuichetApp() {
             </p>
             <input
               value={pinInput}
+              type="password"
               onChange={(e) => { setPinInput(e.target.value.replace(/\D/g, "").slice(0, 4)); setPinError(""); }}
               placeholder="••••"
               inputMode="numeric"
