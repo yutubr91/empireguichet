@@ -1387,8 +1387,28 @@ export default function GuichetApp() {
       </header>
 
       {/* ===== Hero ===== */}
-      <section className="max-w-6xl mx-auto px-5 pt-14 pb-16 grid md:grid-cols-2 gap-10 items-center">
-        <div>
+      <section
+        className="max-w-6xl mx-auto px-5 pt-14 pb-16 grid md:grid-cols-2 gap-10 items-center"
+        style={{ position: "relative", overflow: "hidden" }}
+      >
+        <img
+          src={LOGO_DATA_URI}
+          alt=""
+          aria-hidden="true"
+          style={{
+            position: "absolute",
+            top: "50%",
+            right: "-8%",
+            transform: "translateY(-50%)",
+            height: 620,
+            width: "auto",
+            opacity: theme === "light" ? 0.05 : 0.07,
+            pointerEvents: "none",
+            zIndex: 0,
+            filter: theme === "light" ? "grayscale(0.2)" : "none",
+          }}
+        />
+        <div style={{ position: "relative", zIndex: 1 }}>
           <div
             className="inline-flex items-center gap-1.5 text-xs px-3 py-1 rounded-full mb-5"
             style={{ background: COLORS.surface, color: COLORS.goldSoft, border: `1px solid ${COLORS.surfaceLine}` }}
