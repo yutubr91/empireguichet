@@ -370,6 +370,7 @@ export default function GuichetApp() {
   const [signupAgency, setSignupAgency] = useState("");
   const [signupAgencyCode, setSignupAgencyCode] = useState("");
   const [signupPassword, setSignupPassword] = useState("");
+  const [signupConfirmPassword, setSignupConfirmPassword] = useState("");
   const [signupEmail, setSignupEmail] = useState("");
   const [signupPin, setSignupPin] = useState("");
   const [signupRole, setSignupRole] = useState("agent");
@@ -624,6 +625,10 @@ export default function GuichetApp() {
     e.preventDefault();
     if (!signupName || !signupPhone || !signupEmail || !signupAgency || !signupPassword || signupPin.length !== 4) {
       setAuthError(signupPin.length !== 4 ? "Le code PIN doit contenir exactement 4 chiffres." : "Merci de remplir tous les champs.");
+      return;
+    }
+    if (signupPassword !== signupConfirmPassword) {
+      setAuthError("Les deux mots de passe ne correspondent pas.");
       return;
     }
     if (!signupEmail.toLowerCase().endsWith("@gmail.com")) {
@@ -1621,6 +1626,15 @@ export default function GuichetApp() {
                     <PasswordInput
                       value={signupPassword}
                       onChange={(e) => setSignupPassword(e.target.value)}
+                      placeholder="••••••••"
+                      colors={COLORS}
+                    />
+                  </div>
+                  <label className="text-xs mb-2 block" style={{ color: COLORS.textMuted }}>Confirmer le mot de passe</label>
+                  <div className="mb-4">
+                    <PasswordInput
+                      value={signupConfirmPassword}
+                      onChange={(e) => setSignupConfirmPassword(e.target.value)}
                       placeholder="••••••••"
                       colors={COLORS}
                     />
