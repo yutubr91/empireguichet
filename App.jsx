@@ -51,6 +51,8 @@ import {
   MapPin,
   Calendar,
   Fingerprint,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import {
   BarChart,
@@ -67,33 +69,39 @@ import {
 import { supabase } from "./supabaseClient";
 
 const DARK_COLORS = {
-  bg: "#0B1B33",
-  bgSoft: "#102844",
-  surface: "#153355",
-  surfaceLine: "#204A72",
+  bg: "#0B1220",
+  bgSoft: "#101A2E",
+  surface: "#152238",
+  surfaceLine: "#213655",
   text: "#F1F5F9",
   textMuted: "#8CA3BE",
-  gold: "#E8A93B",
-  goldSoft: "#F5D89A",
+  gold: "#22D3EE",
+  goldSoft: "#67E8F9",
   teal: "#2BBF8A",
   danger: "#E2685E",
-  headerBg: "rgba(11,27,51,0.92)",
-  chartGrid: "#204A72",
+  deposit: "#2BBF8A",
+  withdraw: "#E8935A",
+  transfer: "#3B82F6",
+  headerBg: "rgba(11,18,32,0.92)",
+  chartGrid: "#213655",
 };
 
 const LIGHT_COLORS = {
-  bg: "#F2F6FA",
-  bgSoft: "#E5EDF5",
+  bg: "#F5F7FA",
+  bgSoft: "#E9EEF3",
   surface: "#FFFFFF",
-  surfaceLine: "#D2E0EC",
-  text: "#122032",
+  surfaceLine: "#D6DEE7",
+  text: "#101826",
   textMuted: "#5C7089",
-  gold: "#C9821F",
-  goldSoft: "#8A5A12",
+  gold: "#0891B2",
+  goldSoft: "#0E7490",
   teal: "#1D8F63",
   danger: "#C43D34",
-  headerBg: "rgba(242,246,250,0.92)",
-  chartGrid: "#D2E0EC",
+  deposit: "#1D8F63",
+  withdraw: "#C9702E",
+  transfer: "#2563EB",
+  headerBg: "rgba(245,247,250,0.92)",
+  chartGrid: "#D6DEE7",
 };
 
 const NETWORKS = [
@@ -103,7 +111,7 @@ const NETWORKS = [
   { id: "wave", name: "Wave", color: "#1DC8F2", fg: "#00222C", fee: 0.008, letter: "W", type: "momo" },
   { id: "djamo", name: "Djamo", color: "#7B5CFA", fg: "#F3F0E8", fee: 0.015, letter: "DJ", type: "momo" },
   { id: "crypto", name: "Crypto (USDT)", color: "#2BBF8A", fg: "#08221A", fee: 0.02, letter: "₮", type: "crypto" },
-  { id: "cie", name: "CIE (Électricité)", color: "#F5A623", fg: "#241800", fee: 0.01, letter: "CIE", type: "facture" },
+  { id: "cie", name: "CIE (Électricité)", color: "#F5A623", fg: "#052E36", fee: 0.01, letter: "CIE", type: "facture" },
   { id: "sodeci", name: "SODECI (Eau)", color: "#29B6C7", fg: "#04262B", fee: 0.01, letter: "SDC", type: "facture" },
   { id: "peage", name: "Péage (Pont HKB)", color: "#8D6E63", fg: "#F3F0E8", fee: 0.02, letter: "PG", type: "peage" },
 ];
@@ -130,6 +138,30 @@ function FlagIcon({ iso, size = 16 }) {
       height={Math.round(size * 0.75)}
       style={{ borderRadius: 2, objectFit: "cover", flexShrink: 0 }}
     />
+  );
+}
+
+function PasswordInput({ value, onChange, placeholder, colors, className }) {
+  const [show, setShow] = useState(false);
+  return (
+    <div style={{ position: "relative" }}>
+      <input
+        type={show ? "text" : "password"}
+        value={value}
+        onChange={onChange}
+        placeholder={placeholder}
+        className={className || "w-full px-3.5 py-2.5 pr-11 rounded-lg text-sm outline-none"}
+        style={{ background: colors.bgSoft, border: `1px solid ${colors.surfaceLine}`, color: colors.text, width: "100%" }}
+      />
+      <button
+        type="button"
+        onClick={() => setShow((v) => !v)}
+        aria-label={show ? "Masquer le mot de passe" : "Afficher le mot de passe"}
+        style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", color: colors.textMuted }}
+      >
+        {show ? <EyeOff size={16} /> : <Eye size={16} />}
+      </button>
+    </div>
   );
 }
 
@@ -1184,7 +1216,7 @@ export default function GuichetApp() {
               <button
                 onClick={() => setIntroStep((s) => (s === 3 ? 4 : s + 1))}
                 className="gc-btn w-full max-w-xs py-3 rounded-lg text-sm font-medium"
-                style={{ background: COLORS.gold, color: "#241800" }}
+                style={{ background: COLORS.gold, color: "#052E36" }}
               >
                 {introStep === 3 ? "Commencer" : "Suivant"}
               </button>
@@ -1263,7 +1295,7 @@ export default function GuichetApp() {
               <button
                 onClick={scrollToDemo}
                 className="gc-btn hidden md:inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium"
-                style={{ background: COLORS.gold, color: "#241800" }}
+                style={{ background: COLORS.gold, color: "#052E36" }}
               >
                 Se connecter <ChevronRight size={15} />
               </button>
@@ -1371,7 +1403,7 @@ export default function GuichetApp() {
             <button
               onClick={scrollToDemo}
               className="gc-btn px-5 py-3 rounded-lg text-sm font-medium"
-              style={{ background: COLORS.gold, color: "#241800" }}
+              style={{ background: COLORS.gold, color: "#052E36" }}
             >
               Lancer une transaction test
             </button>
@@ -1476,7 +1508,7 @@ export default function GuichetApp() {
                     className="gc-btn flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg text-sm font-medium"
                     style={
                       authMode === "login"
-                        ? { background: COLORS.gold, color: "#241800" }
+                        ? { background: COLORS.gold, color: "#052E36" }
                         : { background: COLORS.bgSoft, color: COLORS.textMuted, border: `1px solid ${COLORS.surfaceLine}` }
                     }
                   >
@@ -1487,7 +1519,7 @@ export default function GuichetApp() {
                     className="gc-btn flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg text-sm font-medium"
                     style={
                       authMode === "signup"
-                        ? { background: COLORS.gold, color: "#241800" }
+                        ? { background: COLORS.gold, color: "#052E36" }
                         : { background: COLORS.bgSoft, color: COLORS.textMuted, border: `1px solid ${COLORS.surfaceLine}` }
                     }
                   >
@@ -1516,14 +1548,14 @@ export default function GuichetApp() {
                     style={{ background: COLORS.bgSoft, border: `1px solid ${COLORS.surfaceLine}`, color: COLORS.text }}
                   />
                   <label className="text-xs mb-2 block" style={{ color: COLORS.textMuted }}>Mot de passe</label>
-                  <input
-                    type="password"
-                    value={loginPassword}
-                    onChange={(e) => setLoginPassword(e.target.value)}
-                    placeholder="••••••••"
-                    className="w-full px-3.5 py-2.5 rounded-lg text-sm mb-2 outline-none"
-                    style={{ background: COLORS.bgSoft, border: `1px solid ${COLORS.surfaceLine}`, color: COLORS.text }}
-                  />
+                  <div className="mb-2">
+                    <PasswordInput
+                      value={loginPassword}
+                      onChange={(e) => setLoginPassword(e.target.value)}
+                      placeholder="••••••••"
+                      colors={COLORS}
+                    />
+                  </div>
                   <button
                     type="button"
                     onClick={() => { setAuthMode("recovery"); setRecoveryError(""); }}
@@ -1537,7 +1569,7 @@ export default function GuichetApp() {
                     type="submit"
                     disabled={authLoading}
                     className="gc-btn w-full py-3 rounded-lg text-sm font-medium disabled:opacity-50"
-                    style={{ background: COLORS.gold, color: "#241800" }}
+                    style={{ background: COLORS.gold, color: "#052E36" }}
                   >
                     {authLoading ? "Connexion…" : "Se connecter"}
                   </button>
@@ -1585,14 +1617,14 @@ export default function GuichetApp() {
                     style={{ background: COLORS.bgSoft, border: `1px solid ${COLORS.surfaceLine}`, color: COLORS.text }}
                   />
                   <label className="text-xs mb-2 block" style={{ color: COLORS.textMuted }}>Mot de passe</label>
-                  <input
-                    type="password"
-                    value={signupPassword}
-                    onChange={(e) => setSignupPassword(e.target.value)}
-                    placeholder="••••••••"
-                    className="w-full px-3.5 py-2.5 rounded-lg text-sm mb-4 outline-none"
-                    style={{ background: COLORS.bgSoft, border: `1px solid ${COLORS.surfaceLine}`, color: COLORS.text }}
-                  />
+                  <div className="mb-4">
+                    <PasswordInput
+                      value={signupPassword}
+                      onChange={(e) => setSignupPassword(e.target.value)}
+                      placeholder="••••••••"
+                      colors={COLORS}
+                    />
+                  </div>
                   <label className="text-xs mb-2 block" style={{ color: COLORS.textMuted }}>Code PIN de transaction (4 chiffres)</label>
                   <input
                     value={signupPin}
@@ -1616,7 +1648,7 @@ export default function GuichetApp() {
                         className="gc-btn flex-1 py-2 rounded-lg text-xs font-medium"
                         style={
                           signupRole === r.id
-                            ? { background: COLORS.gold, color: "#241800" }
+                            ? { background: COLORS.gold, color: "#052E36" }
                             : { background: COLORS.bgSoft, color: COLORS.textMuted, border: `1px solid ${COLORS.surfaceLine}` }
                         }
                       >
@@ -1641,7 +1673,7 @@ export default function GuichetApp() {
                     type="submit"
                     disabled={authLoading}
                     className="gc-btn w-full py-3 rounded-lg text-sm font-medium disabled:opacity-50"
-                    style={{ background: COLORS.gold, color: "#241800" }}
+                    style={{ background: COLORS.gold, color: "#052E36" }}
                   >
                     {authLoading ? "Création du compte…" : "Créer mon compte agent"}
                   </button>
@@ -1678,7 +1710,7 @@ export default function GuichetApp() {
                       <button
                         type="submit"
                         className="gc-btn w-full py-3 rounded-lg text-sm font-medium"
-                        style={{ background: COLORS.gold, color: "#241800" }}
+                        style={{ background: COLORS.gold, color: "#052E36" }}
                       >
                         Envoyer le code
                       </button>
@@ -1705,7 +1737,7 @@ export default function GuichetApp() {
                       <button
                         type="submit"
                         className="gc-btn w-full py-3 rounded-lg text-sm font-medium"
-                        style={{ background: COLORS.gold, color: "#241800" }}
+                        style={{ background: COLORS.gold, color: "#052E36" }}
                       >
                         Vérifier le code
                       </button>
@@ -1715,28 +1747,28 @@ export default function GuichetApp() {
                   {recoveryStep === 3 && (
                     <form onSubmit={handleRecoveryReset}>
                       <label className="text-xs mb-2 block" style={{ color: COLORS.textMuted }}>Nouveau mot de passe</label>
-                      <input
-                        type="password"
-                        value={recoveryNewPassword}
-                        onChange={(e) => setRecoveryNewPassword(e.target.value)}
-                        placeholder="••••••••"
-                        className="w-full px-3.5 py-2.5 rounded-lg text-sm mb-4 outline-none"
-                        style={{ background: COLORS.bgSoft, border: `1px solid ${COLORS.surfaceLine}`, color: COLORS.text }}
-                      />
+                      <div className="mb-4">
+                        <PasswordInput
+                          value={recoveryNewPassword}
+                          onChange={(e) => setRecoveryNewPassword(e.target.value)}
+                          placeholder="••••••••"
+                          colors={COLORS}
+                        />
+                      </div>
                       <label className="text-xs mb-2 block" style={{ color: COLORS.textMuted }}>Confirmer le mot de passe</label>
-                      <input
-                        type="password"
-                        value={recoveryConfirmPassword}
-                        onChange={(e) => setRecoveryConfirmPassword(e.target.value)}
-                        placeholder="••••••••"
-                        className="w-full px-3.5 py-2.5 rounded-lg text-sm mb-4 outline-none"
-                        style={{ background: COLORS.bgSoft, border: `1px solid ${COLORS.surfaceLine}`, color: COLORS.text }}
-                      />
+                      <div className="mb-4">
+                        <PasswordInput
+                          value={recoveryConfirmPassword}
+                          onChange={(e) => setRecoveryConfirmPassword(e.target.value)}
+                          placeholder="••••••••"
+                          colors={COLORS}
+                        />
+                      </div>
                       {recoveryError && <p className="text-xs mb-4" style={{ color: COLORS.danger }}>{recoveryError}</p>}
                       <button
                         type="submit"
                         className="gc-btn w-full py-3 rounded-lg text-sm font-medium"
-                        style={{ background: COLORS.gold, color: "#241800" }}
+                        style={{ background: COLORS.gold, color: "#052E36" }}
                       >
                         Réinitialiser le mot de passe
                       </button>
@@ -1754,7 +1786,7 @@ export default function GuichetApp() {
                       <button
                         onClick={backToLoginFromRecovery}
                         className="gc-btn w-full py-3 rounded-lg text-sm font-medium"
-                        style={{ background: COLORS.gold, color: "#241800" }}
+                        style={{ background: COLORS.gold, color: "#052E36" }}
                       >
                         Retour à la connexion
                       </button>
@@ -1793,7 +1825,7 @@ export default function GuichetApp() {
         >
           <div className="flex items-center gap-3">
             <div
-              style={{ background: COLORS.gold, color: "#241800" }}
+              style={{ background: COLORS.gold, color: "#052E36" }}
               className="w-9 h-9 rounded-full flex items-center justify-center font-semibold gc-display"
             >
               {agent?.name?.charAt(0)}
@@ -1842,7 +1874,7 @@ export default function GuichetApp() {
               className="gc-btn flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium"
               style={
                 tab === t.id
-                  ? { background: COLORS.gold, color: "#241800" }
+                  ? { background: COLORS.gold, color: "#052E36" }
                   : { background: COLORS.surface, color: COLORS.textMuted, border: `1px solid ${COLORS.surfaceLine}` }
               }
             >
@@ -1957,7 +1989,7 @@ export default function GuichetApp() {
                   <button
                     type="submit"
                     className="gc-btn w-full flex items-center justify-center gap-1.5 py-2.5 rounded-lg text-sm font-medium"
-                    style={{ background: COLORS.gold, color: "#241800" }}
+                    style={{ background: COLORS.gold, color: "#052E36" }}
                   >
                     <Send size={14} /> Envoyer le code de vérification
                   </button>
@@ -1979,7 +2011,7 @@ export default function GuichetApp() {
                   <button
                     type="submit"
                     className="gc-btn w-full py-2.5 rounded-lg text-sm font-medium"
-                    style={{ background: COLORS.gold, color: "#241800" }}
+                    style={{ background: COLORS.gold, color: "#052E36" }}
                   >
                     Vérifier le code
                   </button>
@@ -2060,7 +2092,7 @@ export default function GuichetApp() {
                   <button
                     type="submit"
                     className="md:col-span-2 gc-btn py-2.5 rounded-lg text-sm font-medium"
-                    style={{ background: COLORS.gold, color: "#241800" }}
+                    style={{ background: COLORS.gold, color: "#052E36" }}
                   >
                     Enregistrer mon profil
                   </button>
@@ -2092,7 +2124,7 @@ export default function GuichetApp() {
                           className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold mb-1.5"
                           style={{
                             background: done || active ? COLORS.gold : COLORS.bgSoft,
-                            color: done || active ? "#241800" : COLORS.textMuted,
+                            color: done || active ? "#052E36" : COLORS.textMuted,
                             border: `1px solid ${done || active ? COLORS.gold : COLORS.surfaceLine}`,
                           }}
                         >
@@ -2134,7 +2166,7 @@ export default function GuichetApp() {
                         className="gc-btn py-2 rounded-lg text-xs font-medium"
                         style={
                           kycDocType === d.id
-                            ? { background: COLORS.gold, color: "#241800" }
+                            ? { background: COLORS.gold, color: "#052E36" }
                             : { background: COLORS.bgSoft, color: COLORS.textMuted, border: `1px solid ${COLORS.surfaceLine}` }
                         }
                       >
@@ -2203,7 +2235,7 @@ export default function GuichetApp() {
                   <button
                     onClick={handleKycSubmitDocuments}
                     className="gc-btn w-full py-2.5 rounded-lg text-sm font-medium"
-                    style={{ background: COLORS.gold, color: "#241800" }}
+                    style={{ background: COLORS.gold, color: "#052E36" }}
                   >
                     Envoyer pour vérification
                   </button>
@@ -2240,7 +2272,7 @@ export default function GuichetApp() {
             <button
               onClick={() => setTab("kyc")}
               className="gc-btn px-5 py-2.5 rounded-lg text-sm font-medium"
-              style={{ background: COLORS.gold, color: "#241800" }}
+              style={{ background: COLORS.gold, color: "#052E36" }}
             >
               Compléter la vérification KYC
             </button>
@@ -2283,7 +2315,7 @@ export default function GuichetApp() {
                       className="gc-btn flex items-center justify-center gap-1.5 py-2.5 rounded-lg text-xs font-medium"
                       style={
                         txDirection === "depot"
-                          ? { background: COLORS.gold, color: "#241800" }
+                          ? { background: COLORS.deposit, color: "#ffffff" }
                           : { background: COLORS.bgSoft, color: COLORS.textMuted, border: `1px solid ${COLORS.surfaceLine}` }
                       }
                     >
@@ -2295,7 +2327,7 @@ export default function GuichetApp() {
                       className="gc-btn flex items-center justify-center gap-1.5 py-2.5 rounded-lg text-xs font-medium"
                       style={
                         txDirection === "retrait"
-                          ? { background: COLORS.gold, color: "#241800" }
+                          ? { background: COLORS.withdraw, color: "#ffffff" }
                           : { background: COLORS.bgSoft, color: COLORS.textMuted, border: `1px solid ${COLORS.surfaceLine}` }
                       }
                     >
@@ -2358,7 +2390,7 @@ export default function GuichetApp() {
                 type="submit"
                 disabled={!amtNum || !phone || pending}
                 className="gc-btn w-full py-3 rounded-lg text-sm font-medium disabled:opacity-40"
-                style={{ background: COLORS.gold, color: "#241800" }}
+                style={{ background: COLORS.gold, color: "#052E36" }}
               >
                 {pending ? "Traitement en cours…" : "Continuer — confirmer par PIN"}
               </button>
@@ -2408,8 +2440,8 @@ export default function GuichetApp() {
                           className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full"
                           style={
                             txDirection === "retrait"
-                              ? { background: "rgba(232,169,59,0.15)", color: COLORS.goldSoft }
-                              : { background: "rgba(43,191,138,0.15)", color: COLORS.teal }
+                              ? { background: "rgba(232,147,90,0.15)", color: COLORS.withdraw }
+                              : { background: "rgba(43,191,138,0.15)", color: COLORS.deposit }
                           }
                         >
                           {txDirection === "retrait" ? "Retrait" : "Dépôt"}
@@ -2430,7 +2462,7 @@ export default function GuichetApp() {
               {pending && (
                 <div
                   className="gc-fade-in flex items-center gap-2 p-4 rounded-xl text-sm"
-                  style={{ background: "rgba(232,169,59,0.1)", color: COLORS.goldSoft, border: `1px solid ${COLORS.gold}` }}
+                  style={{ background: "rgba(59,130,246,0.1)", color: COLORS.transfer, border: `1px solid ${COLORS.transfer}` }}
                 >
                   <Clock size={16} className="animate-pulse" /> Transaction <TicketNumber n={pending.id} /> en cours…
                 </div>
@@ -2546,8 +2578,8 @@ export default function GuichetApp() {
                             className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-md"
                             style={
                               h.direction === "retrait"
-                                ? { background: "rgba(232,169,59,0.12)", color: COLORS.goldSoft }
-                                : { background: "rgba(43,191,138,0.12)", color: COLORS.teal }
+                                ? { background: "rgba(232,147,90,0.12)", color: COLORS.withdraw }
+                                : { background: "rgba(43,191,138,0.12)", color: COLORS.deposit }
                             }
                           >
                             {h.direction === "retrait" ? <ArrowDownCircle size={12} /> : <ArrowUpCircle size={12} />}
@@ -2563,7 +2595,7 @@ export default function GuichetApp() {
                           style={
                             h.status === "Terminé"
                               ? { background: "rgba(43,191,138,0.12)", color: COLORS.teal }
-                              : { background: "rgba(232,169,59,0.12)", color: COLORS.goldSoft }
+                              : { background: "rgba(59,130,246,0.14)", color: COLORS.transfer }
                           }
                         >
                           {h.status === "Terminé" ? <CheckCircle2 size={12} /> : <Clock size={12} />} {h.status}
@@ -2646,7 +2678,7 @@ export default function GuichetApp() {
                 <button
                   onClick={handleShareReferral}
                   className="gc-btn flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg text-sm font-medium"
-                  style={{ background: COLORS.gold, color: "#241800" }}
+                  style={{ background: COLORS.gold, color: "#052E36" }}
                 >
                   <Share2 size={14} /> Partager
                 </button>
@@ -2807,7 +2839,7 @@ export default function GuichetApp() {
               <button
                 type="submit"
                 className="gc-btn w-full flex items-center justify-center gap-1.5 py-2.5 rounded-lg text-sm font-medium"
-                style={{ background: COLORS.gold, color: "#241800" }}
+                style={{ background: COLORS.gold, color: "#052E36" }}
               >
                 <Save size={14} /> Mettre à jour le PIN
               </button>
@@ -2823,23 +2855,23 @@ export default function GuichetApp() {
                 <span className="text-sm font-medium">Changer le mot de passe</span>
               </div>
               <label className="text-xs mb-2 block" style={{ color: COLORS.textMuted }}>Nouveau mot de passe</label>
-              <input
-                type="password"
-                value={newPasswordInput}
-                onChange={(e) => setNewPasswordInput(e.target.value)}
-                placeholder="••••••••"
-                className="w-full px-3.5 py-2.5 rounded-lg text-sm mb-3 outline-none"
-                style={{ background: COLORS.bgSoft, border: `1px solid ${COLORS.surfaceLine}`, color: COLORS.text }}
-              />
+              <div className="mb-3">
+                <PasswordInput
+                  value={newPasswordInput}
+                  onChange={(e) => setNewPasswordInput(e.target.value)}
+                  placeholder="••••••••"
+                  colors={COLORS}
+                />
+              </div>
               <label className="text-xs mb-2 block" style={{ color: COLORS.textMuted }}>Confirmer le mot de passe</label>
-              <input
-                type="password"
-                value={confirmPasswordInput}
-                onChange={(e) => setConfirmPasswordInput(e.target.value)}
-                placeholder="••••••••"
-                className="w-full px-3.5 py-2.5 rounded-lg text-sm mb-4 outline-none"
-                style={{ background: COLORS.bgSoft, border: `1px solid ${COLORS.surfaceLine}`, color: COLORS.text }}
-              />
+              <div className="mb-4">
+                <PasswordInput
+                  value={confirmPasswordInput}
+                  onChange={(e) => setConfirmPasswordInput(e.target.value)}
+                  placeholder="••••••••"
+                  colors={COLORS}
+                />
+              </div>
               {passwordChangeMsg.text && (
                 <p className="text-xs mb-4" style={{ color: passwordChangeMsg.type === "error" ? COLORS.danger : COLORS.teal }}>
                   {passwordChangeMsg.text}
@@ -2848,7 +2880,7 @@ export default function GuichetApp() {
               <button
                 type="submit"
                 className="gc-btn w-full flex items-center justify-center gap-1.5 py-2.5 rounded-lg text-sm font-medium"
-                style={{ background: COLORS.gold, color: "#241800" }}
+                style={{ background: COLORS.gold, color: "#052E36" }}
               >
                 <Save size={14} /> Mettre à jour le mot de passe
               </button>
@@ -2911,7 +2943,7 @@ export default function GuichetApp() {
               <button
                 onClick={staySignedIn}
                 className="gc-btn flex-1 py-2.5 rounded-lg text-sm font-medium"
-                style={{ background: COLORS.gold, color: "#241800" }}
+                style={{ background: COLORS.gold, color: "#052E36" }}
               >
                 Rester connecté
               </button>
@@ -2978,7 +3010,7 @@ export default function GuichetApp() {
                 type="submit"
                 disabled={pinInput.length !== 4}
                 className="gc-btn flex-1 py-2.5 rounded-lg text-sm font-medium disabled:opacity-40"
-                style={{ background: COLORS.gold, color: "#241800" }}
+                style={{ background: COLORS.gold, color: "#052E36" }}
               >
                 Confirmer
               </button>
@@ -3069,7 +3101,7 @@ export default function GuichetApp() {
             <button
               onClick={() => shareReceiptNative(lastReceipt)}
               className="gc-btn w-full flex items-center justify-center gap-1.5 py-2.5 rounded-lg text-xs font-medium mb-2"
-              style={{ background: COLORS.gold, color: "#241800" }}
+              style={{ background: COLORS.gold, color: "#052E36" }}
             >
               <Share2 size={14} /> Autre application
             </button>
@@ -3138,7 +3170,7 @@ export default function GuichetApp() {
                       style={
                         m.from === "agent"
                           ? { background: COLORS.bgSoft, color: COLORS.text, alignSelf: "flex-start" }
-                          : { background: COLORS.gold, color: "#241800", alignSelf: "flex-end" }
+                          : { background: COLORS.gold, color: "#052E36", alignSelf: "flex-end" }
                       }
                     >
                       {m.text}
@@ -3206,7 +3238,7 @@ export default function GuichetApp() {
                       <button
                         type="submit"
                         className="gc-btn flex items-center justify-center gap-1.5 py-2.5 rounded-lg text-xs font-medium"
-                        style={{ background: COLORS.gold, color: "#241800" }}
+                        style={{ background: COLORS.gold, color: "#052E36" }}
                       >
                         <Send size={13} /> Envoyer
                       </button>
@@ -3226,7 +3258,7 @@ export default function GuichetApp() {
                   className="flex-1 px-3 py-2 rounded-lg text-xs outline-none"
                   style={{ background: COLORS.bgSoft, border: `1px solid ${COLORS.surfaceLine}`, color: COLORS.text }}
                 />
-                <button type="submit" aria-label="Envoyer" className="gc-btn w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: COLORS.gold, color: "#241800" }}>
+                <button type="submit" aria-label="Envoyer" className="gc-btn w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: COLORS.gold, color: "#052E36" }}>
                   <Send size={14} />
                 </button>
               </form>
@@ -3238,7 +3270,7 @@ export default function GuichetApp() {
           onClick={() => setSupportOpen((v) => !v)}
           aria-label="Service client"
           className="gc-btn w-14 h-14 rounded-full flex items-center justify-center"
-          style={{ background: COLORS.gold, color: "#241800", boxShadow: "0 10px 30px -10px rgba(232,169,59,0.6)" }}
+          style={{ background: COLORS.gold, color: "#052E36", boxShadow: "0 10px 30px -10px rgba(232,169,59,0.6)" }}
         >
           {supportOpen ? <X size={22} /> : <MessageCircle size={22} />}
         </button>
