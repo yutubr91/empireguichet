@@ -1391,23 +1391,33 @@ export default function GuichetApp() {
         className="max-w-6xl mx-auto px-5 pt-14 pb-16 grid md:grid-cols-2 gap-10 items-center"
         style={{ position: "relative", overflow: "hidden" }}
       >
-        <img
-          src={LOGO_DATA_URI}
-          alt=""
-          aria-hidden="true"
-          style={{
-            position: "absolute",
-            top: "50%",
-            right: "-8%",
-            transform: "translateY(-50%)",
-            height: 620,
-            width: "auto",
-            opacity: theme === "light" ? 0.05 : 0.07,
-            pointerEvents: "none",
-            zIndex: 0,
-            filter: theme === "light" ? "grayscale(0.2)" : "none",
-          }}
-        />
+        {[
+          { top: "4%", right: "2%", height: 130, rotate: "-8deg" },
+          { top: "38%", right: "22%", height: 90, rotate: "12deg" },
+          { top: "62%", right: "-4%", height: 160, rotate: "6deg" },
+          { top: "82%", right: "30%", height: 70, rotate: "-14deg" },
+          { top: "12%", right: "38%", height: 60, rotate: "20deg" },
+          { top: "-6%", right: "16%", height: 100, rotate: "-4deg" },
+        ].map((p, i) => (
+          <img
+            key={i}
+            src={LOGO_DATA_URI}
+            alt=""
+            aria-hidden="true"
+            style={{
+              position: "absolute",
+              top: p.top,
+              right: p.right,
+              height: p.height,
+              width: "auto",
+              transform: `rotate(${p.rotate})`,
+              opacity: theme === "light" ? 0.05 : 0.07,
+              pointerEvents: "none",
+              zIndex: 0,
+              filter: theme === "light" ? "grayscale(0.2)" : "none",
+            }}
+          />
+        ))}
         <div style={{ position: "relative", zIndex: 1 }}>
           <div
             className="inline-flex items-center gap-1.5 text-xs px-3 py-1 rounded-full mb-5"
