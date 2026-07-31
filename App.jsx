@@ -1137,16 +1137,19 @@ export default function GuichetApp() {
   const INTRO_SLIDES = [
     {
       icon: Wallet,
+      color: "#E8A93B",
       title: "Tous vos réseaux, un seul endroit",
       text: "MTN, Orange, Moov, Wave, Djamo, crypto, CIE, SODECI et péages réunis dans une seule interface.",
     },
     {
       icon: ShieldCheck,
+      color: COLORS.transfer,
       title: "Sécurisé à chaque transaction",
       text: "Un code PIN personnel confirme chaque envoi, pour protéger l'agent et le client.",
     },
     {
       icon: BarChart3,
+      color: COLORS.deposit,
       title: "Pilote ton activité",
       text: "Suis ton volume, tes commissions et ton équipe en temps réel depuis le tableau de bord.",
     },
@@ -1214,8 +1217,8 @@ export default function GuichetApp() {
                         display: "flex",
                         alignItems: "center",
                         justifyContent: "center",
-                        background: `linear-gradient(150deg, ${shadeColor(COLORS.transfer, 25)} 0%, ${COLORS.transfer} 45%, ${shadeColor(COLORS.transfer, -30)} 100%)`,
-                        boxShadow: `0 22px 40px -14px ${COLORS.transfer}88, 0 10px 18px -8px rgba(0,0,0,0.35), inset 0 2px 2px rgba(255,255,255,0.55), inset 0 -6px 10px rgba(0,0,0,0.25)`,
+                        background: `linear-gradient(150deg, ${shadeColor(slide.color, 25)} 0%, ${slide.color} 45%, ${shadeColor(slide.color, -30)} 100%)`,
+                        boxShadow: `0 22px 40px -14px ${slide.color}88, 0 10px 18px -8px rgba(0,0,0,0.35), inset 0 2px 2px rgba(255,255,255,0.55), inset 0 -6px 10px rgba(0,0,0,0.25)`,
                       }}
                     >
                       <div
