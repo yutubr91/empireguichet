@@ -376,6 +376,13 @@ export default function GuichetApp() {
   const [signupRole, setSignupRole] = useState("agent");
   const [authError, setAuthError] = useState("");
   const [authLoading, setAuthLoading] = useState(false);
+  const [signupCooldown, setSignupCooldown] = useState(0);
+
+  useEffect(() => {
+    if (signupCooldown <= 0) return;
+    const t = setTimeout(() => setSignupCooldown((s) => Math.max(s - 1, 0)), 1000);
+    return () => clearTimeout(t);
+  }, [signupCooldown]);
   const [newAgencyCode, setNewAgencyCode] = useState("");
 
   function generateAgencyCode(name) {
@@ -649,7 +656,13 @@ export default function GuichetApp() {
     });
     if (error) {
       setAuthLoading(false);
-      setAuthError(error.message);
+      const waitMatch = error.message.match(/after (\d+) seconds?/i);
+      if (waitMatch) {
+        setSignupCooldown(parseInt(waitMatch[1], 10));
+        setAuthError("");
+      } else {
+        setAuthError(error.message);
+      }
       return;
     }
     const userId = data.user?.id;
@@ -1192,10 +1205,37 @@ export default function GuichetApp() {
                 return (
                   <>
                     <div
-                      className="rounded-2xl flex items-center justify-center mb-6"
-                      style={{ width: 84, height: 84, background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}` }}
+                      style={{
+                        width: 108,
+                        height: 108,
+                        borderRadius: 30,
+                        marginBottom: 28,
+                        position: "relative",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        background: `linear-gradient(150deg, ${shadeColor(COLORS.transfer, 25)} 0%, ${COLORS.transfer} 45%, ${shadeColor(COLORS.transfer, -30)} 100%)`,
+                        boxShadow: `0 22px 40px -14px ${COLORS.transfer}88, 0 10px 18px -8px rgba(0,0,0,0.35), inset 0 2px 2px rgba(255,255,255,0.55), inset 0 -6px 10px rgba(0,0,0,0.25)`,
+                      }}
                     >
-                      <Icon size={34} style={{ color: COLORS.goldSoft }} />
+                      <div
+                        aria-hidden="true"
+                        style={{
+                          position: "absolute",
+                          top: 7,
+                          left: 12,
+                          right: 12,
+                          height: "42%",
+                          borderRadius: "50% 50% 60% 60% / 70% 70% 100% 100%",
+                          background: "linear-gradient(180deg, rgba(255,255,255,0.45), rgba(255,255,255,0))",
+                          pointerEvents: "none",
+                        }}
+                      />
+                      <Icon
+                        size={42}
+                        strokeWidth={2}
+                        style={{ color: "#ffffff", filter: "drop-shadow(0 4px 4px rgba(0,0,0,0.4))", position: "relative", zIndex: 1 }}
+                      />
                     </div>
                     <h2 className="gc-display text-xl font-semibold mb-3" style={{ maxWidth: 320 }}>{slide.title}</h2>
                     <p className="text-sm" style={{ color: COLORS.textMuted, maxWidth: 320 }}>{slide.text}</p>
@@ -1714,13 +1754,22 @@ export default function GuichetApp() {
                     </>
                   )}
                   {authError && <p className="text-xs mb-4" style={{ color: COLORS.danger }}>{authError}</p>}
+                  {signupCooldown > 0 && (
+                    <p className="text-xs mb-4 flex items-center gap-1.5" style={{ color: COLORS.withdraw }}>
+                      <Clock size={13} /> Trop de tentatives — réessaie dans {signupCooldown}s…
+                    </p>
+                  )}
                   <button
                     type="submit"
-                    disabled={authLoading}
+                    disabled={authLoading || signupCooldown > 0}
                     className="gc-btn w-full py-3 rounded-lg text-sm font-medium disabled:opacity-50"
                     style={{ background: COLORS.gold, color: "#052E36" }}
                   >
-                    {authLoading ? "Création du compte…" : "Créer mon compte agent"}
+                    {signupCooldown > 0
+                      ? `Réessaie dans ${signupCooldown}s`
+                      : authLoading
+                      ? "Création du compte…"
+                      : "Créer mon compte agent"}
                   </button>
                 </form>
               ) : (
