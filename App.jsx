@@ -132,6 +132,20 @@ const COUNTRY_CODES = [
 function Wallet3D({ size = 120 }) {
   return (
     <svg width={size} height={size} viewBox="0 0 120 120">
+      <style>{`
+        @keyframes wDrop {
+          0% { transform: translateY(-55px) rotate(-6deg); opacity: 0; }
+          65% { transform: translateY(3px) rotate(0deg); opacity: 1; }
+          80% { transform: translateY(-2px); }
+          100% { transform: translateY(0); opacity: 1; }
+        }
+        .w-drop-cash { animation: wDrop 0.9s cubic-bezier(.34,1.56,.64,1) 0.15s both; transform-origin: 91px 49px; }
+        .w-drop-card2 { animation: wDrop 0.9s cubic-bezier(.34,1.56,.64,1) 0.3s both; transform-origin: 39px 39px; }
+        .w-drop-card1 { animation: wDrop 0.9s cubic-bezier(.34,1.56,.64,1) 0.45s both; transform-origin: 47px 35px; }
+        @media (prefers-reduced-motion: reduce) {
+          .w-drop-cash, .w-drop-card2, .w-drop-card1 { animation: none; }
+        }
+      `}</style>
       <defs>
         <linearGradient id="wBody" x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%" stopColor="#8A5A28" />
@@ -167,32 +181,38 @@ function Wallet3D({ size = 120 }) {
       <g filter="url(#wShadow)">
         {/* cash peeking from the side, styled like a banknote */}
         <g transform="rotate(-4 91 49)">
-          <rect x="78" y="42" width="26" height="15" rx="2" fill="url(#wCash)" />
-          <rect x="80" y="44" width="22" height="11" rx="1" fill="none" stroke="#FFFFFF" strokeWidth="0.7" opacity="0.7" />
-          <circle cx="86" cy="49.5" r="3.1" fill="none" stroke="#FFFFFF" strokeWidth="0.7" opacity="0.75" />
-          <circle cx="86" cy="49.5" r="1.3" fill="#FFFFFF" opacity="0.5" />
-          <rect x="96" y="45.5" width="4" height="1.3" rx="0.6" fill="#FFFFFF" opacity="0.6" />
-          <rect x="96" y="48" width="4" height="1.3" rx="0.6" fill="#FFFFFF" opacity="0.6" />
-          <rect x="96" y="50.5" width="4" height="1.3" rx="0.6" fill="#FFFFFF" opacity="0.6" />
+          <g className="w-drop-cash">
+            <rect x="78" y="42" width="26" height="15" rx="2" fill="url(#wCash)" />
+            <rect x="80" y="44" width="22" height="11" rx="1" fill="none" stroke="#FFFFFF" strokeWidth="0.7" opacity="0.7" />
+            <circle cx="86" cy="49.5" r="3.1" fill="none" stroke="#FFFFFF" strokeWidth="0.7" opacity="0.75" />
+            <circle cx="86" cy="49.5" r="1.3" fill="#FFFFFF" opacity="0.5" />
+            <rect x="96" y="45.5" width="4" height="1.3" rx="0.6" fill="#FFFFFF" opacity="0.6" />
+            <rect x="96" y="48" width="4" height="1.3" rx="0.6" fill="#FFFFFF" opacity="0.6" />
+            <rect x="96" y="50.5" width="4" height="1.3" rx="0.6" fill="#FFFFFF" opacity="0.6" />
+          </g>
         </g>
         {/* second card, mostly hidden — just a magnetic stripe hint */}
         <g transform="rotate(-10 39 39)">
-          <rect x="16" y="24" width="46" height="30" rx="4" fill="url(#wCard2)" />
-          <rect x="16" y="30" width="46" height="4.5" fill="#0B1220" opacity="0.55" />
+          <g className="w-drop-card2">
+            <rect x="16" y="24" width="46" height="30" rx="4" fill="url(#wCard2)" />
+            <rect x="16" y="30" width="46" height="4.5" fill="#0B1220" opacity="0.55" />
+          </g>
         </g>
         {/* front card, fully detailed like a real bank card */}
         <g transform="rotate(-2 47 35)">
-          <rect x="24" y="20" width="46" height="30" rx="4" fill="url(#wCard1)" />
-          <rect x="29" y="26" width="9" height="6.5" rx="1.4" fill="#F3D98B" stroke="#C99A3D" strokeWidth="0.4" />
-          <line x1="29" y1="29.3" x2="38" y2="29.3" stroke="#C99A3D" strokeWidth="0.4" />
-          <line x1="32.3" y1="26" x2="32.3" y2="32.5" stroke="#C99A3D" strokeWidth="0.4" />
-          <rect x="29" y="38" width="6" height="1.6" rx="0.8" fill="#FFFFFF" opacity="0.85" />
-          <rect x="37" y="38" width="6" height="1.6" rx="0.8" fill="#FFFFFF" opacity="0.85" />
-          <rect x="45" y="38" width="6" height="1.6" rx="0.8" fill="#FFFFFF" opacity="0.85" />
-          <rect x="53" y="38" width="6" height="1.6" rx="0.8" fill="#FFFFFF" opacity="0.85" />
-          <rect x="29" y="43" width="16" height="2" rx="1" fill="#FFFFFF" opacity="0.55" />
-          <circle cx="58" cy="44" r="5.5" fill="#F5D89A" opacity="0.85" />
-          <circle cx="63" cy="44" r="5.5" fill="#FFFFFF" opacity="0.65" />
+          <g className="w-drop-card1">
+            <rect x="24" y="20" width="46" height="30" rx="4" fill="url(#wCard1)" />
+            <rect x="29" y="26" width="9" height="6.5" rx="1.4" fill="#F3D98B" stroke="#C99A3D" strokeWidth="0.4" />
+            <line x1="29" y1="29.3" x2="38" y2="29.3" stroke="#C99A3D" strokeWidth="0.4" />
+            <line x1="32.3" y1="26" x2="32.3" y2="32.5" stroke="#C99A3D" strokeWidth="0.4" />
+            <rect x="29" y="38" width="6" height="1.6" rx="0.8" fill="#FFFFFF" opacity="0.85" />
+            <rect x="37" y="38" width="6" height="1.6" rx="0.8" fill="#FFFFFF" opacity="0.85" />
+            <rect x="45" y="38" width="6" height="1.6" rx="0.8" fill="#FFFFFF" opacity="0.85" />
+            <rect x="53" y="38" width="6" height="1.6" rx="0.8" fill="#FFFFFF" opacity="0.85" />
+            <rect x="29" y="43" width="16" height="2" rx="1" fill="#FFFFFF" opacity="0.55" />
+            <circle cx="58" cy="44" r="5.5" fill="#F5D89A" opacity="0.85" />
+            <circle cx="63" cy="44" r="5.5" fill="#FFFFFF" opacity="0.65" />
+          </g>
         </g>
         {/* wallet body (covers the lower half of the cards, so they look tucked in) */}
         <rect x="12" y="46" width="96" height="52" rx="10" fill="url(#wBody)" />
@@ -211,7 +231,18 @@ function Wallet3D({ size = 120 }) {
 
 function Shield3D({ size = 120 }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 120 120">
+    <div style={{ perspective: 500, width: size, height: size }}>
+    <svg width={size} height={size} viewBox="0 0 120 120" className="shield-spin" style={{ transformStyle: "preserve-3d" }}>
+      <style>{`
+        @keyframes shieldSpin {
+          0% { transform: rotateY(0deg); }
+          100% { transform: rotateY(360deg); }
+        }
+        .shield-spin { animation: shieldSpin 4.5s linear infinite; }
+        @media (prefers-reduced-motion: reduce) {
+          .shield-spin { animation: none; }
+        }
+      `}</style>
       <defs>
         <linearGradient id="sBack" x1="0" y1="0" x2="1" y2="1">
           <stop offset="0%" stopColor="#153355" />
@@ -290,6 +321,7 @@ function Shield3D({ size = 120 }) {
         <ellipse cx="52" cy="28" rx="20" ry="10" fill="#FFFFFF" opacity="0.18" />
       </g>
     </svg>
+    </div>
   );
 }
 
@@ -305,6 +337,21 @@ function Chart3D({ size = 120 }) {
   return (
     <svg width={size} height={size} viewBox="0 0 130 120">
       <defs>
+        <style>{`
+          @keyframes arrowMove {
+            0%, 100% { transform: translate(0px, 0px); }
+            50% { transform: translate(4px, -4px); }
+          }
+          @keyframes markerPulse {
+            0%, 100% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.5); opacity: 0.55; }
+          }
+          .chart-arrow { animation: arrowMove 1.4s ease-in-out infinite; transform-origin: 94px 32px; }
+          .chart-end-marker { animation: markerPulse 1.4s ease-in-out infinite; transform-origin: 100px 26px; }
+          @media (prefers-reduced-motion: reduce) {
+            .chart-arrow, .chart-end-marker { animation: none; }
+          }
+        `}</style>
         {bars.map((b, i) => (
           <linearGradient id={`bar${i}`} key={i} x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor={b.c1} />
@@ -354,10 +401,11 @@ function Chart3D({ size = 120 }) {
           strokeLinecap="round"
           strokeLinejoin="round"
         />
-        <path d="M88 26 L100 26 L100 38" fill="none" stroke="url(#chartLine)" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
-        {[[20, 72], [44, 50], [68, 60], [100, 26]].map(([px, py], i) => (
+        <path className="chart-arrow" d="M88 26 L100 26 L100 38" fill="none" stroke="url(#chartLine)" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
+        {[[20, 72], [44, 50], [68, 60]].map(([px, py], i) => (
           <circle key={i} cx={px} cy={py} r="3.2" fill="#FFFDF5" stroke="#E8A93B" strokeWidth="1.6" />
         ))}
+        <circle className="chart-end-marker" cx={100} cy={26} r="3.2" fill="#FFFDF5" stroke="#E8A93B" strokeWidth="1.6" />
       </g>
     </svg>
   );
