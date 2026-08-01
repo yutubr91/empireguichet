@@ -133,17 +133,26 @@ function Wallet3D({ size = 120 }) {
   return (
     <svg width={size} height={size} viewBox="0 0 120 120">
       <defs>
-        <linearGradient id="wBody" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stopColor="#3A2410" />
-          <stop offset="100%" stopColor="#7A4B1E" />
+        <linearGradient id="wBody" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#8A5A28" />
+          <stop offset="55%" stopColor="#6B4520" />
+          <stop offset="100%" stopColor="#4A2E15" />
         </linearGradient>
-        <linearGradient id="wFlap" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#C97F2E" />
-          <stop offset="100%" stopColor="#8F5A20" />
+        <linearGradient id="wTop" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#A87438" />
+          <stop offset="100%" stopColor="#8A5A28" />
         </linearGradient>
-        <linearGradient id="wCard" x1="0" y1="0" x2="1" y2="0">
-          <stop offset="0%" stopColor="#5B9DF9" />
+        <linearGradient id="wCard1" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%" stopColor="#7CB8FF" />
           <stop offset="100%" stopColor="#2563EB" />
+        </linearGradient>
+        <linearGradient id="wCard2" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%" stopColor="#7CF7C4" />
+          <stop offset="100%" stopColor="#1D8F63" />
+        </linearGradient>
+        <linearGradient id="wCash" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#A9E6C4" />
+          <stop offset="100%" stopColor="#4FAE79" />
         </linearGradient>
         <radialGradient id="wClasp" cx="35%" cy="30%" r="70%">
           <stop offset="0%" stopColor="#FFE9A8" />
@@ -154,13 +163,24 @@ function Wallet3D({ size = 120 }) {
           <feDropShadow dx="0" dy="6" stdDeviation="6" floodColor="#000000" floodOpacity="0.35" />
         </filter>
       </defs>
-      <ellipse cx="60" cy="104" rx="34" ry="7" fill="#000000" opacity="0.18" />
+      <ellipse cx="60" cy="106" rx="38" ry="7" fill="#000000" opacity="0.18" />
       <g filter="url(#wShadow)">
-        <rect x="16" y="30" width="82" height="14" rx="4" fill="url(#wCard)" transform="rotate(-8 57 37)" />
-        <rect x="18" y="38" width="84" height="56" rx="12" fill="url(#wBody)" />
-        <path d="M18 50 Q60 30 102 50 L102 94 Q60 74 18 94 Z" fill="url(#wFlap)" />
-        <circle cx="60" cy="66" r="9" fill="url(#wClasp)" />
-        <circle cx="57" cy="63" r="2.4" fill="#FFFDF5" opacity="0.85" />
+        {/* cash peeking from the side */}
+        <rect x="78" y="42" width="26" height="15" rx="2" fill="url(#wCash)" transform="rotate(-4 91 49)" />
+        <rect x="78" y="42" width="26" height="15" rx="2" fill="none" stroke="#2E7D50" strokeWidth="1" opacity="0.5" transform="rotate(-4 91 49)" />
+        {/* cards peeking out of the top pocket */}
+        <rect x="16" y="24" width="46" height="30" rx="4" fill="url(#wCard2)" transform="rotate(-10 39 39)" />
+        <rect x="24" y="20" width="46" height="30" rx="4" fill="url(#wCard1)" transform="rotate(-2 47 35)" />
+        {/* wallet body (covers the lower half of the cards, so they look tucked in) */}
+        <rect x="12" y="46" width="96" height="52" rx="10" fill="url(#wBody)" />
+        <rect x="12" y="46" width="96" height="16" rx="8" fill="url(#wTop)" />
+        {/* bifold center crease */}
+        <line x1="60" y1="46" x2="60" y2="98" stroke="#3A2410" strokeWidth="2" opacity="0.6" />
+        {/* stitched border */}
+        <rect x="17" y="51" width="86" height="42" rx="7" fill="none" stroke="#C9A15A" strokeWidth="1.4" strokeDasharray="2.5 3" opacity="0.7" />
+        {/* snap button */}
+        <circle cx="60" cy="72" r="8" fill="url(#wClasp)" />
+        <circle cx="57.5" cy="69.5" r="2.1" fill="#FFFDF5" opacity="0.85" />
       </g>
     </svg>
   );
@@ -488,7 +508,8 @@ export default function GuichetApp() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [authMode, setAuthMode] = useState("login");
   const [agent, setAgent] = useState(null);
-  const [loginEmail, setLoginEmail] = useState("");
+  const [loginPhone, setLoginPhone] = useState("");
+  const [loginCountryCode, setLoginCountryCode] = useState("+225");
   const [loginPassword, setLoginPassword] = useState("");
   const [signupName, setSignupName] = useState("");
   const [signupPhone, setSignupPhone] = useState("");
@@ -729,19 +750,26 @@ export default function GuichetApp() {
 
   async function handleLogin(e) {
     e.preventDefault();
-    if (!loginEmail || !loginPassword) {
-      setAuthError("Renseigne ton email et ton mot de passe.");
+    if (!loginPhone || !loginPassword) {
+      setAuthError("Renseigne ton numéro de téléphone et ton mot de passe.");
       return;
     }
     setAuthLoading(true);
     setAuthError("");
+    const fullLoginPhone = `${loginCountryCode} ${loginPhone}`.trim();
+    const { data: emailResult, error: lookupErr } = await supabase.rpc("get_email_by_phone", { phone_input: fullLoginPhone });
+    if (lookupErr || !emailResult) {
+      setAuthLoading(false);
+      setAuthError("Aucun compte trouvé avec ce numéro de téléphone.");
+      return;
+    }
     const { data, error } = await supabase.auth.signInWithPassword({
-      email: loginEmail,
+      email: emailResult,
       password: loginPassword,
     });
     if (error) {
       setAuthLoading(false);
-      setAuthError(error.message === "Invalid login credentials" ? "Email ou mot de passe incorrect." : error.message);
+      setAuthError(error.message === "Invalid login credentials" ? "Numéro ou mot de passe incorrect." : error.message);
       return;
     }
     const profile = await fetchAgentProfile(data.user.id);
@@ -1709,15 +1737,18 @@ export default function GuichetApp() {
 
               {authMode === "login" ? (
                 <form onSubmit={handleLogin} className="max-w-sm">
-                  <label className="text-xs mb-2 block" style={{ color: COLORS.textMuted }}>Adresse Gmail</label>
-                  <input
-                    type="email"
-                    value={loginEmail}
-                    onChange={(e) => setLoginEmail(e.target.value)}
-                    placeholder="toncompte@gmail.com"
-                    className="w-full px-3.5 py-2.5 rounded-lg text-sm mb-4 outline-none"
-                    style={{ background: COLORS.bgSoft, border: `1px solid ${COLORS.surfaceLine}`, color: COLORS.text }}
-                  />
+                  <label className="text-xs mb-2 block" style={{ color: COLORS.textMuted }}>Numéro de téléphone</label>
+                  <div className="flex gap-2 mb-4">
+                    <CountryDropdown value={loginCountryCode} onChange={setLoginCountryCode} colors={COLORS} />
+                    <input
+                      value={loginPhone}
+                      onChange={(e) => setLoginPhone(e.target.value)}
+                      placeholder="07 XX XX XX XX"
+                      type="tel"
+                      className="flex-1 px-3.5 py-2.5 rounded-lg text-sm outline-none"
+                      style={{ background: COLORS.bgSoft, border: `1px solid ${COLORS.surfaceLine}`, color: COLORS.text }}
+                    />
+                  </div>
                   <label className="text-xs mb-2 block" style={{ color: COLORS.textMuted }}>Mot de passe</label>
                   <div className="mb-2">
                     <PasswordInput
