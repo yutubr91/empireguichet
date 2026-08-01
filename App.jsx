@@ -129,6 +129,132 @@ const COUNTRY_CODES = [
   { code: "+33", iso: "fr", flag: "🇫🇷", name: "France" },
 ];
 
+function Wallet3D({ size = 120 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 120 120">
+      <defs>
+        <linearGradient id="wBody" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stopColor="#3A2410" />
+          <stop offset="100%" stopColor="#7A4B1E" />
+        </linearGradient>
+        <linearGradient id="wFlap" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#C97F2E" />
+          <stop offset="100%" stopColor="#8F5A20" />
+        </linearGradient>
+        <linearGradient id="wCard" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%" stopColor="#5B9DF9" />
+          <stop offset="100%" stopColor="#2563EB" />
+        </linearGradient>
+        <radialGradient id="wClasp" cx="35%" cy="30%" r="70%">
+          <stop offset="0%" stopColor="#FFE9A8" />
+          <stop offset="55%" stopColor="#E8A93B" />
+          <stop offset="100%" stopColor="#9C6A17" />
+        </radialGradient>
+        <filter id="wShadow" x="-40%" y="-40%" width="180%" height="180%">
+          <feDropShadow dx="0" dy="6" stdDeviation="6" floodColor="#000000" floodOpacity="0.35" />
+        </filter>
+      </defs>
+      <ellipse cx="60" cy="104" rx="34" ry="7" fill="#000000" opacity="0.18" />
+      <g filter="url(#wShadow)">
+        <rect x="16" y="30" width="82" height="14" rx="4" fill="url(#wCard)" transform="rotate(-8 57 37)" />
+        <rect x="18" y="38" width="84" height="56" rx="12" fill="url(#wBody)" />
+        <path d="M18 50 Q60 30 102 50 L102 94 Q60 74 18 94 Z" fill="url(#wFlap)" />
+        <circle cx="60" cy="66" r="9" fill="url(#wClasp)" />
+        <circle cx="57" cy="63" r="2.4" fill="#FFFDF5" opacity="0.85" />
+      </g>
+    </svg>
+  );
+}
+
+function Shield3D({ size = 120 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 120 120">
+      <defs>
+        <linearGradient id="sBack" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stopColor="#153355" />
+          <stop offset="100%" stopColor="#1E4B82" />
+        </linearGradient>
+        <linearGradient id="sFront" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#5B9DF9" />
+          <stop offset="55%" stopColor="#2E6FE0" />
+          <stop offset="100%" stopColor="#1B4CB0" />
+        </linearGradient>
+        <linearGradient id="sCheck" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stopColor="#7CF7C4" />
+          <stop offset="100%" stopColor="#2BBF8A" />
+        </linearGradient>
+        <filter id="sShadow" x="-40%" y="-40%" width="180%" height="180%">
+          <feDropShadow dx="0" dy="7" stdDeviation="6" floodColor="#000000" floodOpacity="0.35" />
+        </filter>
+      </defs>
+      <ellipse cx="60" cy="106" rx="30" ry="6" fill="#000000" opacity="0.18" />
+      <g filter="url(#sShadow)">
+        <path d="M60 12 L96 24 V56 C96 82 80 98 60 108 C40 98 24 82 24 56 V24 Z" fill="url(#sBack)" transform="translate(4,3)" opacity="0.6" />
+        <path d="M60 10 L94 22 V54 C94 80 78 96 60 106 C42 96 26 80 26 54 V22 Z" fill="url(#sFront)" />
+        <path
+          d="M60 10 L94 22 V54 C94 80 78 96 60 106"
+          fill="none"
+          stroke="#BFE0FF"
+          strokeWidth="2"
+          opacity="0.5"
+        />
+        <path
+          d="M45 58 L55 68 L77 44"
+          fill="none"
+          stroke="url(#sCheck)"
+          strokeWidth="9"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+        <ellipse cx="52" cy="28" rx="20" ry="10" fill="#FFFFFF" opacity="0.18" />
+      </g>
+    </svg>
+  );
+}
+
+function Chart3D({ size = 120 }) {
+  const bars = [
+    { x: 22, h: 30, c1: "#8FE3C0", c2: "#1D8F63" },
+    { x: 46, h: 48, c1: "#7CF7C4", c2: "#2BBF8A" },
+    { x: 70, h: 38, c1: "#9AF0D2", c2: "#22A876" },
+    { x: 94, h: 60, c1: "#67E8B0", c2: "#189E68" },
+  ];
+  return (
+    <svg width={size} height={size} viewBox="0 0 130 120">
+      <defs>
+        {bars.map((b, i) => (
+          <linearGradient id={`bar${i}`} key={i} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={b.c1} />
+            <stop offset="100%" stopColor={b.c2} />
+          </linearGradient>
+        ))}
+        <linearGradient id="chartLine" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%" stopColor="#FFE9A8" />
+          <stop offset="100%" stopColor="#E8A93B" />
+        </linearGradient>
+        <filter id="cShadow" x="-40%" y="-40%" width="180%" height="180%">
+          <feDropShadow dx="0" dy="5" stdDeviation="5" floodColor="#000000" floodOpacity="0.3" />
+        </filter>
+      </defs>
+      <ellipse cx="65" cy="106" rx="46" ry="7" fill="#000000" opacity="0.16" />
+      <g filter="url(#cShadow)">
+        {bars.map((b, i) => (
+          <rect key={i} x={b.x} y={100 - b.h} width="16" height={b.h} rx="5" fill={`url(#bar${i})`} />
+        ))}
+        <path
+          d="M20 72 L44 50 L68 60 L100 26"
+          fill="none"
+          stroke="url(#chartLine)"
+          strokeWidth="4"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+        <path d="M88 26 L100 26 L100 38" fill="none" stroke="url(#chartLine)" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
+      </g>
+    </svg>
+  );
+}
+
 function FlagIcon({ iso, size = 16 }) {
   return (
     <img
@@ -1136,20 +1262,17 @@ export default function GuichetApp() {
 
   const INTRO_SLIDES = [
     {
-      icon: Wallet,
-      color: "#E8A93B",
+      icon: Wallet3D,
       title: "Tous vos réseaux, un seul endroit",
       text: "MTN, Orange, Moov, Wave, Djamo, crypto, CIE, SODECI et péages réunis dans une seule interface.",
     },
     {
-      icon: ShieldCheck,
-      color: COLORS.transfer,
+      icon: Shield3D,
       title: "Sécurisé à chaque transaction",
       text: "Un code PIN personnel confirme chaque envoi, pour protéger l'agent et le client.",
     },
     {
-      icon: BarChart3,
-      color: COLORS.deposit,
+      icon: Chart3D,
       title: "Pilote ton activité",
       text: "Suis ton volume, tes commissions et ton équipe en temps réel depuis le tableau de bord.",
     },
@@ -1204,41 +1327,11 @@ export default function GuichetApp() {
             <div className="flex-1 flex flex-col items-center justify-center px-8 text-center gc-slide" key={introStep}>
               {(() => {
                 const slide = INTRO_SLIDES[introStep - 1];
-                const Icon = slide.icon;
+                const Illustration = slide.icon;
                 return (
                   <>
-                    <div
-                      style={{
-                        width: 108,
-                        height: 108,
-                        borderRadius: 30,
-                        marginBottom: 28,
-                        position: "relative",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        background: `linear-gradient(150deg, ${shadeColor(slide.color, 25)} 0%, ${slide.color} 45%, ${shadeColor(slide.color, -30)} 100%)`,
-                        boxShadow: `0 22px 40px -14px ${slide.color}88, 0 10px 18px -8px rgba(0,0,0,0.35), inset 0 2px 2px rgba(255,255,255,0.55), inset 0 -6px 10px rgba(0,0,0,0.25)`,
-                      }}
-                    >
-                      <div
-                        aria-hidden="true"
-                        style={{
-                          position: "absolute",
-                          top: 7,
-                          left: 12,
-                          right: 12,
-                          height: "42%",
-                          borderRadius: "50% 50% 60% 60% / 70% 70% 100% 100%",
-                          background: "linear-gradient(180deg, rgba(255,255,255,0.45), rgba(255,255,255,0))",
-                          pointerEvents: "none",
-                        }}
-                      />
-                      <Icon
-                        size={42}
-                        strokeWidth={2}
-                        style={{ color: "#ffffff", filter: "drop-shadow(0 4px 4px rgba(0,0,0,0.4))", position: "relative", zIndex: 1 }}
-                      />
+                    <div style={{ marginBottom: 24 }}>
+                      <Illustration size={128} />
                     </div>
                     <h2 className="gc-display text-xl font-semibold mb-3" style={{ maxWidth: 320 }}>{slide.title}</h2>
                     <p className="text-sm" style={{ color: COLORS.textMuted, maxWidth: 320 }}>{slide.text}</p>
