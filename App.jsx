@@ -165,12 +165,35 @@ function Wallet3D({ size = 120 }) {
       </defs>
       <ellipse cx="60" cy="106" rx="38" ry="7" fill="#000000" opacity="0.18" />
       <g filter="url(#wShadow)">
-        {/* cash peeking from the side */}
-        <rect x="78" y="42" width="26" height="15" rx="2" fill="url(#wCash)" transform="rotate(-4 91 49)" />
-        <rect x="78" y="42" width="26" height="15" rx="2" fill="none" stroke="#2E7D50" strokeWidth="1" opacity="0.5" transform="rotate(-4 91 49)" />
-        {/* cards peeking out of the top pocket */}
-        <rect x="16" y="24" width="46" height="30" rx="4" fill="url(#wCard2)" transform="rotate(-10 39 39)" />
-        <rect x="24" y="20" width="46" height="30" rx="4" fill="url(#wCard1)" transform="rotate(-2 47 35)" />
+        {/* cash peeking from the side, styled like a banknote */}
+        <g transform="rotate(-4 91 49)">
+          <rect x="78" y="42" width="26" height="15" rx="2" fill="url(#wCash)" />
+          <rect x="80" y="44" width="22" height="11" rx="1" fill="none" stroke="#FFFFFF" strokeWidth="0.7" opacity="0.7" />
+          <circle cx="86" cy="49.5" r="3.1" fill="none" stroke="#FFFFFF" strokeWidth="0.7" opacity="0.75" />
+          <circle cx="86" cy="49.5" r="1.3" fill="#FFFFFF" opacity="0.5" />
+          <rect x="96" y="45.5" width="4" height="1.3" rx="0.6" fill="#FFFFFF" opacity="0.6" />
+          <rect x="96" y="48" width="4" height="1.3" rx="0.6" fill="#FFFFFF" opacity="0.6" />
+          <rect x="96" y="50.5" width="4" height="1.3" rx="0.6" fill="#FFFFFF" opacity="0.6" />
+        </g>
+        {/* second card, mostly hidden — just a magnetic stripe hint */}
+        <g transform="rotate(-10 39 39)">
+          <rect x="16" y="24" width="46" height="30" rx="4" fill="url(#wCard2)" />
+          <rect x="16" y="30" width="46" height="4.5" fill="#0B1220" opacity="0.55" />
+        </g>
+        {/* front card, fully detailed like a real bank card */}
+        <g transform="rotate(-2 47 35)">
+          <rect x="24" y="20" width="46" height="30" rx="4" fill="url(#wCard1)" />
+          <rect x="29" y="26" width="9" height="6.5" rx="1.4" fill="#F3D98B" stroke="#C99A3D" strokeWidth="0.4" />
+          <line x1="29" y1="29.3" x2="38" y2="29.3" stroke="#C99A3D" strokeWidth="0.4" />
+          <line x1="32.3" y1="26" x2="32.3" y2="32.5" stroke="#C99A3D" strokeWidth="0.4" />
+          <rect x="29" y="38" width="6" height="1.6" rx="0.8" fill="#FFFFFF" opacity="0.85" />
+          <rect x="37" y="38" width="6" height="1.6" rx="0.8" fill="#FFFFFF" opacity="0.85" />
+          <rect x="45" y="38" width="6" height="1.6" rx="0.8" fill="#FFFFFF" opacity="0.85" />
+          <rect x="53" y="38" width="6" height="1.6" rx="0.8" fill="#FFFFFF" opacity="0.85" />
+          <rect x="29" y="43" width="16" height="2" rx="1" fill="#FFFFFF" opacity="0.55" />
+          <circle cx="58" cy="44" r="5.5" fill="#F5D89A" opacity="0.85" />
+          <circle cx="63" cy="44" r="5.5" fill="#FFFFFF" opacity="0.65" />
+        </g>
         {/* wallet body (covers the lower half of the cards, so they look tucked in) */}
         <rect x="12" y="46" width="96" height="52" rx="10" fill="url(#wBody)" />
         <rect x="12" y="46" width="96" height="16" rx="8" fill="url(#wTop)" />
