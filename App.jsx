@@ -222,6 +222,15 @@ function Shield3D({ size = 120 }) {
           <stop offset="55%" stopColor="#2E6FE0" />
           <stop offset="100%" stopColor="#1B4CB0" />
         </linearGradient>
+        <linearGradient id="sRim" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#FFE9A8" />
+          <stop offset="50%" stopColor="#E8A93B" />
+          <stop offset="100%" stopColor="#9C6A17" />
+        </linearGradient>
+        <linearGradient id="sPanel" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#8FBBFF" />
+          <stop offset="100%" stopColor="#3D6FE0" />
+        </linearGradient>
         <linearGradient id="sCheck" x1="0" y1="0" x2="1" y2="1">
           <stop offset="0%" stopColor="#7CF7C4" />
           <stop offset="100%" stopColor="#2BBF8A" />
@@ -233,13 +242,33 @@ function Shield3D({ size = 120 }) {
       <ellipse cx="60" cy="106" rx="30" ry="6" fill="#000000" opacity="0.18" />
       <g filter="url(#sShadow)">
         <path d="M60 12 L96 24 V56 C96 82 80 98 60 108 C40 98 24 82 24 56 V24 Z" fill="url(#sBack)" transform="translate(4,3)" opacity="0.6" />
-        <path d="M60 10 L94 22 V54 C94 80 78 96 60 106 C42 96 26 80 26 54 V22 Z" fill="url(#sFront)" />
+        {/* outer metallic rim */}
+        <path d="M60 8 L96 21 V54 C96 81 79 98 60 109 C41 98 24 81 24 54 V21 Z" fill="url(#sRim)" />
+        {/* main blue face, inset from rim */}
+        <path d="M60 13 L91 24 V53 C91 76 77 91 60 101 C43 91 29 76 29 53 V24 Z" fill="url(#sFront)" />
+        {/* inner panel line */}
+        <path d="M60 19 L85 28 V52 C85 72 73 85 60 94 C47 85 35 72 35 52 V28 Z" fill="none" stroke="url(#sPanel)" strokeWidth="1.6" opacity="0.7" />
+        {/* rivets */}
+        <circle cx="60" cy="14" r="2.4" fill="#FFE9A8" opacity="0.9" />
+        <circle cx="31" cy="27" r="2" fill="#FFE9A8" opacity="0.8" />
+        <circle cx="89" cy="27" r="2" fill="#FFE9A8" opacity="0.8" />
         <path
           d="M60 10 L94 22 V54 C94 80 78 96 60 106"
           fill="none"
           stroke="#BFE0FF"
           strokeWidth="2"
           opacity="0.5"
+        />
+        {/* checkmark shadow for bevel effect */}
+        <path
+          d="M46 59 L56 69 L78 45"
+          fill="none"
+          stroke="#0B3D2A"
+          strokeWidth="9"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          opacity="0.3"
+          transform="translate(0,1.5)"
         />
         <path
           d="M45 58 L55 68 L77 44"
@@ -248,6 +277,15 @@ function Shield3D({ size = 120 }) {
           strokeWidth="9"
           strokeLinecap="round"
           strokeLinejoin="round"
+        />
+        <path
+          d="M45 58 L55 68 L77 44"
+          fill="none"
+          stroke="#FFFFFF"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          opacity="0.4"
         />
         <ellipse cx="52" cy="28" rx="20" ry="10" fill="#FFFFFF" opacity="0.18" />
       </g>
@@ -262,6 +300,8 @@ function Chart3D({ size = 120 }) {
     { x: 70, h: 38, c1: "#9AF0D2", c2: "#22A876" },
     { x: 94, h: 60, c1: "#67E8B0", c2: "#189E68" },
   ];
+  const dx = 7;
+  const dy = -5;
   return (
     <svg width={size} height={size} viewBox="0 0 130 120">
       <defs>
@@ -271,6 +311,10 @@ function Chart3D({ size = 120 }) {
             <stop offset="100%" stopColor={b.c2} />
           </linearGradient>
         ))}
+        <linearGradient id="floorGrad" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stopColor="#DDEDE4" />
+          <stop offset="100%" stopColor="#B9D8C8" />
+        </linearGradient>
         <linearGradient id="chartLine" x1="0" y1="0" x2="1" y2="0">
           <stop offset="0%" stopColor="#FFE9A8" />
           <stop offset="100%" stopColor="#E8A93B" />
@@ -281,9 +325,27 @@ function Chart3D({ size = 120 }) {
       </defs>
       <ellipse cx="65" cy="106" rx="46" ry="7" fill="#000000" opacity="0.16" />
       <g filter="url(#cShadow)">
-        {bars.map((b, i) => (
-          <rect key={i} x={b.x} y={100 - b.h} width="16" height={b.h} rx="5" fill={`url(#bar${i})`} />
-        ))}
+        {/* floor plane for grounding */}
+        <polygon points={`14,100 116,100 ${116 + dx},${100 + dy} ${14 + dx},${100 + dy}`} fill="url(#floorGrad)" opacity="0.55" />
+        {bars.map((b, i) => {
+          const top = 100 - b.h;
+          return (
+            <g key={i}>
+              {/* side face (darker) */}
+              <polygon
+                points={`${b.x + 16},${top} ${b.x + 16 + dx},${top + dy} ${b.x + 16 + dx},${100 + dy} ${b.x + 16},100`}
+                fill={shadeColor(b.c2, -22)}
+              />
+              {/* top face (lighter) */}
+              <polygon
+                points={`${b.x},${top} ${b.x + 16},${top} ${b.x + 16 + dx},${top + dy} ${b.x + dx},${top + dy}`}
+                fill={shadeColor(b.c1, 18)}
+              />
+              {/* front face */}
+              <rect x={b.x} y={top} width="16" height={b.h} rx="2" fill={`url(#bar${i})`} />
+            </g>
+          );
+        })}
         <path
           d="M20 72 L44 50 L68 60 L100 26"
           fill="none"
@@ -293,6 +355,9 @@ function Chart3D({ size = 120 }) {
           strokeLinejoin="round"
         />
         <path d="M88 26 L100 26 L100 38" fill="none" stroke="url(#chartLine)" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
+        {[[20, 72], [44, 50], [68, 60], [100, 26]].map(([px, py], i) => (
+          <circle key={i} cx={px} cy={py} r="3.2" fill="#FFFDF5" stroke="#E8A93B" strokeWidth="1.6" />
+        ))}
       </g>
     </svg>
   );
