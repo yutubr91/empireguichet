@@ -338,18 +338,29 @@ function Chart3D({ size = 120 }) {
     <svg width={size} height={size} viewBox="0 0 130 120">
       <defs>
         <style>{`
-          @keyframes arrowMove {
-            0%, 100% { transform: translate(0px, 0px); }
-            50% { transform: translate(4px, -4px); }
+          @keyframes barColorCycle {
+            0%, 100% { filter: hue-rotate(0deg); }
+            50% { filter: hue-rotate(55deg); }
+          }
+          @keyframes arrowRise {
+            0% { transform: translateY(64px); opacity: 0; }
+            15% { opacity: 1; }
+            55% { transform: translateY(0px); opacity: 1; }
+            85% { transform: translateY(0px); opacity: 1; }
+            100% { transform: translateY(64px); opacity: 0; }
           }
           @keyframes markerPulse {
             0%, 100% { transform: scale(1); opacity: 1; }
             50% { transform: scale(1.5); opacity: 0.55; }
           }
-          .chart-arrow { animation: arrowMove 1.4s ease-in-out infinite; transform-origin: 94px 32px; }
-          .chart-end-marker { animation: markerPulse 1.4s ease-in-out infinite; transform-origin: 100px 26px; }
+          .chart-bar-0 { animation: barColorCycle 3.2s ease-in-out infinite; }
+          .chart-bar-1 { animation: barColorCycle 3.2s ease-in-out infinite 0.3s; }
+          .chart-bar-2 { animation: barColorCycle 3.2s ease-in-out infinite 0.6s; }
+          .chart-bar-3 { animation: barColorCycle 3.2s ease-in-out infinite 0.9s; }
+          .chart-arrow { animation: arrowRise 2.4s ease-in-out infinite; transform-origin: 94px 32px; }
+          .chart-end-marker { animation: markerPulse 2.4s ease-in-out infinite; transform-origin: 100px 26px; }
           @media (prefers-reduced-motion: reduce) {
-            .chart-arrow, .chart-end-marker { animation: none; }
+            .chart-bar-0, .chart-bar-1, .chart-bar-2, .chart-bar-3, .chart-arrow, .chart-end-marker { animation: none; }
           }
         `}</style>
         {bars.map((b, i) => (
@@ -377,7 +388,7 @@ function Chart3D({ size = 120 }) {
         {bars.map((b, i) => {
           const top = 100 - b.h;
           return (
-            <g key={i}>
+            <g key={i} className={`chart-bar-${i}`}>
               {/* side face (darker) */}
               <polygon
                 points={`${b.x + 16},${top} ${b.x + 16 + dx},${top + dy} ${b.x + 16 + dx},${100 + dy} ${b.x + 16},100`}
