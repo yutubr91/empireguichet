@@ -678,6 +678,7 @@ export default function GuichetApp() {
     return () => clearTimeout(t);
   }, [signupCooldown]);
   const [newAgencyCode, setNewAgencyCode] = useState("");
+  const [agencyCodeCopied, setAgencyCodeCopied] = useState(false);
 
   function generateAgencyCode(name) {
     const base = (name || "AG").replace(/[^A-Za-z]/g, "").toUpperCase().slice(0, 3) || "AGC";
@@ -706,7 +707,15 @@ export default function GuichetApp() {
       idNumber: data.id_number,
       dob: data.date_of_birth,
       documentType: data.document_type,
+      agencyCode: null,
     };
+  }
+
+  async function fetchAgencyCode(agencyId) {
+    if (!agencyId) return null;
+    const { data, error } = await supabase.from("agencies").select("code").eq("id", agencyId).single();
+    if (error || !data) return null;
+    return data.code;
   }
 
   // Mot de passe oublié
@@ -925,6 +934,9 @@ export default function GuichetApp() {
       setAuthError("Compte introuvable. Réessaie ou crée un compte.");
       return;
     }
+    if (profile.role === "manager") {
+      profile.agencyCode = await fetchAgencyCode(profile.agencyId);
+    }
     setAgent(profile);
     setIsAuthenticated(true);
   }
@@ -976,6 +988,7 @@ export default function GuichetApp() {
 
     let agencyId = null;
     let agencyName = signupAgency;
+    let agencyCodeForAgent = null;
 
     if (signupRole === "manager") {
       const code = generateAgencyCode(signupAgency);
@@ -990,6 +1003,7 @@ export default function GuichetApp() {
         return;
       }
       agencyId = agencyRow.id;
+      agencyCodeForAgent = code;
       setNewAgencyCode(code);
     } else {
       const { data: foundAgency, error: findErr } = await supabase
@@ -1036,6 +1050,7 @@ export default function GuichetApp() {
       role: signupRole,
       kycEmailVerified: false,
       kycStatus: "incomplete",
+      agencyCode: agencyCodeForAgent,
     });
     setIsAuthenticated(true);
     setAuthError("");
@@ -1422,8 +1437,11 @@ export default function GuichetApp() {
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session) {
-        fetchAgentProfile(session.user.id).then((profile) => {
+        fetchAgentProfile(session.user.id).then(async (profile) => {
           if (profile) {
+            if (profile.role === "manager") {
+              profile.agencyCode = await fetchAgencyCode(profile.agencyId);
+            }
             setAgent(profile);
             setIsAuthenticated(true);
           }
@@ -3083,6 +3101,32 @@ export default function GuichetApp() {
 
         {tab === "equipe" && agent?.role === "manager" && (
           <div className="gc-fade-in">
+            <div
+              className="flex items-center justify-between gap-3 p-4 rounded-xl mb-4"
+              style={{ background: COLORS.surface, border: `1px solid ${COLORS.gold}` }}
+            >
+              <div className="text-sm">
+                <span className="font-medium">Code d'agence à donner à tes agents : </span>
+                <span className="gc-mono" style={{ color: COLORS.goldSoft }}>{agent?.agencyCode || "—"}</span>
+                <div className="text-xs mt-1" style={{ color: COLORS.textMuted }}>
+                  Ils l'entrent dans le champ "Code d'agence" à l'inscription pour rejoindre ton équipe.
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  if (agent?.agencyCode) {
+                    navigator.clipboard.writeText(agent.agencyCode);
+                    setAgencyCodeCopied(true);
+                    setTimeout(() => setAgencyCodeCopied(false), 2000);
+                  }
+                }}
+                className="gc-btn flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-medium"
+                style={{ background: COLORS.gold, color: "#052E36" }}
+              >
+                <Copy size={13} /> {agencyCodeCopied ? "Copié !" : "Copier"}
+              </button>
+            </div>
+
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
               {[
                 { label: "Agents dans l'équipe", value: TEAM_ROSTER.length },
