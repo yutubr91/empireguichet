@@ -1047,6 +1047,7 @@ export default function GuichetApp() {
     setIsAuthenticated(false);
     setAgent(null);
     setTab("dashboard");
+    setLoginPassword("");
   }
 
   // Déconnexion automatique après inactivité
