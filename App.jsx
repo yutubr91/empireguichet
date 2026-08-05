@@ -707,6 +707,7 @@ export default function GuichetApp() {
       idNumber: data.id_number,
       dob: data.date_of_birth,
       documentType: data.document_type,
+      kycRejectedReason: data.kyc_rejected_reason,
       agencyCode: null,
     };
   }
@@ -804,13 +805,18 @@ export default function GuichetApp() {
   const [kycDocType, setKycDocType] = useState("cni");
   const [kycIdRectoName, setKycIdRectoName] = useState("");
   const [kycIdRectoPreview, setKycIdRectoPreview] = useState("");
+  const [kycIdRectoFile, setKycIdRectoFile] = useState(null);
   const [kycIdVersoName, setKycIdVersoName] = useState("");
   const [kycIdVersoPreview, setKycIdVersoPreview] = useState("");
+  const [kycIdVersoFile, setKycIdVersoFile] = useState(null);
   const [kycSelfieName, setKycSelfieName] = useState("");
   const [kycSelfiePreview, setKycSelfiePreview] = useState("");
+  const [kycSelfieFile, setKycSelfieFile] = useState(null);
   const [kycSelfieIdName, setKycSelfieIdName] = useState("");
   const [kycSelfieIdPreview, setKycSelfieIdPreview] = useState("");
+  const [kycSelfieIdFile, setKycSelfieIdFile] = useState(null);
   const [kycIdError, setKycIdError] = useState("");
+  const [kycUploading, setKycUploading] = useState(false);
 
   const kycProfileDone = !!(agent?.firstName && agent?.lastName && agent?.country && agent?.address && agent?.idNumber && agent?.dob);
   const kycStatus = agent?.kycStatus || "incomplete"; // incomplete | pending | validated
@@ -872,31 +878,112 @@ export default function GuichetApp() {
     const file = e.target.files?.[0];
     if (!file) return;
     const preview = file.type.startsWith("image/") ? URL.createObjectURL(file) : "";
-    if (kind === "recto") { setKycIdRectoName(file.name); setKycIdRectoPreview(preview); }
-    if (kind === "verso") { setKycIdVersoName(file.name); setKycIdVersoPreview(preview); }
-    if (kind === "selfie") { setKycSelfieName(file.name); setKycSelfiePreview(preview); }
-    if (kind === "selfieId") { setKycSelfieIdName(file.name); setKycSelfieIdPreview(preview); }
+    if (kind === "recto") { setKycIdRectoName(file.name); setKycIdRectoPreview(preview); setKycIdRectoFile(file); }
+    if (kind === "verso") { setKycIdVersoName(file.name); setKycIdVersoPreview(preview); setKycIdVersoFile(file); }
+    if (kind === "selfie") { setKycSelfieName(file.name); setKycSelfiePreview(preview); setKycSelfieFile(file); }
+    if (kind === "selfieId") { setKycSelfieIdName(file.name); setKycSelfieIdPreview(preview); setKycSelfieIdFile(file); }
     setKycIdError("");
+  }
+
+  async function uploadKycFile(file, label) {
+    const ext = file.name.split(".").pop();
+    const path = `${agent.id}/${label}.${ext}`;
+    const { error } = await supabase.storage.from("kyc-documents").upload(path, file, { upsert: true });
+    if (error) throw error;
+    return path;
   }
 
   async function handleKycSubmitDocuments() {
     const needsVerso = kycDocType !== "passeport";
-    if (!kycIdRectoName || (needsVerso && !kycIdVersoName) || !kycSelfieName || !kycSelfieIdName) {
+    if (!kycIdRectoFile || (needsVerso && !kycIdVersoFile) || !kycSelfieFile || !kycSelfieIdFile) {
       setKycIdError("Ajoute tous les documents demandés avant d'envoyer.");
       return;
     }
     setKycIdError("");
-    await supabase.from("agents").update({ document_type: kycDocType, kyc_status: "pending" }).eq("id", agent.id);
-    setAgent((a) => ({ ...a, kycStatus: "pending" }));
-    pushNotification("Documents envoyés — vérification en cours (jusqu'à 24h) ⏳");
+    setKycUploading(true);
+    try {
+      const rectoPath = await uploadKycFile(kycIdRectoFile, "recto");
+      const versoPath = needsVerso ? await uploadKycFile(kycIdVersoFile, "verso") : null;
+      const selfiePath = await uploadKycFile(kycSelfieFile, "selfie");
+      const selfieIdPath = await uploadKycFile(kycSelfieIdFile, "selfie-id");
 
-    // Simulation de la vérification (en production : jusqu'à 24h, traitée manuellement ou par un prestataire)
-    setTimeout(async () => {
-      await supabase.from("agents").update({ kyc_status: "validated" }).eq("id", agent.id);
-      setAgent((a) => (a ? { ...a, kycStatus: "validated" } : a));
-      pushNotification("Identité vérifiée — ton compte est validé ✅");
-    }, 10000);
+      await supabase
+        .from("agents")
+        .update({
+          document_type: kycDocType,
+          kyc_status: "pending",
+          kyc_recto_path: rectoPath,
+          kyc_verso_path: versoPath,
+          kyc_selfie_path: selfiePath,
+          kyc_selfie_id_path: selfieIdPath,
+        })
+        .eq("id", agent.id);
+
+      setAgent((a) => ({ ...a, kycStatus: "pending" }));
+      pushNotification("Documents envoyés — en attente de vérification par ton chef d'agence ⏳");
+    } catch (err) {
+      setKycIdError("Erreur lors de l'envoi : " + err.message);
+    } finally {
+      setKycUploading(false);
+    }
   }
+
+  // Vérification KYC — panneau chef d'agence
+  const [pendingKycAgents, setPendingKycAgents] = useState([]);
+  const [kycLoadingList, setKycLoadingList] = useState(false);
+  const [selectedKycAgent, setSelectedKycAgent] = useState(null);
+  const [selectedKycUrls, setSelectedKycUrls] = useState(null);
+  const [kycRejectReason, setKycRejectReason] = useState("");
+
+  async function loadPendingKycAgents() {
+    setKycLoadingList(true);
+    const { data, error } = await supabase
+      .from("agents")
+      .select("*")
+      .eq("agency_id", agent.agencyId)
+      .eq("kyc_status", "pending");
+    setKycLoadingList(false);
+    if (!error) setPendingKycAgents(data || []);
+  }
+
+  async function openKycReview(kycAgent) {
+    setSelectedKycAgent(kycAgent);
+    setSelectedKycUrls(null);
+    setKycRejectReason("");
+    const paths = [kycAgent.kyc_recto_path, kycAgent.kyc_verso_path, kycAgent.kyc_selfie_path, kycAgent.kyc_selfie_id_path].filter(Boolean);
+    const urls = {};
+    for (const p of paths) {
+      const { data } = await supabase.storage.from("kyc-documents").createSignedUrl(p, 300);
+      if (data) urls[p] = data.signedUrl;
+    }
+    setSelectedKycUrls(urls);
+  }
+
+  async function approveKycAgent() {
+    if (!selectedKycAgent) return;
+    await supabase.from("agents").update({ kyc_status: "validated" }).eq("id", selectedKycAgent.id);
+    pushNotification(`Identité de ${selectedKycAgent.full_name} validée ✅`);
+    setSelectedKycAgent(null);
+    loadPendingKycAgents();
+  }
+
+  async function rejectKycAgent() {
+    if (!selectedKycAgent) return;
+    await supabase
+      .from("agents")
+      .update({ kyc_status: "rejected", kyc_rejected_reason: kycRejectReason || "Documents non conformes" })
+      .eq("id", selectedKycAgent.id);
+    pushNotification(`Identité de ${selectedKycAgent.full_name} refusée`);
+    setSelectedKycAgent(null);
+    loadPendingKycAgents();
+  }
+
+  useEffect(() => {
+    if (tab === "kyc-review" && agent?.role === "manager") {
+      loadPendingKycAgents();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab]);
 
   // PIN confirmation modal state
   const [pinModalOpen, setPinModalOpen] = useState(false);
@@ -2252,7 +2339,7 @@ export default function GuichetApp() {
             { id: "historique", label: "Historique", icon: Clock },
             { id: "annonceurs", label: "Espace annonceurs", icon: Megaphone },
             { id: "parrainage", label: "Parrainage", icon: Users },
-            ...(agent?.role === "manager" ? [{ id: "equipe", label: "Équipe", icon: Crown }] : []),
+            ...(agent?.role === "manager" ? [{ id: "equipe", label: "Équipe", icon: Crown }, { id: "kyc-review", label: "Vérifications KYC", icon: Fingerprint }] : []),
             { id: "parametres", label: "Paramètres", icon: Settings },
           ].map((t) => (
             <button
@@ -2533,12 +2620,18 @@ export default function GuichetApp() {
                 </div>
               ) : kycStatus === "pending" ? (
                 <div className="flex items-center gap-2 p-3 rounded-lg text-xs" style={{ background: "rgba(232,169,59,0.1)", color: COLORS.goldSoft }}>
-                  <Clock size={14} /> Vérification en cours — délai habituel jusqu'à 24h.
+                  <Clock size={14} /> En attente de vérification par ton chef d'agence — délai habituel jusqu'à 24h.
                 </div>
               ) : !kycProfileDone ? (
                 <p className="text-xs" style={{ color: COLORS.textMuted }}>Complète d'abord ton profil ci-dessus pour continuer.</p>
               ) : (
                 <>
+                  {kycStatus === "rejected" && (
+                    <div className="flex items-start gap-2 p-3 rounded-lg text-xs mb-4" style={{ background: "rgba(226,104,94,0.1)", color: COLORS.danger }}>
+                      <AlertTriangle size={14} style={{ flexShrink: 0, marginTop: 1 }} />
+                      <span>Documents refusés{agent?.kycRejectedReason ? ` — ${agent.kycRejectedReason}` : ""}. Renvoie des documents plus lisibles ci-dessous.</span>
+                    </div>
+                  )}
                   <label className="text-xs mb-2 block" style={{ color: COLORS.textMuted }}>Type de document</label>
                   <div className="grid grid-cols-3 gap-2 mb-4">
                     {[
@@ -2621,10 +2714,11 @@ export default function GuichetApp() {
                   {kycIdError && <p className="text-xs mb-3" style={{ color: COLORS.danger }}>{kycIdError}</p>}
                   <button
                     onClick={handleKycSubmitDocuments}
-                    className="gc-btn w-full py-2.5 rounded-lg text-sm font-medium"
+                    disabled={kycUploading}
+                    className="gc-btn w-full py-2.5 rounded-lg text-sm font-medium disabled:opacity-50"
                     style={{ background: COLORS.gold, color: "#052E36" }}
                   >
-                    Envoyer pour vérification
+                    {kycUploading ? "Envoi en cours…" : "Envoyer pour vérification"}
                   </button>
                 </>
               )}
@@ -3203,6 +3297,113 @@ export default function GuichetApp() {
             <p className="text-xs mt-3" style={{ color: COLORS.textMuted }}>
               Données d'équipe simulées à titre de démonstration.
             </p>
+          </div>
+        )}
+
+        {tab === "kyc-review" && agent?.role === "manager" && (
+          <div className="gc-fade-in">
+            <p className="text-xs mb-4" style={{ color: COLORS.textMuted }}>
+              Agents de ton équipe ayant envoyé leurs documents et en attente de ta validation.
+            </p>
+
+            {kycLoadingList ? (
+              <p className="text-sm" style={{ color: COLORS.textMuted }}>Chargement…</p>
+            ) : pendingKycAgents.length === 0 ? (
+              <div className="p-6 rounded-xl text-center" style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}` }}>
+                <CheckCircle2 size={22} style={{ color: COLORS.teal, margin: "0 auto 8px" }} />
+                <p className="text-sm" style={{ color: COLORS.textMuted }}>Aucune vérification en attente pour le moment.</p>
+              </div>
+            ) : (
+              <div className="grid gap-2">
+                {pendingKycAgents.map((a) => (
+                  <button
+                    key={a.id}
+                    onClick={() => openKycReview(a)}
+                    className="gc-btn flex items-center justify-between p-4 rounded-xl text-left"
+                    style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}` }}
+                  >
+                    <div>
+                      <div className="text-sm font-medium">{a.full_name}</div>
+                      <div className="text-xs" style={{ color: COLORS.textMuted }}>{a.phone} · {a.document_type === "passeport" ? "Passeport" : a.document_type === "permis" ? "Permis de conduire" : "Pièce d'identité"}</div>
+                    </div>
+                    <span
+                      className="text-xs px-2.5 py-1 rounded-md"
+                      style={{ background: "rgba(59,130,246,0.14)", color: COLORS.transfer }}
+                    >
+                      En attente
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* Panneau de révision */}
+            {selectedKycAgent && (
+              <div
+                className="gc-fade-in"
+                style={{ position: "fixed", inset: 0, background: "rgba(6,7,20,0.7)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 40, padding: 16 }}
+              >
+                <div
+                  className="w-full"
+                  style={{ maxWidth: 520, maxHeight: "85vh", overflowY: "auto", background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}`, borderRadius: 16, padding: 24 }}
+                >
+                  <div className="flex items-center justify-between mb-4">
+                    <div>
+                      <div className="text-sm font-medium">{selectedKycAgent.full_name}</div>
+                      <div className="text-xs" style={{ color: COLORS.textMuted }}>{selectedKycAgent.phone} · {selectedKycAgent.email}</div>
+                    </div>
+                    <button onClick={() => setSelectedKycAgent(null)} aria-label="Fermer">
+                      <X size={18} style={{ color: COLORS.textMuted }} />
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3 mb-4 text-xs" style={{ color: COLORS.textMuted }}>
+                    <div>Pays : <span style={{ color: COLORS.text }}>{selectedKycAgent.country || "—"}</span></div>
+                    <div>Naissance : <span style={{ color: COLORS.text }}>{selectedKycAgent.date_of_birth || "—"}</span></div>
+                    <div className="col-span-2">Adresse : <span style={{ color: COLORS.text }}>{selectedKycAgent.address || "—"}</span></div>
+                    <div className="col-span-2">N° identité : <span className="gc-mono" style={{ color: COLORS.text }}>{selectedKycAgent.id_number || "—"}</span></div>
+                  </div>
+
+                  {!selectedKycUrls ? (
+                    <p className="text-xs mb-4" style={{ color: COLORS.textMuted }}>Chargement des documents…</p>
+                  ) : (
+                    <div className="grid grid-cols-2 gap-2 mb-4">
+                      {Object.entries(selectedKycUrls).map(([path, url]) => (
+                        <a key={path} href={url} target="_blank" rel="noopener noreferrer">
+                          <img src={url} alt="Document KYC" className="w-full rounded-lg" style={{ height: 120, objectFit: "cover", border: `1px solid ${COLORS.surfaceLine}` }} />
+                        </a>
+                      ))}
+                    </div>
+                  )}
+
+                  <label className="text-xs mb-2 block" style={{ color: COLORS.textMuted }}>Motif en cas de refus (optionnel)</label>
+                  <input
+                    value={kycRejectReason}
+                    onChange={(e) => setKycRejectReason(e.target.value)}
+                    placeholder="Ex. photo floue, document illisible…"
+                    className="w-full px-3.5 py-2.5 rounded-lg text-sm mb-4 outline-none"
+                    style={{ background: COLORS.bgSoft, border: `1px solid ${COLORS.surfaceLine}`, color: COLORS.text }}
+                  />
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      onClick={rejectKycAgent}
+                      className="gc-btn py-2.5 rounded-lg text-sm font-medium"
+                      style={{ background: COLORS.withdraw, color: "#fff" }}
+                    >
+                      Refuser
+                    </button>
+                    <button
+                      onClick={approveKycAgent}
+                      className="gc-btn py-2.5 rounded-lg text-sm font-medium"
+                      style={{ background: COLORS.deposit, color: "#fff" }}
+                    >
+                      Approuver
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
