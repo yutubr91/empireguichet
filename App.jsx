@@ -2598,8 +2598,8 @@ export default function GuichetApp() {
                   { n: 3, label: "Validé" },
                 ].map((s, i) => {
                   const currentStep = kycStatus === "validated" ? 3 : kycStatus === "pending" ? 2 : 1;
-                  const done = currentStep > s.n;
-                  const active = currentStep === s.n;
+                  const done = kycStatus === "validated" ? true : currentStep > s.n;
+                  const active = currentStep === s.n && !done;
                   return (
                     <React.Fragment key={s.n}>
                       <div className="flex flex-col items-center" style={{ minWidth: 70 }}>
