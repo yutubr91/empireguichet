@@ -907,11 +907,16 @@ export default function GuichetApp() {
       const selfiePath = await uploadKycFile(kycSelfieFile, "selfie");
       const selfieIdPath = await uploadKycFile(kycSelfieIdFile, "selfie-id");
 
+      // Un chef d'agence n'a personne au-dessus de lui dans l'app pour valider —
+      // sa vérification est donc validée directement dès l'envoi des documents.
+      const isManager = agent.role === "manager";
+      const newStatus = isManager ? "validated" : "pending";
+
       await supabase
         .from("agents")
         .update({
           document_type: kycDocType,
-          kyc_status: "pending",
+          kyc_status: newStatus,
           kyc_recto_path: rectoPath,
           kyc_verso_path: versoPath,
           kyc_selfie_path: selfiePath,
@@ -919,8 +924,12 @@ export default function GuichetApp() {
         })
         .eq("id", agent.id);
 
-      setAgent((a) => ({ ...a, kycStatus: "pending" }));
-      pushNotification("Documents envoyés — en attente de vérification par ton chef d'agence ⏳");
+      setAgent((a) => ({ ...a, kycStatus: newStatus }));
+      pushNotification(
+        isManager
+          ? "Identité vérifiée — ton compte est validé ✅"
+          : "Documents envoyés — en attente de vérification par ton chef d'agence ⏳"
+      );
     } catch (err) {
       setKycIdError("Erreur lors de l'envoi : " + err.message);
     } finally {
