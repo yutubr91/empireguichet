@@ -434,6 +434,20 @@ function FlagIcon({ iso, size = 16 }) {
   );
 }
 
+function KycStatusBadge({ status, colors }) {
+  const map = {
+    validated: { label: "Validé", bg: "rgba(43,191,138,0.14)", color: colors.deposit },
+    pending: { label: "En attente", bg: "rgba(59,130,246,0.14)", color: colors.transfer },
+    rejected: { label: "Refusé", bg: "rgba(232,147,90,0.14)", color: colors.withdraw },
+  };
+  const s = map[status] || { label: "Aucun document", bg: colors.bgSoft, color: colors.textMuted };
+  return (
+    <span className="text-xs px-2.5 py-1 rounded-md" style={{ background: s.bg, color: s.color }}>
+      {s.label}
+    </span>
+  );
+}
+
 function PasswordInput({ value, onChange, placeholder, colors, className }) {
   const [show, setShow] = useState(false);
   return (
@@ -953,7 +967,8 @@ export default function GuichetApp() {
       .from("agents")
       .select("*")
       .eq("agency_id", agent.agencyId)
-      .eq("kyc_status", "pending");
+      .neq("id", agent.id)
+      .order("kyc_status", { ascending: true });
     setKycLoadingList(false);
     if (!error) setPendingKycAgents(data || []);
   }
@@ -964,7 +979,8 @@ export default function GuichetApp() {
       .from("agents")
       .select("*")
       .eq("role", "manager")
-      .eq("kyc_status", "pending");
+      .neq("id", agent.id)
+      .order("kyc_status", { ascending: true });
     setKycLoadingList(false);
     if (!error) setPendingManagers(data || []);
   }
@@ -3353,14 +3369,9 @@ export default function GuichetApp() {
                   >
                     <div>
                       <div className="text-sm font-medium">{a.full_name}</div>
-                      <div className="text-xs" style={{ color: COLORS.textMuted }}>{a.phone} · {a.document_type === "passeport" ? "Passeport" : a.document_type === "permis" ? "Permis de conduire" : "Pièce d'identité"}</div>
+                      <div className="text-xs" style={{ color: COLORS.textMuted }}>{a.phone} · {a.document_type === "passeport" ? "Passeport" : a.document_type === "permis" ? "Permis de conduire" : a.document_type ? "Pièce d'identité" : "Aucun document envoyé"}</div>
                     </div>
-                    <span
-                      className="text-xs px-2.5 py-1 rounded-md"
-                      style={{ background: "rgba(59,130,246,0.14)", color: COLORS.transfer }}
-                    >
-                      En attente
-                    </span>
+                    <KycStatusBadge status={a.kyc_status} colors={COLORS} />
                   </button>
                 ))}
               </div>
@@ -3405,31 +3416,41 @@ export default function GuichetApp() {
                     </div>
                   )}
 
-                  <label className="text-xs mb-2 block" style={{ color: COLORS.textMuted }}>Motif en cas de refus (optionnel)</label>
-                  <input
-                    value={kycRejectReason}
-                    onChange={(e) => setKycRejectReason(e.target.value)}
-                    placeholder="Ex. photo floue, document illisible…"
-                    className="w-full px-3.5 py-2.5 rounded-lg text-sm mb-4 outline-none"
-                    style={{ background: COLORS.bgSoft, border: `1px solid ${COLORS.surfaceLine}`, color: COLORS.text }}
-                  />
-
-                  <div className="grid grid-cols-2 gap-2">
-                    <button
-                      onClick={rejectKycAgent}
-                      className="gc-btn py-2.5 rounded-lg text-sm font-medium"
-                      style={{ background: COLORS.withdraw, color: "#fff" }}
-                    >
-                      Refuser
-                    </button>
-                    <button
-                      onClick={approveKycAgent}
-                      className="gc-btn py-2.5 rounded-lg text-sm font-medium"
-                      style={{ background: COLORS.deposit, color: "#fff" }}
-                    >
-                      Approuver
-                    </button>
-                  </div>
+                  {selectedKycAgent.kyc_status === "pending" ? (
+                    <>
+                      <label className="text-xs mb-2 block" style={{ color: COLORS.textMuted }}>Motif en cas de refus (optionnel)</label>
+                      <input
+                        value={kycRejectReason}
+                        onChange={(e) => setKycRejectReason(e.target.value)}
+                        placeholder="Ex. photo floue, document illisible…"
+                        className="w-full px-3.5 py-2.5 rounded-lg text-sm mb-4 outline-none"
+                        style={{ background: COLORS.bgSoft, border: `1px solid ${COLORS.surfaceLine}`, color: COLORS.text }}
+                      />
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          onClick={rejectKycAgent}
+                          className="gc-btn py-2.5 rounded-lg text-sm font-medium"
+                          style={{ background: COLORS.withdraw, color: "#fff" }}
+                        >
+                          Refuser
+                        </button>
+                        <button
+                          onClick={approveKycAgent}
+                          className="gc-btn py-2.5 rounded-lg text-sm font-medium"
+                          style={{ background: COLORS.deposit, color: "#fff" }}
+                        >
+                          Approuver
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <KycStatusBadge status={selectedKycAgent.kyc_status} colors={COLORS} />
+                      {selectedKycAgent.kyc_status === "rejected" && selectedKycAgent.kyc_rejected_reason && (
+                        <span className="text-xs" style={{ color: COLORS.textMuted }}>{selectedKycAgent.kyc_rejected_reason}</span>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -3462,9 +3483,7 @@ export default function GuichetApp() {
                       <div className="text-sm font-medium">{a.full_name}</div>
                       <div className="text-xs" style={{ color: COLORS.textMuted }}>{a.phone} · Agence : {a.agency_name}</div>
                     </div>
-                    <span className="text-xs px-2.5 py-1 rounded-md" style={{ background: "rgba(59,130,246,0.14)", color: COLORS.transfer }}>
-                      En attente
-                    </span>
+                    <KycStatusBadge status={a.kyc_status} colors={COLORS} />
                   </button>
                 ))}
               </div>
@@ -3509,23 +3528,33 @@ export default function GuichetApp() {
                     </div>
                   )}
 
-                  <label className="text-xs mb-2 block" style={{ color: COLORS.textMuted }}>Motif en cas de refus (optionnel)</label>
-                  <input
-                    value={kycRejectReason}
-                    onChange={(e) => setKycRejectReason(e.target.value)}
-                    placeholder="Ex. photo floue, document illisible…"
-                    className="w-full px-3.5 py-2.5 rounded-lg text-sm mb-4 outline-none"
-                    style={{ background: COLORS.bgSoft, border: `1px solid ${COLORS.surfaceLine}`, color: COLORS.text }}
-                  />
-
-                  <div className="grid grid-cols-2 gap-2">
-                    <button onClick={rejectKycAgent} className="gc-btn py-2.5 rounded-lg text-sm font-medium" style={{ background: COLORS.withdraw, color: "#fff" }}>
-                      Refuser
-                    </button>
-                    <button onClick={approveKycAgent} className="gc-btn py-2.5 rounded-lg text-sm font-medium" style={{ background: COLORS.deposit, color: "#fff" }}>
-                      Approuver
-                    </button>
-                  </div>
+                  {selectedKycAgent.kyc_status === "pending" ? (
+                    <>
+                      <label className="text-xs mb-2 block" style={{ color: COLORS.textMuted }}>Motif en cas de refus (optionnel)</label>
+                      <input
+                        value={kycRejectReason}
+                        onChange={(e) => setKycRejectReason(e.target.value)}
+                        placeholder="Ex. photo floue, document illisible…"
+                        className="w-full px-3.5 py-2.5 rounded-lg text-sm mb-4 outline-none"
+                        style={{ background: COLORS.bgSoft, border: `1px solid ${COLORS.surfaceLine}`, color: COLORS.text }}
+                      />
+                      <div className="grid grid-cols-2 gap-2">
+                        <button onClick={rejectKycAgent} className="gc-btn py-2.5 rounded-lg text-sm font-medium" style={{ background: COLORS.withdraw, color: "#fff" }}>
+                          Refuser
+                        </button>
+                        <button onClick={approveKycAgent} className="gc-btn py-2.5 rounded-lg text-sm font-medium" style={{ background: COLORS.deposit, color: "#fff" }}>
+                          Approuver
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <KycStatusBadge status={selectedKycAgent.kyc_status} colors={COLORS} />
+                      {selectedKycAgent.kyc_status === "rejected" && selectedKycAgent.kyc_rejected_reason && (
+                        <span className="text-xs" style={{ color: COLORS.textMuted }}>{selectedKycAgent.kyc_rejected_reason}</span>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
             )}
