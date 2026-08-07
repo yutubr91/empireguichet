@@ -1096,6 +1096,8 @@ export default function GuichetApp() {
       return;
     }
     const plan = AD_PRICING[adForm.planIndex];
+    const isFree = !!agent?.isPlatformOwner;
+    const amountToCharge = isFree ? 0 : plan.price;
     setAdSubmitting(true);
     // Paiement simulé — en production, appel réel à l'agrégateur de paiement ici
     const now = new Date();
@@ -1108,7 +1110,7 @@ export default function GuichetApp() {
       description: adForm.description.trim(),
       contact_phone: adForm.contactPhone.trim(),
       duration_days: plan.days,
-      amount_paid: plan.price,
+      amount_paid: amountToCharge,
       status: "active",
       starts_at: now.toISOString(),
       ends_at: endsAt.toISOString(),
@@ -1120,7 +1122,11 @@ export default function GuichetApp() {
       setAdFormError("Erreur lors de la publication : " + error.message);
       return;
     }
-    setAdSuccessMsg(`Publicité payée (${formatFCFA(plan.price)}) et en ligne pour ${plan.days} jours ✅`);
+    setAdSuccessMsg(
+      isFree
+        ? `Publicité publiée gratuitement et en ligne pour ${plan.days} jours ✅`
+        : `Publicité payée (${formatFCFA(plan.price)}) et en ligne pour ${plan.days} jours ✅`
+    );
     setAdForm({ title: "", description: "", contactPhone: "", planIndex: 0 });
     pushNotification("Publicité publiée avec succès 📣");
     loadActiveAds();
@@ -3348,7 +3354,7 @@ export default function GuichetApp() {
                             : { background: COLORS.bgSoft, color: COLORS.textMuted, border: `1px solid ${COLORS.surfaceLine}` }
                         }
                       >
-                        {plan.label}<br />{formatFCFA(plan.price)}
+                        {plan.label}<br />{agent?.isPlatformOwner ? "Gratuit" : formatFCFA(plan.price)}
                       </button>
                     ))}
                   </div>
@@ -3359,10 +3365,16 @@ export default function GuichetApp() {
                   className="gc-btn py-3 rounded-lg text-sm font-medium mt-1"
                   style={{ background: COLORS.gold, color: "#052E36", opacity: adSubmitting ? 0.6 : 1 }}
                 >
-                  {adSubmitting ? "Paiement en cours…" : `Payer ${formatFCFA(AD_PRICING[adForm.planIndex].price)} et publier`}
+                  {adSubmitting
+                    ? "Publication en cours…"
+                    : agent?.isPlatformOwner
+                    ? "Publier gratuitement"
+                    : `Payer ${formatFCFA(AD_PRICING[adForm.planIndex].price)} et publier`}
                 </button>
                 <p className="text-xs" style={{ color: COLORS.textMuted }}>
-                  Paiement simulé pour cette démo — l'annonce passe en ligne immédiatement après confirmation.
+                  {agent?.isPlatformOwner
+                    ? "En tant que compte principal, tes publicités sont gratuites."
+                    : "Paiement simulé pour cette démo — l'annonce passe en ligne immédiatement après confirmation."}
                 </p>
               </form>
             </div>
