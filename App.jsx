@@ -989,6 +989,7 @@ export default function GuichetApp() {
     setSelectedKycAgent(kycAgent);
     setSelectedKycUrls(null);
     setKycRejectReason("");
+    setKycActionError("");
     const paths = [kycAgent.kyc_recto_path, kycAgent.kyc_verso_path, kycAgent.kyc_selfie_path, kycAgent.kyc_selfie_id_path].filter(Boolean);
     const urls = {};
     for (const p of paths) {
@@ -998,9 +999,18 @@ export default function GuichetApp() {
     setSelectedKycUrls(urls);
   }
 
+  const [kycActionError, setKycActionError] = useState("");
+
   async function approveKycAgent() {
     if (!selectedKycAgent) return;
-    await supabase.from("agents").update({ kyc_status: "validated" }).eq("id", selectedKycAgent.id);
+    setKycActionError("");
+    const { error } = await supabase.from("agents").update({ kyc_status: "validated" }).eq("id", selectedKycAgent.id);
+    if (error) {
+      setKycActionError(
+        "Échec de la validation : " + error.message + " (vérifie les règles RLS de la table agents dans Supabase)"
+      );
+      return;
+    }
     pushNotification(`Identité de ${selectedKycAgent.full_name} validée ✅`);
     setSelectedKycAgent(null);
     if (selectedKycAgent.role === "manager") loadPendingManagers();
@@ -1009,10 +1019,17 @@ export default function GuichetApp() {
 
   async function rejectKycAgent() {
     if (!selectedKycAgent) return;
-    await supabase
+    setKycActionError("");
+    const { error } = await supabase
       .from("agents")
       .update({ kyc_status: "rejected", kyc_rejected_reason: kycRejectReason || "Documents non conformes" })
       .eq("id", selectedKycAgent.id);
+    if (error) {
+      setKycActionError(
+        "Échec du refus : " + error.message + " (vérifie les règles RLS de la table agents dans Supabase)"
+      );
+      return;
+    }
     pushNotification(`Identité de ${selectedKycAgent.full_name} refusée`);
     setSelectedKycAgent(null);
     if (selectedKycAgent.role === "manager") loadPendingManagers();
@@ -3730,6 +3747,11 @@ export default function GuichetApp() {
 
                   {selectedKycAgent.kyc_status === "pending" ? (
                     <>
+                      {kycActionError && (
+                        <p className="text-xs mb-3 px-3 py-2 rounded-lg" style={{ background: "#FEE2E2", color: "#991B1B" }}>
+                          {kycActionError}
+                        </p>
+                      )}
                       <label className="text-xs mb-2 block" style={{ color: COLORS.textMuted }}>Motif en cas de refus (optionnel)</label>
                       <input
                         value={kycRejectReason}
@@ -3842,6 +3864,11 @@ export default function GuichetApp() {
 
                   {selectedKycAgent.kyc_status === "pending" ? (
                     <>
+                      {kycActionError && (
+                        <p className="text-xs mb-3 px-3 py-2 rounded-lg" style={{ background: "#FEE2E2", color: "#991B1B" }}>
+                          {kycActionError}
+                        </p>
+                      )}
                       <label className="text-xs mb-2 block" style={{ color: COLORS.textMuted }}>Motif en cas de refus (optionnel)</label>
                       <input
                         value={kycRejectReason}
