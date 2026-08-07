@@ -1029,6 +1029,104 @@ export default function GuichetApp() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab]);
 
+  // ===== Publicités (annonceurs) =====
+  const AD_PRICING = [
+    { days: 7, price: 15000, label: "7 jours" },
+    { days: 15, price: 25000, label: "15 jours" },
+    { days: 30, price: 40000, label: "30 jours" },
+  ];
+  const [activeAds, setActiveAds] = useState([]);
+  const [adsLoading, setAdsLoading] = useState(false);
+  const [myAds, setMyAds] = useState([]);
+  const [adForm, setAdForm] = useState({ title: "", description: "", contactPhone: "", planIndex: 0 });
+  const [adFormError, setAdFormError] = useState("");
+  const [adSubmitting, setAdSubmitting] = useState(false);
+  const [adSuccessMsg, setAdSuccessMsg] = useState("");
+
+  async function loadActiveAds() {
+    setAdsLoading(true);
+    const { data, error } = await supabase
+      .from("ads")
+      .select("*")
+      .eq("status", "active")
+      .gt("ends_at", new Date().toISOString())
+      .order("created_at", { ascending: false });
+    setAdsLoading(false);
+    if (!error) setActiveAds(data || []);
+  }
+
+  async function loadMyAds() {
+    if (!agent) return;
+    const { data, error } = await supabase
+      .from("ads")
+      .select("*")
+      .eq("created_by", agent.id)
+      .order("created_at", { ascending: false });
+    if (!error) setMyAds(data || []);
+  }
+
+  // Backoffice — toutes les pubs, réservé au propriétaire de la plateforme
+  const [allAds, setAllAds] = useState([]);
+  const [allAdsLoading, setAllAdsLoading] = useState(false);
+
+  async function loadAllAdsForBackoffice() {
+    setAllAdsLoading(true);
+    const { data, error } = await supabase.from("ads").select("*").order("created_at", { ascending: false });
+    setAllAdsLoading(false);
+    if (!error) setAllAds(data || []);
+  }
+
+  useEffect(() => {
+    if (tab === "publicites" && agent) {
+      loadActiveAds();
+      loadMyAds();
+    }
+    if (tab === "backoffice-pub" && agent?.isPlatformOwner) {
+      loadAllAdsForBackoffice();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab]);
+
+  async function handleSubmitAd(e) {
+    e.preventDefault();
+    setAdFormError("");
+    setAdSuccessMsg("");
+    if (!adForm.title.trim() || !adForm.description.trim() || !adForm.contactPhone.trim()) {
+      setAdFormError("Merci de remplir tous les champs.");
+      return;
+    }
+    const plan = AD_PRICING[adForm.planIndex];
+    setAdSubmitting(true);
+    // Paiement simulé — en production, appel réel à l'agrégateur de paiement ici
+    const now = new Date();
+    const endsAt = new Date(now.getTime() + plan.days * 24 * 60 * 60 * 1000);
+    const { error } = await supabase.from("ads").insert({
+      created_by: agent.id,
+      agency_id: agent.agencyId,
+      agency_name: agent.agency,
+      title: adForm.title.trim(),
+      description: adForm.description.trim(),
+      contact_phone: adForm.contactPhone.trim(),
+      duration_days: plan.days,
+      amount_paid: plan.price,
+      status: "active",
+      starts_at: now.toISOString(),
+      ends_at: endsAt.toISOString(),
+      impressions: 0,
+      clicks: 0,
+    });
+    setAdSubmitting(false);
+    if (error) {
+      setAdFormError("Erreur lors de la publication : " + error.message);
+      return;
+    }
+    setAdSuccessMsg(`Publicité payée (${formatFCFA(plan.price)}) et en ligne pour ${plan.days} jours ✅`);
+    setAdForm({ title: "", description: "", contactPhone: "", planIndex: 0 });
+    pushNotification("Publicité publiée avec succès 📣");
+    loadActiveAds();
+    loadMyAds();
+  }
+
   // PIN confirmation modal state
   const [pinModalOpen, setPinModalOpen] = useState(false);
   const [pinInput, setPinInput] = useState("");
@@ -1305,6 +1403,23 @@ export default function GuichetApp() {
       });
       doc.save("empireguichet-historique.pdf");
     });
+  }
+
+  // Suivi impressions/clics des publicités actives — s'appuie sur activeAds déjà chargé par loadActiveAds()
+  const countedImpressionsRef = useRef(new Set());
+  useEffect(() => {
+    if (activeAds.length === 0) return;
+    activeAds.forEach((ad) => {
+      if (!countedImpressionsRef.current.has(ad.id)) {
+        countedImpressionsRef.current.add(ad.id);
+        supabase.rpc("increment_ad_impression", { ad_id_input: ad.id }).then(() => {});
+      }
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeAds]);
+
+  function handleAdClick(adId) {
+    supabase.rpc("increment_ad_click", { ad_id_input: adId }).then(() => {});
   }
 
   // Paramètres du compte : changer PIN / mot de passe
@@ -2381,10 +2496,10 @@ export default function GuichetApp() {
             { id: "kyc", label: kycVerified ? "Vérification KYC" : "Vérification KYC ⚠", icon: kycVerified ? FileCheck : AlertTriangle },
             { id: "transaction", label: "Nouvelle transaction", icon: ArrowRightLeft },
             { id: "historique", label: "Historique", icon: Clock },
-            { id: "annonceurs", label: "Espace annonceurs", icon: Megaphone },
+            { id: "publicites", label: "Publicités", icon: Megaphone },
             { id: "parrainage", label: "Parrainage", icon: Users },
             ...(agent?.role === "manager" ? [{ id: "equipe", label: "Équipe", icon: Crown }, { id: "kyc-review", label: "Vérifications KYC", icon: Fingerprint }] : []),
-            ...(agent?.isPlatformOwner ? [{ id: "kyc-review-managers", label: "Vérif. chefs d'agence", icon: ShieldCheck }] : []),
+            ...(agent?.isPlatformOwner ? [{ id: "kyc-review-managers", label: "Vérif. chefs d'agence", icon: ShieldCheck }, { id: "backoffice-pub", label: "Backoffice publicité", icon: BarChart3 }] : []),
             { id: "parametres", label: "Paramètres", icon: Settings },
           ].map((t) => (
             <button
@@ -3136,42 +3251,227 @@ export default function GuichetApp() {
           </div>
         )}
 
-        {/* Annonceurs tab */}
-        {tab === "annonceurs" && (
+        {/* Publicités tab — visible à tous les agents et chefs d'agence */}
+        {tab === "publicites" && (
           <div className="gc-fade-in">
-            <div className="grid md:grid-cols-3 gap-4 mb-6">
-              {[
-                { label: "Impressions ce mois", value: "48 200" },
-                { label: "Taux de clic moyen", value: "2.4 %" },
-                { label: "Revenu publicitaire simulé", value: "184 000 FCFA" },
-              ].map((s) => (
-                <div key={s.label} className="p-5 rounded-xl" style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}` }}>
-                  <div className="text-xs mb-1.5" style={{ color: COLORS.textMuted }}>{s.label}</div>
-                  <div className="gc-display text-2xl font-semibold gc-mono">{s.value}</div>
-                </div>
-              ))}
+            <div className="mb-6">
+              <h2 className="text-lg font-semibold mb-1">Publicités sur la plateforme</h2>
+              <p className="text-xs" style={{ color: COLORS.textMuted, maxWidth: 620 }}>
+                Découvre les annonces en ligne, ou publie la tienne pour la faire apparaître auprès de tous les agents et chefs d'agence.
+              </p>
             </div>
-            <div className="p-5 rounded-xl mb-4" style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}` }}>
-              <div className="text-xs mb-3" style={{ color: COLORS.textMuted }}>EMPLACEMENT PUBLICITAIRE — bandeau après confirmation de ticket</div>
-              <div
-                className="rounded-lg p-4 flex items-center justify-between"
-                style={{ background: COLORS.bgSoft, border: `1px dashed ${COLORS.surfaceLine}` }}
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ background: COLORS.surfaceLine }}>
-                    <Megaphone size={18} style={{ color: COLORS.goldSoft }} />
-                  </div>
-                  <div>
-                    <div className="text-sm font-medium">Emplacement disponible</div>
-                    <div className="text-xs" style={{ color: COLORS.textMuted }}>Annonceur local — ex. forfait data, transfert international</div>
+
+            {/* Pubs actives */}
+            <div className="mb-8">
+              <div className="text-xs font-medium mb-3" style={{ color: COLORS.textMuted }}>ANNONCES EN LIGNE</div>
+              {adsLoading ? (
+                <div className="text-xs" style={{ color: COLORS.textMuted }}>Chargement…</div>
+              ) : activeAds.length === 0 ? (
+                <div className="p-5 rounded-xl text-xs" style={{ background: COLORS.surface, border: `1px dashed ${COLORS.surfaceLine}`, color: COLORS.textMuted }}>
+                  Aucune publicité en ligne pour le moment.
+                </div>
+              ) : (
+                <div className="grid md:grid-cols-2 gap-3">
+                  {activeAds.map((ad) => (
+                    <div key={ad.id} className="p-4 rounded-xl" style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}` }}>
+                      <div className="flex items-start gap-3">
+                        <div className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: COLORS.surfaceLine }}>
+                          <Megaphone size={18} style={{ color: COLORS.goldSoft }} />
+                        </div>
+                        <div className="min-w-0">
+                          <div className="text-sm font-medium truncate">{ad.title}</div>
+                          <p className="text-xs mt-0.5" style={{ color: COLORS.textMuted }}>{ad.description}</p>
+                          <button
+                            type="button"
+                            onClick={() => handleAdClick(ad.id)}
+                            className="text-xs mt-2 flex items-center gap-1"
+                            style={{ color: COLORS.gold }}
+                          >
+                            <Phone size={11} /> {ad.contact_phone}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Publier une pub */}
+            <div className="p-5 rounded-xl mb-6" style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}` }}>
+              <div className="text-sm font-medium mb-3">Publier ma publicité</div>
+              {adSuccessMsg && (
+                <div className="text-xs p-3 rounded-lg mb-3 flex items-center gap-2" style={{ background: "rgba(43,191,138,0.12)", color: COLORS.teal }}>
+                  <CheckCircle2 size={14} /> {adSuccessMsg}
+                </div>
+              )}
+              {adFormError && (
+                <div className="text-xs p-3 rounded-lg mb-3" style={{ background: "rgba(226,104,94,0.12)", color: COLORS.danger }}>
+                  {adFormError}
+                </div>
+              )}
+              <form onSubmit={handleSubmitAd} className="flex flex-col gap-3">
+                <input
+                  value={adForm.title}
+                  onChange={(e) => setAdForm((f) => ({ ...f, title: e.target.value }))}
+                  placeholder="Titre de l'annonce"
+                  className="px-3 py-2.5 rounded-lg text-sm outline-none"
+                  style={{ background: COLORS.bgSoft, border: `1px solid ${COLORS.surfaceLine}`, color: COLORS.text }}
+                />
+                <textarea
+                  value={adForm.description}
+                  onChange={(e) => setAdForm((f) => ({ ...f, description: e.target.value }))}
+                  placeholder="Description courte"
+                  rows={3}
+                  className="px-3 py-2.5 rounded-lg text-sm outline-none resize-none"
+                  style={{ background: COLORS.bgSoft, border: `1px solid ${COLORS.surfaceLine}`, color: COLORS.text }}
+                />
+                <input
+                  value={adForm.contactPhone}
+                  onChange={(e) => setAdForm((f) => ({ ...f, contactPhone: e.target.value }))}
+                  placeholder="Numéro de contact"
+                  className="px-3 py-2.5 rounded-lg text-sm outline-none"
+                  style={{ background: COLORS.bgSoft, border: `1px solid ${COLORS.surfaceLine}`, color: COLORS.text }}
+                />
+                <div>
+                  <div className="text-xs mb-2" style={{ color: COLORS.textMuted }}>Durée de diffusion</div>
+                  <div className="grid grid-cols-3 gap-2">
+                    {AD_PRICING.map((plan, i) => (
+                      <button
+                        type="button"
+                        key={plan.days}
+                        onClick={() => setAdForm((f) => ({ ...f, planIndex: i }))}
+                        className="gc-btn py-2.5 rounded-lg text-xs font-medium"
+                        style={
+                          adForm.planIndex === i
+                            ? { background: COLORS.gold, color: "#052E36" }
+                            : { background: COLORS.bgSoft, color: COLORS.textMuted, border: `1px solid ${COLORS.surfaceLine}` }
+                        }
+                      >
+                        {plan.label}<br />{formatFCFA(plan.price)}
+                      </button>
+                    ))}
                   </div>
                 </div>
-                <span className="text-xs px-2.5 py-1 rounded-md" style={{ background: "rgba(232,169,59,0.12)", color: COLORS.goldSoft }}>Simulé</span>
+                <button
+                  type="submit"
+                  disabled={adSubmitting}
+                  className="gc-btn py-3 rounded-lg text-sm font-medium mt-1"
+                  style={{ background: COLORS.gold, color: "#052E36", opacity: adSubmitting ? 0.6 : 1 }}
+                >
+                  {adSubmitting ? "Paiement en cours…" : `Payer ${formatFCFA(AD_PRICING[adForm.planIndex].price)} et publier`}
+                </button>
+                <p className="text-xs" style={{ color: COLORS.textMuted }}>
+                  Paiement simulé pour cette démo — l'annonce passe en ligne immédiatement après confirmation.
+                </p>
+              </form>
+            </div>
+
+            {/* Mes publicités */}
+            {myAds.length > 0 && (
+              <div>
+                <div className="text-xs font-medium mb-3" style={{ color: COLORS.textMuted }}>MES PUBLICITÉS</div>
+                <div className="flex flex-col gap-2">
+                  {myAds.map((ad) => {
+                    const isActive = ad.status === "active" && new Date(ad.ends_at) > new Date();
+                    return (
+                      <div key={ad.id} className="p-3.5 rounded-lg flex items-center justify-between" style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}` }}>
+                        <div className="min-w-0">
+                          <div className="text-sm font-medium truncate">{ad.title}</div>
+                          <div className="text-xs" style={{ color: COLORS.textMuted }}>
+                            {formatFCFA(ad.amount_paid)} · {ad.duration_days} jours · expire le {new Date(ad.ends_at).toLocaleDateString("fr-FR")}
+                          </div>
+                        </div>
+                        <span
+                          className="text-xs px-2.5 py-1 rounded-md flex-shrink-0"
+                          style={
+                            isActive
+                              ? { background: "rgba(43,191,138,0.12)", color: COLORS.teal }
+                              : { background: COLORS.bgSoft, color: COLORS.textMuted }
+                          }
+                        >
+                          {isActive ? "En ligne" : "Expirée"}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
+            )}
+          </div>
+        )}
+
+        {/* Backoffice publicité — réservé au propriétaire de la plateforme */}
+        {tab === "backoffice-pub" && agent?.isPlatformOwner && (
+          <div className="gc-fade-in">
+            <div className="mb-6">
+              <h2 className="text-lg font-semibold mb-1">Backoffice publicité</h2>
+              <p className="text-xs" style={{ color: COLORS.textMuted }}>Visible uniquement par toi.</p>
             </div>
-            <p className="text-xs" style={{ color: COLORS.textMuted, maxWidth: 560 }}>
-              En production, ces emplacements se connectent à une régie publicitaire (ex. Google AdSense) ou à des annonceurs locaux directs — opérateurs, boutiques partenaires, services de transfert international.
-            </p>
+            {allAdsLoading ? (
+              <div className="text-xs" style={{ color: COLORS.textMuted }}>Chargement…</div>
+            ) : (
+              <>
+                <div className="grid md:grid-cols-3 gap-4 mb-6">
+                  {(() => {
+                    const totalImpressions = allAds.reduce((s, a) => s + (a.impressions || 0), 0);
+                    const totalClicks = allAds.reduce((s, a) => s + (a.clicks || 0), 0);
+                    const totalRevenue = allAds.reduce((s, a) => s + (a.amount_paid || 0), 0);
+                    const ctr = totalImpressions > 0 ? ((totalClicks / totalImpressions) * 100).toFixed(1) : "0.0";
+                    return [
+                      { label: "Impressions ce mois", value: totalImpressions.toLocaleString("fr-FR") },
+                      { label: "Taux de clic moyen", value: `${ctr} %` },
+                      { label: "Revenu publicitaire", value: formatFCFA(totalRevenue) },
+                    ];
+                  })().map((s) => (
+                    <div key={s.label} className="p-5 rounded-xl" style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}` }}>
+                      <div className="text-xs mb-1.5" style={{ color: COLORS.textMuted }}>{s.label}</div>
+                      <div className="gc-display text-2xl font-semibold gc-mono">{s.value}</div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="text-xs font-medium mb-3" style={{ color: COLORS.textMuted }}>TOUTES LES PUBLICITÉS ({allAds.length})</div>
+                <div className="rounded-xl overflow-hidden" style={{ border: `1px solid ${COLORS.surfaceLine}` }}>
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr style={{ background: COLORS.bgSoft, color: COLORS.textMuted }}>
+                        <th className="text-left px-3 py-2.5">Titre</th>
+                        <th className="text-left px-3 py-2.5">Agence</th>
+                        <th className="text-left px-3 py-2.5">Montant</th>
+                        <th className="text-left px-3 py-2.5">Statut</th>
+                        <th className="text-left px-3 py-2.5">Expire</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {allAds.map((ad) => {
+                        const isActive = ad.status === "active" && new Date(ad.ends_at) > new Date();
+                        return (
+                          <tr key={ad.id} style={{ borderTop: `1px solid ${COLORS.surfaceLine}` }}>
+                            <td className="px-3 py-2.5">{ad.title}</td>
+                            <td className="px-3 py-2.5" style={{ color: COLORS.textMuted }}>{ad.agency_name || "—"}</td>
+                            <td className="px-3 py-2.5 gc-mono">{formatFCFA(ad.amount_paid)}</td>
+                            <td className="px-3 py-2.5">
+                              <span
+                                className="px-2 py-0.5 rounded-md"
+                                style={
+                                  isActive
+                                    ? { background: "rgba(43,191,138,0.12)", color: COLORS.teal }
+                                    : { background: COLORS.bgSoft, color: COLORS.textMuted }
+                                }
+                              >
+                                {isActive ? "En ligne" : "Expirée"}
+                              </span>
+                            </td>
+                            <td className="px-3 py-2.5" style={{ color: COLORS.textMuted }}>{new Date(ad.ends_at).toLocaleDateString("fr-FR")}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
           </div>
         )}
 
