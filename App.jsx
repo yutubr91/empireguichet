@@ -536,14 +536,6 @@ const PAST_DAYS = [
   { day: "Sam", volume: 705000 },
 ];
 
-const TEAM_ROSTER = [
-  { name: "Awa Koné", agency: "Agence Marcory", transactions: 18, volume: 612000, status: "actif" },
-  { name: "Ibrahim Traoré", agency: "Agence Yopougon", transactions: 12, volume: 398000, status: "actif" },
-  { name: "Fatou Diabaté", agency: "Agence Cocody", transactions: 21, volume: 745000, status: "actif" },
-  { name: "Yao Kouassi", agency: "Agence Adjamé", transactions: 6, volume: 154000, status: "inactif" },
-  { name: "Mariam Sylla", agency: "Agence Treichville", transactions: 15, volume: 501000, status: "actif" },
-];
-
 const FAQ_ITEMS = [
   {
     q: "Comment envoyer une transaction ?",
@@ -687,6 +679,15 @@ export default function GuichetApp() {
   const [authLoading, setAuthLoading] = useState(false);
   const [signupCooldown, setSignupCooldown] = useState(0);
 
+  // Capture le parrain depuis le lien de parrainage (?parrain=...) dès l'ouverture du site
+  const [referredByPhone, setReferredByPhone] = useState("");
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const parrain = params.get("parrain");
+    if (parrain) setReferredByPhone(decodeURIComponent(parrain));
+  }, []);
+
   useEffect(() => {
     if (signupCooldown <= 0) return;
     const t = setTimeout(() => setSignupCooldown((s) => Math.max(s - 1, 0)), 1000);
@@ -734,6 +735,32 @@ export default function GuichetApp() {
     if (error || !data) return null;
     return data.code;
   }
+
+  // ===== Équipe réelle (chef d'agence) et filleuls réels (parrainage) =====
+  const [realTeam, setRealTeam] = useState([]);
+  const [realTeamLoading, setRealTeamLoading] = useState(false);
+  const [realReferrals, setRealReferrals] = useState([]);
+  const [realReferralsLoading, setRealReferralsLoading] = useState(false);
+
+  async function loadRealTeam() {
+    setRealTeamLoading(true);
+    const { data, error } = await supabase.rpc("get_team_members");
+    setRealTeamLoading(false);
+    if (!error && data) setRealTeam(data);
+  }
+
+  async function loadRealReferrals() {
+    setRealReferralsLoading(true);
+    const { data, error } = await supabase.rpc("get_my_referrals");
+    setRealReferralsLoading(false);
+    if (!error && data) setRealReferrals(data);
+  }
+
+  useEffect(() => {
+    if (tab === "equipe" && agent?.role === "manager") loadRealTeam();
+    if (tab === "parrainage" && agent) loadRealReferrals();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab]);
 
   // Mot de passe oublié
   const [recoveryStep, setRecoveryStep] = useState(1);
@@ -1343,6 +1370,7 @@ export default function GuichetApp() {
       role: signupRole,
       pin_hash: signupPin,
       kyc_email_verified: false,
+      referred_by_phone: referredByPhone || null,
     });
     setAuthLoading(false);
     if (insertErr) {
@@ -2200,12 +2228,9 @@ export default function GuichetApp() {
                   style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}` }}
                 >
                   {ad.image_url && (
-                    <img
-                      src={ad.image_url}
-                      alt={ad.title}
-                      className="w-full object-cover"
-                      style={{ height: 140, objectPosition: "center" }}
-                    />
+                    <div className="w-full flex items-center justify-center" style={{ height: 160, background: COLORS.bgSoft }}>
+                      <img src={ad.image_url} alt={ad.title} className="w-full h-full object-contain" />
+                    </div>
                   )}
                   <div className="p-4 flex items-start gap-3">
                     {!ad.image_url && (
@@ -2673,7 +2698,9 @@ export default function GuichetApp() {
                       style={{ width: 240, background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}` }}
                     >
                       {ad.image_url && (
-                        <img src={ad.image_url} alt={ad.title} className="w-full object-cover" style={{ height: 100, objectPosition: "center" }} />
+                        <div className="w-full flex items-center justify-center" style={{ height: 110, background: COLORS.bgSoft }}>
+                          <img src={ad.image_url} alt={ad.title} className="w-full h-full object-contain" />
+                        </div>
                       )}
                       <div className="p-3">
                         <div className="text-sm font-medium">{ad.title}</div>
@@ -3437,8 +3464,8 @@ export default function GuichetApp() {
                         <img
                           src={ad.image_url}
                           alt={ad.title}
-                          className="w-full"
-                          style={{ display: "block", maxHeight: 260, objectFit: "contain", background: COLORS.bgSoft }}
+                          className="w-full object-cover"
+                          style={{ height: 160, objectPosition: "center" }}
                         />
                       )}
                       <div className="p-4 flex items-start gap-3">
@@ -3720,9 +3747,33 @@ export default function GuichetApp() {
               </div>
 
               <div className="p-4 rounded-lg" style={{ background: "rgba(43,191,138,0.1)", border: `1px solid ${COLORS.surfaceLine}` }}>
-                <div className="text-xs mb-1" style={{ color: COLORS.textMuted }}>Connaissances invitées (simulé)</div>
-                <div className="gc-display gc-mono text-xl font-semibold" style={{ color: COLORS.teal }}>4</div>
+                <div className="text-xs mb-1" style={{ color: COLORS.textMuted }}>Connaissances invitées</div>
+                <div className="gc-display gc-mono text-xl font-semibold" style={{ color: COLORS.teal }}>
+                  {realReferralsLoading ? "…" : realReferrals.length}
+                </div>
               </div>
+
+              {realReferrals.length > 0 && (
+                <div className="mt-4 space-y-2">
+                  {realReferrals.map((r) => (
+                    <div key={r.id} className="p-3 rounded-lg flex items-center justify-between" style={{ background: COLORS.bgSoft, border: `1px solid ${COLORS.surfaceLine}` }}>
+                      <div>
+                        <div className="text-sm font-medium">{r.full_name}</div>
+                        <div className="text-xs" style={{ color: COLORS.textMuted }}>{r.phone}</div>
+                      </div>
+                      <span
+                        className="text-xs px-2 py-1 rounded-full"
+                        style={{
+                          background: r.kyc_status === "validated" ? "rgba(43,191,138,0.15)" : "rgba(217,164,65,0.15)",
+                          color: r.kyc_status === "validated" ? COLORS.teal : COLORS.goldSoft,
+                        }}
+                      >
+                        {r.kyc_status === "validated" ? "Vérifié" : "En attente"}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             <div className="p-6 rounded-xl flex flex-col items-center justify-center text-center" style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}` }}>
@@ -3775,12 +3826,11 @@ export default function GuichetApp() {
               </button>
             </div>
 
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6">
               {[
-                { label: "Agents dans l'équipe", value: TEAM_ROSTER.length },
-                { label: "Agents actifs", value: TEAM_ROSTER.filter((a) => a.status === "actif").length },
-                { label: "Transactions équipe (jour)", value: TEAM_ROSTER.reduce((s, a) => s + a.transactions, 0) },
-                { label: "Volume équipe (jour)", value: formatFCFA(TEAM_ROSTER.reduce((s, a) => s + a.volume, 0)) },
+                { label: "Agents dans l'équipe", value: realTeamLoading ? "…" : realTeam.length },
+                { label: "KYC validés", value: realTeamLoading ? "…" : realTeam.filter((a) => a.kyc_status === "validated").length },
+                { label: "KYC en attente", value: realTeamLoading ? "…" : realTeam.filter((a) => a.kyc_status !== "validated").length },
               ].map((s) => (
                 <div key={s.label} className="p-4 rounded-xl" style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}` }}>
                   <div className="text-xs mb-1.5" style={{ color: COLORS.textMuted }}>{s.label}</div>
@@ -3789,57 +3839,39 @@ export default function GuichetApp() {
               ))}
             </div>
 
-            <div className="p-5 rounded-xl mb-4" style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}` }}>
-              <div className="text-sm font-medium mb-4">Volume par agent — aujourd'hui</div>
-              <ResponsiveContainer width="100%" height={220}>
-                <BarChart data={TEAM_ROSTER.map((a) => ({ name: a.name.split(" ")[0], volume: a.volume }))}>
-                  <CartesianGrid stroke={COLORS.chartGrid} strokeDasharray="3 4" vertical={false} />
-                  <XAxis dataKey="name" tick={{ fill: COLORS.textMuted, fontSize: 10 }} axisLine={{ stroke: COLORS.surfaceLine }} tickLine={false} />
-                  <YAxis
-                    tick={{ fill: COLORS.textMuted, fontSize: 10 }}
-                    axisLine={false}
-                    tickLine={false}
-                    tickFormatter={(v) => `${Math.round(v / 1000)}k`}
-                    width={38}
-                  />
-                  <Tooltip
-                    contentStyle={{ background: COLORS.bgSoft, border: `1px solid ${COLORS.surfaceLine}`, borderRadius: 8, fontSize: 12 }}
-                    labelStyle={{ color: COLORS.text }}
-                    formatter={(v) => [formatFCFA(v), "Volume"]}
-                  />
-                  <Bar dataKey="volume" radius={[6, 6, 0, 0]} fill={COLORS.gold} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-
             <div className="rounded-xl overflow-hidden" style={{ border: `1px solid ${COLORS.surfaceLine}` }}>
               <table className="w-full text-sm">
                 <thead>
                   <tr style={{ background: COLORS.surface, color: COLORS.textMuted }}>
                     <th className="text-left font-normal px-4 py-3">Agent</th>
-                    <th className="text-left font-normal px-4 py-3">Agence</th>
-                    <th className="text-right font-normal px-4 py-3">Transactions</th>
-                    <th className="text-right font-normal px-4 py-3">Volume</th>
-                    <th className="text-left font-normal px-4 py-3">Statut</th>
+                    <th className="text-left font-normal px-4 py-3">Téléphone</th>
+                    <th className="text-left font-normal px-4 py-3">Rôle</th>
+                    <th className="text-left font-normal px-4 py-3">Statut KYC</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {TEAM_ROSTER.map((a) => (
-                    <tr key={a.name} style={{ borderTop: `1px solid ${COLORS.surfaceLine}` }}>
-                      <td className="px-4 py-3">{a.name}</td>
-                      <td className="px-4 py-3" style={{ color: COLORS.textMuted }}>{a.agency}</td>
-                      <td className="px-4 py-3 text-right gc-mono">{a.transactions}</td>
-                      <td className="px-4 py-3 text-right gc-mono">{formatFCFA(a.volume)}</td>
+                  {!realTeamLoading && realTeam.length === 0 && (
+                    <tr>
+                      <td colSpan={4} className="px-4 py-6 text-center text-sm" style={{ color: COLORS.textMuted }}>
+                        Aucun agent n'a encore rejoint ton équipe avec ton code d'agence.
+                      </td>
+                    </tr>
+                  )}
+                  {realTeam.map((a) => (
+                    <tr key={a.id} style={{ borderTop: `1px solid ${COLORS.surfaceLine}` }}>
+                      <td className="px-4 py-3">{a.full_name}</td>
+                      <td className="px-4 py-3 gc-mono" style={{ color: COLORS.textMuted }}>{a.phone}</td>
+                      <td className="px-4 py-3" style={{ color: COLORS.textMuted }}>{a.role === "manager" ? "Chef d'agence" : "Agent"}</td>
                       <td className="px-4 py-3">
                         <span
                           className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-md"
                           style={
-                            a.status === "actif"
+                            a.kyc_status === "validated"
                               ? { background: "rgba(43,191,138,0.12)", color: COLORS.teal }
-                              : { background: "rgba(226,104,94,0.12)", color: COLORS.danger }
+                              : { background: "rgba(217,164,65,0.12)", color: COLORS.goldSoft }
                           }
                         >
-                          {a.status === "actif" ? "Actif" : "Inactif"}
+                          {a.kyc_status === "validated" ? "Vérifié" : "En attente"}
                         </span>
                       </td>
                     </tr>
@@ -3847,10 +3879,6 @@ export default function GuichetApp() {
                 </tbody>
               </table>
             </div>
-
-            <p className="text-xs mt-3" style={{ color: COLORS.textMuted }}>
-              Données d'équipe simulées à titre de démonstration.
-            </p>
           </div>
         )}
 
