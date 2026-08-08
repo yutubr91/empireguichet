@@ -3434,12 +3434,14 @@ export default function GuichetApp() {
                       style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}` }}
                     >
                       {ad.image_url && (
-                        <img
-                          src={ad.image_url}
-                          alt={ad.title}
-                          className="w-full object-cover"
-                          style={{ height: 160, objectPosition: "center" }}
-                        />
+                        <div style={{ height: 180, background: COLORS.bgSoft, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                          <img
+                            src={ad.image_url}
+                            alt={ad.title}
+                            className="w-full h-full"
+                            style={{ objectFit: "contain", objectPosition: "center" }}
+                          />
+                        </div>
                       )}
                       <div className="p-4 flex items-start gap-3">
                         {!ad.image_url && (
