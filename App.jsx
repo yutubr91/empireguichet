@@ -2194,7 +2194,9 @@ export default function GuichetApp() {
               {activeAds.map((ad) => (
                 <div key={ad.id} className="rounded-xl overflow-hidden" style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}` }}>
                   {ad.image_url && (
-                    <img src={ad.image_url} alt={ad.title} className="w-full object-cover" style={{ height: 120 }} />
+                    <div className="w-full flex items-center justify-center" style={{ height: 140, background: COLORS.bgSoft }}>
+                      <img src={ad.image_url} alt={ad.title} className="max-w-full max-h-full object-contain" />
+                    </div>
                   )}
                   <div className="p-4 flex items-start gap-3">
                     {!ad.image_url && (
@@ -2203,7 +2205,7 @@ export default function GuichetApp() {
                       </div>
                     )}
                     <div className="min-w-0">
-                      <div className="text-sm font-medium truncate">{ad.title}</div>
+                      <div className="text-sm font-medium">{ad.title}</div>
                       <p className="text-xs mt-0.5" style={{ color: COLORS.textMuted }}>{ad.description}</p>
                       <div className="text-xs mt-2 flex items-center gap-1" style={{ color: COLORS.gold }}>
                         <Phone size={11} /> {ad.contact_phone}
@@ -3386,7 +3388,9 @@ export default function GuichetApp() {
                   {activeAds.map((ad) => (
                     <div key={ad.id} className="rounded-xl overflow-hidden" style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}` }}>
                       {ad.image_url && (
-                        <img src={ad.image_url} alt={ad.title} className="w-full object-cover" style={{ height: 140 }} />
+                        <div className="w-full flex items-center justify-center" style={{ height: 160, background: COLORS.bgSoft }}>
+                          <img src={ad.image_url} alt={ad.title} className="max-w-full max-h-full object-contain" />
+                        </div>
                       )}
                       <div className="p-4 flex items-start gap-3">
                         {!ad.image_url && (
@@ -3395,7 +3399,7 @@ export default function GuichetApp() {
                           </div>
                         )}
                         <div className="min-w-0">
-                          <div className="text-sm font-medium truncate">{ad.title}</div>
+                          <div className="text-sm font-medium">{ad.title}</div>
                           <p className="text-xs mt-0.5" style={{ color: COLORS.textMuted }}>{ad.description}</p>
                           <button
                             type="button"
