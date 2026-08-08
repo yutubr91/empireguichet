@@ -1118,6 +1118,12 @@ export default function GuichetApp() {
   }
 
   useEffect(() => {
+    // Chargées dès l'ouverture du site, connecté ou non (vitrine publique)
+    loadActiveAds();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
     if (tab === "publicites" && agent) {
       loadActiveAds();
       loadMyAds();
@@ -2180,6 +2186,35 @@ export default function GuichetApp() {
         <p className="text-sm mb-8" style={{ color: COLORS.textMuted }}>
           Interface fonctionnelle avec données simulées — aucune transaction réelle n'est envoyée.
         </p>
+
+        {!isAuthenticated && activeAds.length > 0 && (
+          <div className="mb-8 max-w-3xl">
+            <div className="text-xs font-medium mb-3" style={{ color: COLORS.textMuted }}>ANNONCES SUR LA PLATEFORME</div>
+            <div className="grid md:grid-cols-2 gap-3">
+              {activeAds.map((ad) => (
+                <div key={ad.id} className="rounded-xl overflow-hidden" style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}` }}>
+                  {ad.image_url && (
+                    <img src={ad.image_url} alt={ad.title} className="w-full object-cover" style={{ height: 120 }} />
+                  )}
+                  <div className="p-4 flex items-start gap-3">
+                    {!ad.image_url && (
+                      <div className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: COLORS.surfaceLine }}>
+                        <Megaphone size={18} style={{ color: COLORS.goldSoft }} />
+                      </div>
+                    )}
+                    <div className="min-w-0">
+                      <div className="text-sm font-medium truncate">{ad.title}</div>
+                      <p className="text-xs mt-0.5" style={{ color: COLORS.textMuted }}>{ad.description}</p>
+                      <div className="text-xs mt-2 flex items-center gap-1" style={{ color: COLORS.gold }}>
+                        <Phone size={11} /> {ad.contact_phone}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {!isAuthenticated ? (
           <div className="gc-fade-in grid md:grid-cols-2 gap-6 max-w-3xl">
