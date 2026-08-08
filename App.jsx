@@ -2763,34 +2763,72 @@ export default function GuichetApp() {
             {activeAds.length > 0 && (
               <div className="mb-4">
                 <div className="text-xs font-medium mb-3" style={{ color: COLORS.textMuted }}>PUBLICITÉS SUR LA PLATEFORME</div>
-                <div className="flex gap-3 overflow-x-auto pb-1">
-                  {activeAds.map((ad) => (
-                    <div
-                      key={ad.id}
-                      onClick={() => setSelectedAdPreview(ad)}
-                      className="rounded-xl overflow-hidden flex-shrink-0 cursor-pointer"
-                      style={{ width: 240, background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}` }}
-                    >
-                      {ad.image_url && (
-                        <div className="w-full flex items-center justify-center" style={{ height: 110, background: COLORS.bgSoft }}>
-                          <img src={ad.image_url} alt={ad.title} className="w-full h-full object-contain" />
+                {(() => {
+                  const [hero, ...rest] = activeAds;
+                  return (
+                    <>
+                      <div
+                        onClick={() => setSelectedAdPreview(hero)}
+                        className="rounded-xl overflow-hidden cursor-pointer mb-3"
+                        style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}` }}
+                      >
+                        {hero.image_url && (
+                          <img
+                            src={hero.image_url}
+                            alt={hero.title}
+                            className="w-full object-cover"
+                            style={{ maxHeight: 280, height: "auto", aspectRatio: "16/8", objectPosition: "center" }}
+                          />
+                        )}
+                        <div className="p-4">
+                          <div className="text-base font-semibold">{hero.title}</div>
+                          <p className="text-sm mt-1" style={{ color: COLORS.textMuted }}>{hero.description}</p>
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); handleAdClick(hero.id); }}
+                            className="text-sm mt-2 flex items-center gap-1.5"
+                            style={{ color: COLORS.gold }}
+                          >
+                            <Phone size={13} /> {hero.contact_phone}
+                          </button>
+                        </div>
+                      </div>
+
+                      {rest.length > 0 && (
+                        <div className="space-y-2">
+                          {rest.map((ad) => (
+                            <div
+                              key={ad.id}
+                              onClick={() => setSelectedAdPreview(ad)}
+                              className="rounded-lg flex items-center gap-3 p-2.5 cursor-pointer"
+                              style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}` }}
+                            >
+                              {ad.image_url ? (
+                                <img src={ad.image_url} alt={ad.title} className="w-12 h-12 rounded-md object-cover flex-shrink-0" />
+                              ) : (
+                                <div className="w-12 h-12 rounded-md flex items-center justify-center flex-shrink-0" style={{ background: COLORS.surfaceLine }}>
+                                  <Megaphone size={16} style={{ color: COLORS.goldSoft }} />
+                                </div>
+                              )}
+                              <div className="min-w-0 flex-1">
+                                <div className="text-sm font-medium truncate">{ad.title}</div>
+                                <p className="text-xs truncate" style={{ color: COLORS.textMuted }}>{ad.description}</p>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={(e) => { e.stopPropagation(); handleAdClick(ad.id); }}
+                                className="text-xs flex items-center gap-1 flex-shrink-0"
+                                style={{ color: COLORS.gold }}
+                              >
+                                <Phone size={11} /> {ad.contact_phone}
+                              </button>
+                            </div>
+                          ))}
                         </div>
                       )}
-                      <div className="p-3">
-                        <div className="text-sm font-medium">{ad.title}</div>
-                        <p className="text-xs mt-0.5 line-clamp-2" style={{ color: COLORS.textMuted }}>{ad.description}</p>
-                        <button
-                          type="button"
-                          onClick={(e) => { e.stopPropagation(); handleAdClick(ad.id); }}
-                          className="text-xs mt-2 flex items-center gap-1"
-                          style={{ color: COLORS.gold }}
-                        >
-                          <Phone size={11} /> {ad.contact_phone}
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                    </>
+                  );
+                })()}
               </div>
             )}
 
