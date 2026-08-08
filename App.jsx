@@ -2655,6 +2655,37 @@ export default function GuichetApp() {
               ))}
             </div>
 
+            {activeAds.length > 0 && (
+              <div className="mb-4">
+                <div className="text-xs font-medium mb-3" style={{ color: COLORS.textMuted }}>PUBLICITÉS SUR LA PLATEFORME</div>
+                <div className="flex gap-3 overflow-x-auto pb-1">
+                  {activeAds.map((ad) => (
+                    <div
+                      key={ad.id}
+                      className="rounded-xl overflow-hidden flex-shrink-0"
+                      style={{ width: 240, background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}` }}
+                    >
+                      {ad.image_url && (
+                        <img src={ad.image_url} alt={ad.title} className="w-full object-cover" style={{ height: 100, objectPosition: "center" }} />
+                      )}
+                      <div className="p-3">
+                        <div className="text-sm font-medium">{ad.title}</div>
+                        <p className="text-xs mt-0.5 line-clamp-2" style={{ color: COLORS.textMuted }}>{ad.description}</p>
+                        <button
+                          type="button"
+                          onClick={() => handleAdClick(ad.id)}
+                          className="text-xs mt-2 flex items-center gap-1"
+                          style={{ color: COLORS.gold }}
+                        >
+                          <Phone size={11} /> {ad.contact_phone}
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <div className="grid md:grid-cols-2 gap-4 mb-4">
               <div className="p-5 rounded-xl" style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}` }}>
                 <div className="text-sm font-medium mb-4">Tendance sur 7 jours</div>
