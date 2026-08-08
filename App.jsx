@@ -1128,6 +1128,16 @@ export default function GuichetApp() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab]);
 
+  // Le compte principal est crédité automatiquement des revenus publicitaires
+  // dès sa connexion (et à chaque retour sur le tableau de bord), pas seulement
+  // quand il ouvre le backoffice publicité.
+  useEffect(() => {
+    if (agent?.isPlatformOwner) loadAllAdsForBackoffice();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [agent?.isPlatformOwner, tab === "dashboard"]);
+
+  const ownerAdRevenue = agent?.isPlatformOwner ? allAds.reduce((s, a) => s + (a.amount_paid || 0), 0) : 0;
+
   async function handleSubmitAd(e) {
     e.preventDefault();
     setAdFormError("");
@@ -1139,6 +1149,10 @@ export default function GuichetApp() {
     const plan = AD_PRICING[adForm.planIndex];
     const isFree = !!agent?.isPlatformOwner;
     const amountToCharge = isFree ? 0 : plan.price;
+    if (!isFree && amountToCharge > floatBalance) {
+      setAdFormError(`Solde insuffisant. Solde disponible : ${formatFCFA(floatBalance)}.`);
+      return;
+    }
     setAdSubmitting(true);
     let imageUrl = null;
     if (adImageFile) {
@@ -1179,6 +1193,7 @@ export default function GuichetApp() {
         ? `Publicité publiée gratuitement et en ligne pour ${plan.days} jours ✅`
         : `Publicité payée (${formatFCFA(plan.price)}) et en ligne pour ${plan.days} jours ✅`
     );
+    if (!isFree) setAdSpend((s) => s + plan.price);
     setAdImageFile(null);
     setAdImagePreview("");
     setAdForm({ title: "", description: "", contactPhone: "", planIndex: 0 });
@@ -1729,8 +1744,9 @@ export default function GuichetApp() {
     const hNet = NETWORKS.find((n) => n.id === h.net);
     return sum + h.amount * hNet.fee * AGENT_COMMISSION_RATE;
   }, 0);
+  const [adSpend, setAdSpend] = useState(0); // total dépensé en publicités par cet agent (simulé)
   const floatChange = history.reduce((sum, h) => sum + (h.direction === "retrait" ? h.amount : -h.amount), 0);
-  const floatBalance = Math.max(INITIAL_FLOAT + floatChange, 0);
+  const floatBalance = Math.max(INITIAL_FLOAT + floatChange - adSpend + ownerAdRevenue, 0);
 
   useEffect(() => {
     if (floatBalance > 0 && floatBalance < 50000) {
