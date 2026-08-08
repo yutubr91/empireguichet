@@ -2194,16 +2194,12 @@ export default function GuichetApp() {
               {activeAds.map((ad) => (
                 <div key={ad.id} className="rounded-xl overflow-hidden" style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}` }}>
                   {ad.image_url && (
-                    <div className="w-full relative overflow-hidden" style={{ height: 140, background: COLORS.bgSoft }}>
-                      <img
-                        src={ad.image_url}
-                        alt=""
-                        aria-hidden="true"
-                        className="absolute inset-0 w-full h-full object-cover"
-                        style={{ filter: "blur(18px) brightness(0.7)", transform: "scale(1.15)" }}
-                      />
-                      <img src={ad.image_url} alt={ad.title} className="absolute inset-0 w-full h-full object-contain" />
-                    </div>
+                    <img
+                      src={ad.image_url}
+                      alt={ad.title}
+                      className="w-full object-cover"
+                      style={{ height: 140, objectPosition: "center" }}
+                    />
                   )}
                   <div className="p-4 flex items-start gap-3">
                     {!ad.image_url && (
@@ -3395,16 +3391,12 @@ export default function GuichetApp() {
                   {activeAds.map((ad) => (
                     <div key={ad.id} className="rounded-xl overflow-hidden" style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}` }}>
                       {ad.image_url && (
-                        <div className="w-full relative overflow-hidden" style={{ height: 160, background: COLORS.bgSoft }}>
-                          <img
-                            src={ad.image_url}
-                            alt=""
-                            aria-hidden="true"
-                            className="absolute inset-0 w-full h-full object-cover"
-                            style={{ filter: "blur(18px) brightness(0.7)", transform: "scale(1.15)" }}
-                          />
-                          <img src={ad.image_url} alt={ad.title} className="absolute inset-0 w-full h-full object-contain" />
-                        </div>
+                        <img
+                          src={ad.image_url}
+                          alt={ad.title}
+                          className="w-full object-cover"
+                          style={{ height: 160, objectPosition: "center" }}
+                        />
                       )}
                       <div className="p-4 flex items-start gap-3">
                         {!ad.image_url && (
