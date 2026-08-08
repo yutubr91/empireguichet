@@ -1054,6 +1054,7 @@ export default function GuichetApp() {
     { days: 30, price: 40000, label: "30 jours" },
   ];
   const [activeAds, setActiveAds] = useState([]);
+  const [selectedAdPreview, setSelectedAdPreview] = useState(null);
   const [adsLoading, setAdsLoading] = useState(false);
   const [myAds, setMyAds] = useState([]);
   const [adForm, setAdForm] = useState({ title: "", description: "", contactPhone: "", planIndex: 0 });
@@ -2192,7 +2193,12 @@ export default function GuichetApp() {
             <div className="text-xs font-medium mb-3" style={{ color: COLORS.textMuted }}>ANNONCES SUR LA PLATEFORME</div>
             <div className="grid md:grid-cols-2 gap-3">
               {activeAds.map((ad) => (
-                <div key={ad.id} className="rounded-xl overflow-hidden" style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}` }}>
+                <div
+                  key={ad.id}
+                  onClick={() => setSelectedAdPreview(ad)}
+                  className="rounded-xl overflow-hidden cursor-pointer"
+                  style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}` }}
+                >
                   {ad.image_url && (
                     <img
                       src={ad.image_url}
@@ -2662,7 +2668,8 @@ export default function GuichetApp() {
                   {activeAds.map((ad) => (
                     <div
                       key={ad.id}
-                      className="rounded-xl overflow-hidden flex-shrink-0"
+                      onClick={() => setSelectedAdPreview(ad)}
+                      className="rounded-xl overflow-hidden flex-shrink-0 cursor-pointer"
                       style={{ width: 240, background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}` }}
                     >
                       {ad.image_url && (
@@ -2673,7 +2680,7 @@ export default function GuichetApp() {
                         <p className="text-xs mt-0.5 line-clamp-2" style={{ color: COLORS.textMuted }}>{ad.description}</p>
                         <button
                           type="button"
-                          onClick={() => handleAdClick(ad.id)}
+                          onClick={(e) => { e.stopPropagation(); handleAdClick(ad.id); }}
                           className="text-xs mt-2 flex items-center gap-1"
                           style={{ color: COLORS.gold }}
                         >
@@ -3420,7 +3427,12 @@ export default function GuichetApp() {
               ) : (
                 <div className="grid md:grid-cols-2 gap-3">
                   {activeAds.map((ad) => (
-                    <div key={ad.id} className="rounded-xl overflow-hidden" style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}` }}>
+                    <div
+                      key={ad.id}
+                      onClick={() => setSelectedAdPreview(ad)}
+                      className="rounded-xl overflow-hidden cursor-pointer"
+                      style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}` }}
+                    >
                       {ad.image_url && (
                         <img
                           src={ad.image_url}
@@ -3440,7 +3452,7 @@ export default function GuichetApp() {
                           <p className="text-xs mt-0.5" style={{ color: COLORS.textMuted }}>{ad.description}</p>
                           <button
                             type="button"
-                            onClick={() => handleAdClick(ad.id)}
+                            onClick={(e) => { e.stopPropagation(); handleAdClick(ad.id); }}
                             className="text-xs mt-2 flex items-center gap-1"
                             style={{ color: COLORS.gold }}
                           >
@@ -4295,6 +4307,51 @@ export default function GuichetApp() {
               </button>
             </div>
           </form>
+        </div>
+      )}
+
+      {/* ===== Fenêtre agrandie d'une publicité ===== */}
+      {selectedAdPreview && (
+        <div
+          className="gc-fade-in"
+          style={{ position: "fixed", inset: 0, background: "rgba(6,7,20,0.8)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50, padding: 16 }}
+          onClick={() => setSelectedAdPreview(null)}
+        >
+          <div
+            className="w-full"
+            style={{ maxWidth: 520, maxHeight: "90vh", overflowY: "auto", background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}`, borderRadius: 16, overflow: "hidden" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ position: "relative" }}>
+              {selectedAdPreview.image_url ? (
+                <img src={selectedAdPreview.image_url} alt={selectedAdPreview.title} className="w-full" style={{ maxHeight: "60vh", objectFit: "contain", background: COLORS.bgSoft }} />
+              ) : (
+                <div className="w-full flex items-center justify-center" style={{ height: 180, background: COLORS.bgSoft }}>
+                  <Megaphone size={40} style={{ color: COLORS.goldSoft }} />
+                </div>
+              )}
+              <button
+                onClick={() => setSelectedAdPreview(null)}
+                aria-label="Fermer"
+                className="flex items-center justify-center"
+                style={{ position: "absolute", top: 12, right: 12, width: 32, height: 32, borderRadius: 999, background: "rgba(0,0,0,0.6)" }}
+              >
+                <X size={16} color="#fff" />
+              </button>
+            </div>
+            <div className="p-5">
+              <div className="text-base font-semibold mb-1">{selectedAdPreview.title}</div>
+              <p className="text-sm mb-4" style={{ color: COLORS.textMuted }}>{selectedAdPreview.description}</p>
+              <button
+                type="button"
+                onClick={() => handleAdClick(selectedAdPreview.id)}
+                className="gc-btn flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium"
+                style={{ background: COLORS.gold, color: "#052E36" }}
+              >
+                <Phone size={14} /> {selectedAdPreview.contact_phone}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
