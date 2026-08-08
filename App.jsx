@@ -53,6 +53,7 @@ import {
   Fingerprint,
   Eye,
   EyeOff,
+  Image as ImageIcon,
 } from "lucide-react";
 import {
   BarChart,
@@ -1059,6 +1060,29 @@ export default function GuichetApp() {
   const [adFormError, setAdFormError] = useState("");
   const [adSubmitting, setAdSubmitting] = useState(false);
   const [adSuccessMsg, setAdSuccessMsg] = useState("");
+  const [adImageFile, setAdImageFile] = useState(null);
+  const [adImagePreview, setAdImagePreview] = useState("");
+
+  function handleAdImageChange(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      setAdFormError("Merci de choisir un fichier image (jpg, png…).");
+      return;
+    }
+    setAdFormError("");
+    setAdImageFile(file);
+    setAdImagePreview(URL.createObjectURL(file));
+  }
+
+  async function uploadAdImage(file) {
+    const ext = file.name.split(".").pop();
+    const path = `${agent.id}/${Date.now()}.${ext}`;
+    const { error } = await supabase.storage.from("ad-images").upload(path, file, { upsert: true });
+    if (error) throw error;
+    const { data } = supabase.storage.from("ad-images").getPublicUrl(path);
+    return data.publicUrl;
+  }
 
   async function loadActiveAds() {
     setAdsLoading(true);
@@ -1116,6 +1140,16 @@ export default function GuichetApp() {
     const isFree = !!agent?.isPlatformOwner;
     const amountToCharge = isFree ? 0 : plan.price;
     setAdSubmitting(true);
+    let imageUrl = null;
+    if (adImageFile) {
+      try {
+        imageUrl = await uploadAdImage(adImageFile);
+      } catch (err) {
+        setAdSubmitting(false);
+        setAdFormError("Erreur lors de l'envoi de l'image : " + err.message);
+        return;
+      }
+    }
     // Paiement simulé — en production, appel réel à l'agrégateur de paiement ici
     const now = new Date();
     const endsAt = new Date(now.getTime() + plan.days * 24 * 60 * 60 * 1000);
@@ -1126,6 +1160,7 @@ export default function GuichetApp() {
       title: adForm.title.trim(),
       description: adForm.description.trim(),
       contact_phone: adForm.contactPhone.trim(),
+      image_url: imageUrl,
       duration_days: plan.days,
       amount_paid: amountToCharge,
       status: "active",
@@ -1144,6 +1179,8 @@ export default function GuichetApp() {
         ? `Publicité publiée gratuitement et en ligne pour ${plan.days} jours ✅`
         : `Publicité payée (${formatFCFA(plan.price)}) et en ligne pour ${plan.days} jours ✅`
     );
+    setAdImageFile(null);
+    setAdImagePreview("");
     setAdForm({ title: "", description: "", contactPhone: "", planIndex: 0 });
     pushNotification("Publicité publiée avec succès 📣");
     loadActiveAds();
@@ -3296,11 +3333,16 @@ export default function GuichetApp() {
               ) : (
                 <div className="grid md:grid-cols-2 gap-3">
                   {activeAds.map((ad) => (
-                    <div key={ad.id} className="p-4 rounded-xl" style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}` }}>
-                      <div className="flex items-start gap-3">
-                        <div className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: COLORS.surfaceLine }}>
-                          <Megaphone size={18} style={{ color: COLORS.goldSoft }} />
-                        </div>
+                    <div key={ad.id} className="rounded-xl overflow-hidden" style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}` }}>
+                      {ad.image_url && (
+                        <img src={ad.image_url} alt={ad.title} className="w-full object-cover" style={{ height: 140 }} />
+                      )}
+                      <div className="p-4 flex items-start gap-3">
+                        {!ad.image_url && (
+                          <div className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: COLORS.surfaceLine }}>
+                            <Megaphone size={18} style={{ color: COLORS.goldSoft }} />
+                          </div>
+                        )}
                         <div className="min-w-0">
                           <div className="text-sm font-medium truncate">{ad.title}</div>
                           <p className="text-xs mt-0.5" style={{ color: COLORS.textMuted }}>{ad.description}</p>
@@ -3357,6 +3399,31 @@ export default function GuichetApp() {
                   style={{ background: COLORS.bgSoft, border: `1px solid ${COLORS.surfaceLine}`, color: COLORS.text }}
                 />
                 <div>
+                  <div className="text-xs mb-2" style={{ color: COLORS.textMuted }}>Image de la publicité (optionnel)</div>
+                  {adImagePreview ? (
+                    <div className="relative w-full mb-2" style={{ height: 140 }}>
+                      <img src={adImagePreview} alt="Aperçu" className="w-full h-full object-cover rounded-lg" />
+                      <button
+                        type="button"
+                        onClick={() => { setAdImageFile(null); setAdImagePreview(""); }}
+                        className="absolute top-2 right-2 w-7 h-7 rounded-full flex items-center justify-center"
+                        style={{ background: "rgba(0,0,0,0.6)", color: "#fff" }}
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+                  ) : (
+                    <label
+                      className="flex flex-col items-center justify-center gap-1.5 py-5 rounded-lg cursor-pointer text-xs"
+                      style={{ background: COLORS.bgSoft, border: `1px dashed ${COLORS.surfaceLine}`, color: COLORS.textMuted }}
+                    >
+                      <ImageIcon size={18} />
+                      Ajouter une image (JPG, PNG)
+                      <input type="file" accept="image/*" onChange={handleAdImageChange} className="hidden" />
+                    </label>
+                  )}
+                </div>
+                <div>
                   <div className="text-xs mb-2" style={{ color: COLORS.textMuted }}>Durée de diffusion</div>
                   <div className="grid grid-cols-3 gap-2">
                     {AD_PRICING.map((plan, i) => (
@@ -3404,7 +3471,15 @@ export default function GuichetApp() {
                   {myAds.map((ad) => {
                     const isActive = ad.status === "active" && new Date(ad.ends_at) > new Date();
                     return (
-                      <div key={ad.id} className="p-3.5 rounded-lg flex items-center justify-between" style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}` }}>
+                      <div key={ad.id} className="p-3.5 rounded-lg flex items-center gap-3" style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}` }}>
+                        {ad.image_url ? (
+                          <img src={ad.image_url} alt={ad.title} className="w-11 h-11 rounded-lg object-cover flex-shrink-0" />
+                        ) : (
+                          <div className="w-11 h-11 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: COLORS.bgSoft }}>
+                            <Megaphone size={16} style={{ color: COLORS.goldSoft }} />
+                          </div>
+                        )}
+                        <div className="min-w-0 flex-1 flex items-center justify-between">
                         <div className="min-w-0">
                           <div className="text-sm font-medium truncate">{ad.title}</div>
                           <div className="text-xs" style={{ color: COLORS.textMuted }}>
@@ -3421,6 +3496,7 @@ export default function GuichetApp() {
                         >
                           {isActive ? "En ligne" : "Expirée"}
                         </span>
+                        </div>
                       </div>
                     );
                   })}
