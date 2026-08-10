@@ -4365,7 +4365,7 @@ export default function GuichetApp() {
 
       {/* ===== Affiches publicitaires (avant le pied de page) ===== */}
       {activeAds.length > 0 && (
-        <section className="max-w-2xl mx-auto px-5 pb-14 space-y-4">
+        <section className="max-w-4xl mx-auto px-5 pb-14 grid md:grid-cols-2 gap-4">
           {activeAds.map((ad) => (
             <div
               key={ad.id}
