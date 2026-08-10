@@ -2758,40 +2758,27 @@ export default function GuichetApp() {
             {activeAds.length > 0 && (
               <div className="mb-4">
                 <div className="text-xs font-medium mb-3" style={{ color: COLORS.textMuted }}>PUBLICITÉS SUR LA PLATEFORME</div>
-                <div className="grid md:grid-cols-2 gap-3">
+                <div className="space-y-2">
                   {activeAds.map((ad) => (
                     <div
                       key={ad.id}
                       onClick={() => setSelectedAdPreview(ad)}
-                      className="rounded-xl overflow-hidden cursor-pointer"
-                      style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}` }}
+                      className="rounded-lg overflow-hidden cursor-pointer flex items-center"
+                      style={{ height: 88, background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}` }}
                     >
                       {ad.image_url ? (
-                        <div className="w-full flex items-center justify-center" style={{ height: 140, background: COLORS.bgSoft }}>
-                          <img src={ad.image_url} alt={ad.title} className="w-full h-full object-contain" />
-                        </div>
+                        <img src={ad.image_url} alt={ad.title} className="h-full object-cover flex-shrink-0" style={{ width: 88 }} />
                       ) : (
-                        <div className="w-full flex items-center justify-center" style={{ height: 140, background: COLORS.bgSoft }}>
-                          <Megaphone size={24} style={{ color: COLORS.surfaceLine }} />
+                        <div className="h-full flex items-center justify-center flex-shrink-0" style={{ width: 88, background: COLORS.bgSoft }}>
+                          <Megaphone size={18} style={{ color: COLORS.surfaceLine }} />
                         </div>
                       )}
-                      <div className="p-3.5">
-                        <span
-                          className="inline-flex items-center gap-1.5 text-xs px-2.5 py-0.5 rounded-full mb-2 w-fit"
-                          style={{ background: COLORS.bgSoft, color: COLORS.goldSoft, border: `1px solid ${COLORS.surfaceLine}` }}
-                        >
-                          <Megaphone size={11} /> Publicité
-                        </span>
-                        <div className="text-sm font-semibold">{ad.title}</div>
-                        <p className="text-xs mt-1" style={{ color: COLORS.textMuted }}>{ad.description}</p>
-                        <button
-                          type="button"
-                          onClick={(e) => { e.stopPropagation(); handleAdClick(ad.id); }}
-                          className="gc-btn flex items-center gap-1.5 mt-2 px-3 py-1.5 rounded-lg text-xs font-medium w-fit"
-                          style={{ background: COLORS.gold, color: "#052E36" }}
-                        >
-                          <Phone size={11} /> {ad.contact_phone}
-                        </button>
+                      <div className="p-3 min-w-0">
+                        <div className="text-sm font-medium truncate">{ad.title}</div>
+                        <p className="text-xs truncate" style={{ color: COLORS.textMuted }}>{ad.description}</p>
+                        <div className="text-xs mt-1 flex items-center gap-1" style={{ color: COLORS.gold }}>
+                          <Phone size={10} /> {ad.contact_phone}
+                        </div>
                       </div>
                     </div>
                   ))}
@@ -3531,40 +3518,27 @@ export default function GuichetApp() {
                   Aucune publicité en ligne pour le moment.
                 </div>
               ) : (
-                <div className="grid md:grid-cols-2 gap-3">
+                <div className="space-y-2">
                   {activeAds.map((ad) => (
                     <div
                       key={ad.id}
                       onClick={() => setSelectedAdPreview(ad)}
-                      className="rounded-xl overflow-hidden cursor-pointer"
-                      style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}` }}
+                      className="rounded-lg overflow-hidden cursor-pointer flex items-center"
+                      style={{ height: 88, background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}` }}
                     >
                       {ad.image_url ? (
-                        <div className="w-full flex items-center justify-center" style={{ height: 160, background: COLORS.bgSoft }}>
-                          <img src={ad.image_url} alt={ad.title} className="w-full h-full object-contain" />
-                        </div>
+                        <img src={ad.image_url} alt={ad.title} className="h-full object-cover flex-shrink-0" style={{ width: 88 }} />
                       ) : (
-                        <div className="w-full flex items-center justify-center" style={{ height: 160, background: COLORS.bgSoft }}>
-                          <Megaphone size={26} style={{ color: COLORS.surfaceLine }} />
+                        <div className="h-full flex items-center justify-center flex-shrink-0" style={{ width: 88, background: COLORS.bgSoft }}>
+                          <Megaphone size={18} style={{ color: COLORS.surfaceLine }} />
                         </div>
                       )}
-                      <div className="p-4">
-                        <span
-                          className="inline-flex items-center gap-1.5 text-xs px-2.5 py-0.5 rounded-full mb-2 w-fit"
-                          style={{ background: COLORS.bgSoft, color: COLORS.goldSoft, border: `1px solid ${COLORS.surfaceLine}` }}
-                        >
-                          <Megaphone size={11} /> Publicité
-                        </span>
-                        <div className="text-base font-semibold">{ad.title}</div>
-                        <p className="text-sm mt-1" style={{ color: COLORS.textMuted }}>{ad.description}</p>
-                        <button
-                          type="button"
-                          onClick={(e) => { e.stopPropagation(); handleAdClick(ad.id); }}
-                          className="gc-btn flex items-center gap-1.5 mt-3 px-3 py-1.5 rounded-lg text-sm font-medium w-fit"
-                          style={{ background: COLORS.gold, color: "#052E36" }}
-                        >
-                          <Phone size={12} /> {ad.contact_phone}
-                        </button>
+                      <div className="p-3 min-w-0">
+                        <div className="text-sm font-medium truncate">{ad.title}</div>
+                        <p className="text-xs truncate" style={{ color: COLORS.textMuted }}>{ad.description}</p>
+                        <div className="text-xs mt-1 flex items-center gap-1" style={{ color: COLORS.gold }}>
+                          <Phone size={10} /> {ad.contact_phone}
+                        </div>
                       </div>
                     </div>
                   ))}
