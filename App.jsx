@@ -2291,32 +2291,30 @@ export default function GuichetApp() {
         </p>
 
         {!isAuthenticated && activeAds.length > 0 && (
-          <div className="mb-8 max-w-3xl">
+          <div className="mb-8 max-w-2xl">
             <div className="text-xs font-medium mb-3" style={{ color: COLORS.textMuted }}>ANNONCES SUR LA PLATEFORME</div>
-            <div className="space-y-3">
+            <div className="space-y-2">
               {activeAds.map((ad) => (
                 <div
                   key={ad.id}
                   onClick={() => setSelectedAdPreview(ad)}
-                  className="rounded-xl overflow-hidden cursor-pointer grid grid-cols-2 items-stretch"
-                  style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}` }}
+                  className="rounded-lg overflow-hidden cursor-pointer flex items-center"
+                  style={{ height: 88, background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}` }}
                 >
-                  <div className="p-4 flex flex-col justify-center min-w-0">
-                    <div className="text-sm font-medium">{ad.title}</div>
-                    <p className="text-xs mt-0.5" style={{ color: COLORS.textMuted }}>{ad.description}</p>
-                    <div className="text-xs mt-2 flex items-center gap-1" style={{ color: COLORS.gold }}>
-                      <Phone size={11} /> {ad.contact_phone}
-                    </div>
-                  </div>
                   {ad.image_url ? (
-                    <div className="flex items-center justify-center" style={{ minHeight: 130, background: COLORS.bgSoft }}>
-                      <img src={ad.image_url} alt={ad.title} className="w-full h-full object-cover" style={{ minHeight: 130 }} />
-                    </div>
+                    <img src={ad.image_url} alt={ad.title} className="h-full object-cover flex-shrink-0" style={{ width: 88 }} />
                   ) : (
-                    <div className="flex items-center justify-center" style={{ minHeight: 130, background: COLORS.bgSoft }}>
-                      <Megaphone size={22} style={{ color: COLORS.surfaceLine }} />
+                    <div className="h-full flex items-center justify-center flex-shrink-0" style={{ width: 88, background: COLORS.bgSoft }}>
+                      <Megaphone size={18} style={{ color: COLORS.surfaceLine }} />
                     </div>
                   )}
+                  <div className="p-3 min-w-0">
+                    <div className="text-sm font-medium truncate">{ad.title}</div>
+                    <p className="text-xs truncate" style={{ color: COLORS.textMuted }}>{ad.description}</p>
+                    <div className="text-xs mt-1 flex items-center gap-1" style={{ color: COLORS.gold }}>
+                      <Phone size={10} /> {ad.contact_phone}
+                    </div>
+                  </div>
                 </div>
               ))}
             </div>
