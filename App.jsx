@@ -3580,7 +3580,7 @@ export default function GuichetApp() {
                               src={hero.image_url}
                               alt={hero.title}
                               className="w-full object-cover"
-                              style={{ maxHeight: 380, height: "auto", aspectRatio: "16/7", objectPosition: "center" }}
+                              style={{ maxHeight: 180, height: "auto", aspectRatio: "21/9", objectPosition: "center" }}
                             />
                           )}
                           <div className="p-5">
@@ -4367,6 +4367,55 @@ export default function GuichetApp() {
         </>
         )}
       </section>
+
+      {/* ===== Grande affiche publicitaire (avant le pied de page) ===== */}
+      {activeAds.length > 0 && (
+        <section className="max-w-6xl mx-auto px-5 pb-14">
+          {(() => {
+            const showcase = activeAds[0];
+            return (
+              <div
+                onClick={() => setSelectedAdPreview(showcase)}
+                className="rounded-2xl overflow-hidden cursor-pointer grid md:grid-cols-2 items-stretch"
+                style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}` }}
+              >
+                <div className="p-8 flex flex-col justify-center order-2 md:order-1">
+                  <span
+                    className="inline-flex items-center gap-1.5 text-xs px-3 py-1 rounded-full mb-4 w-fit"
+                    style={{ background: COLORS.bgSoft, color: COLORS.goldSoft, border: `1px solid ${COLORS.surfaceLine}` }}
+                  >
+                    <Megaphone size={12} /> Publicité
+                  </span>
+                  <h3 className="gc-display text-2xl font-semibold mb-3">{showcase.title}</h3>
+                  <p className="text-sm mb-5" style={{ color: COLORS.textMuted }}>{showcase.description}</p>
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); handleAdClick(showcase.id); }}
+                    className="gc-btn flex items-center gap-1.5 px-4 py-2.5 rounded-lg text-sm font-medium w-fit"
+                    style={{ background: COLORS.gold, color: "#052E36" }}
+                  >
+                    <Phone size={14} /> {showcase.contact_phone}
+                  </button>
+                </div>
+                <div className="order-1 md:order-2" style={{ minHeight: 260, background: COLORS.bgSoft }}>
+                  {showcase.image_url ? (
+                    <img
+                      src={showcase.image_url}
+                      alt={showcase.title}
+                      className="w-full h-full"
+                      style={{ objectFit: "cover", minHeight: 260 }}
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center" style={{ minHeight: 260 }}>
+                      <Megaphone size={40} style={{ color: COLORS.surfaceLine }} />
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })()}
+        </section>
+      )}
 
       {/* ===== Footer ===== */}
       <footer style={{ borderTop: `1px solid ${COLORS.surfaceLine}` }} className="px-5 py-8">
