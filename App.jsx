@@ -2293,33 +2293,30 @@ export default function GuichetApp() {
         {!isAuthenticated && activeAds.length > 0 && (
           <div className="mb-8 max-w-3xl">
             <div className="text-xs font-medium mb-3" style={{ color: COLORS.textMuted }}>ANNONCES SUR LA PLATEFORME</div>
-            <div className="grid md:grid-cols-2 gap-3">
+            <div className="space-y-3">
               {activeAds.map((ad) => (
                 <div
                   key={ad.id}
                   onClick={() => setSelectedAdPreview(ad)}
-                  className="rounded-xl overflow-hidden cursor-pointer"
+                  className="rounded-xl overflow-hidden cursor-pointer grid grid-cols-2 items-stretch"
                   style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}` }}
                 >
-                  {ad.image_url && (
-                    <div className="w-full flex items-center justify-center" style={{ height: 160, background: COLORS.bgSoft }}>
-                      <img src={ad.image_url} alt={ad.title} className="w-full h-full object-contain" />
-                    </div>
-                  )}
-                  <div className="p-4 flex items-start gap-3">
-                    {!ad.image_url && (
-                      <div className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: COLORS.surfaceLine }}>
-                        <Megaphone size={18} style={{ color: COLORS.goldSoft }} />
-                      </div>
-                    )}
-                    <div className="min-w-0">
-                      <div className="text-sm font-medium">{ad.title}</div>
-                      <p className="text-xs mt-0.5" style={{ color: COLORS.textMuted }}>{ad.description}</p>
-                      <div className="text-xs mt-2 flex items-center gap-1" style={{ color: COLORS.gold }}>
-                        <Phone size={11} /> {ad.contact_phone}
-                      </div>
+                  <div className="p-4 flex flex-col justify-center min-w-0">
+                    <div className="text-sm font-medium">{ad.title}</div>
+                    <p className="text-xs mt-0.5" style={{ color: COLORS.textMuted }}>{ad.description}</p>
+                    <div className="text-xs mt-2 flex items-center gap-1" style={{ color: COLORS.gold }}>
+                      <Phone size={11} /> {ad.contact_phone}
                     </div>
                   </div>
+                  {ad.image_url ? (
+                    <div className="flex items-center justify-center" style={{ minHeight: 130, background: COLORS.bgSoft }}>
+                      <img src={ad.image_url} alt={ad.title} className="w-full h-full object-cover" style={{ minHeight: 130 }} />
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-center" style={{ minHeight: 130, background: COLORS.bgSoft }}>
+                      <Megaphone size={22} style={{ color: COLORS.surfaceLine }} />
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
