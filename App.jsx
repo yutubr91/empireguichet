@@ -3580,7 +3580,7 @@ export default function GuichetApp() {
                               src={hero.image_url}
                               alt={hero.title}
                               className="w-full object-cover"
-                              style={{ maxHeight: 380, height: "auto", aspectRatio: "16/7", objectPosition: "center" }}
+                              style={{ maxHeight: 180, height: "auto", aspectRatio: "21/9", objectPosition: "center" }}
                             />
                           )}
                           <div className="p-5">
@@ -4367,6 +4367,53 @@ export default function GuichetApp() {
         </>
         )}
       </section>
+
+      {/* ===== Affiche publicitaire (avant le pied de page) ===== */}
+      {activeAds.length > 0 && (
+        <section className="max-w-2xl mx-auto px-5 pb-14">
+          {(() => {
+            const showcase = activeAds[0];
+            return (
+              <div
+                onClick={() => setSelectedAdPreview(showcase)}
+                className="rounded-xl overflow-hidden cursor-pointer"
+                style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}` }}
+              >
+                {showcase.image_url ? (
+                  <img
+                    src={showcase.image_url}
+                    alt={showcase.title}
+                    className="w-full object-cover"
+                    style={{ height: 140, objectPosition: "center" }}
+                  />
+                ) : (
+                  <div className="w-full flex items-center justify-center" style={{ height: 140, background: COLORS.bgSoft }}>
+                    <Megaphone size={28} style={{ color: COLORS.surfaceLine }} />
+                  </div>
+                )}
+                <div className="p-4">
+                  <span
+                    className="inline-flex items-center gap-1.5 text-xs px-2.5 py-0.5 rounded-full mb-2 w-fit"
+                    style={{ background: COLORS.bgSoft, color: COLORS.goldSoft, border: `1px solid ${COLORS.surfaceLine}` }}
+                  >
+                    <Megaphone size={11} /> Publicité
+                  </span>
+                  <h3 className="text-sm font-semibold mb-1">{showcase.title}</h3>
+                  <p className="text-xs mb-3" style={{ color: COLORS.textMuted }}>{showcase.description}</p>
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); handleAdClick(showcase.id); }}
+                    className="gc-btn flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium w-fit"
+                    style={{ background: COLORS.gold, color: "#052E36" }}
+                  >
+                    <Phone size={12} /> {showcase.contact_phone}
+                  </button>
+                </div>
+              </div>
+            );
+          })()}
+        </section>
+      )}
 
       {/* ===== Footer ===== */}
       <footer style={{ borderTop: `1px solid ${COLORS.surfaceLine}` }} className="px-5 py-8">
