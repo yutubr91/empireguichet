@@ -647,6 +647,7 @@ export default function GuichetApp() {
   const [txDirection, setTxDirection] = useState("depot"); // "depot" (envoi) ou "retrait" (réception)
   const [amount, setAmount] = useState("");
   const [phone, setPhone] = useState("");
+  const [txCountryCode, setTxCountryCode] = useState("+225");
   const [ticketCounter, setTicketCounter] = useState(4);
   const [history, setHistory] = useState([]);
   const [pending, setPending] = useState(null);
@@ -1763,6 +1764,36 @@ export default function GuichetApp() {
   const fee = amtNum * net.fee;
   const total = amtNum + fee;
 
+  // Préfixes officiels des opérateurs télécom, vérifiés pays par pays (sources : régulateurs
+  // télécom nationaux / Wikipédia). Un réseau absent de la liste d'un pays (ex. MTN au Sénégal,
+  // qui n'y opère pas) n'est volontairement pas vérifié pour ce pays — voir message à l'agent.
+  // Ne couvre que MTN, Orange et Moov : ce sont de vrais opérateurs télécom avec des préfixes fixes.
+  const NETWORK_PREFIXES_BY_COUNTRY = {
+    "+225": { mtn: ["05"], orange: ["07", "08", "09"], moov: ["01"] }, // Côte d'Ivoire
+    "+221": { orange: ["77", "78"] }, // Sénégal — pas de MTN ni Moov
+    "+223": {
+      orange: ["70", "71", "72", "73", "74", "75", "76", "77", "78", "79", "82", "83", "84", "85", "90", "91", "92", "93", "94"],
+      moov: ["65", "66", "68", "69", "89", "95", "96", "97", "98", "99"],
+    }, // Mali — pas de MTN
+    "+226": {
+      orange: ["05", "06", "07", "54", "57"],
+      moov: ["01", "02", "03", "50", "51", "52", "60", "61", "62", "63", "70", "71", "72", "73"],
+    }, // Burkina Faso — pas de MTN
+    "+228": { moov: ["78", "79", "96", "97", "98", "99"] }, // Togo — pas de MTN ni Orange
+    "+224": { orange: ["62"], mtn: ["66"] }, // Guinée — pas de Moov
+    "+237": { mtn: ["67"], orange: ["69"] }, // Cameroun — pas de Moov
+    // Niger (+227) et France (+33) : volontairement absents. Les données trouvées pour le Niger
+    // étaient trop anciennes/peu fiables pour être garanties, et la France n'a pas de MTN Money,
+    // Orange Money ni Moov Money grand public au sens où cette appli l'entend.
+  };
+
+  // Wave n'est pas un opérateur télécom (n'importe quelle carte SIM peut y être rattachée) :
+  // pas de préfixe à vérifier, seulement sa disponibilité par pays.
+  // Sources vérifiées (2025-2026) : marchés confirmés opérationnels uniquement.
+  // Togo, Bénin et Niger sont volontairement exclus : Wave y a annoncé son arrivée mais
+  // le lancement grand public n'est pas confirmé au moment de cette vérification.
+  const WAVE_AVAILABLE_COUNTRIES = ["+225", "+221", "+223", "+226", "+237", "+224"];
+
   function handleSubmit(e) {
     e.preventDefault();
     setFormError("");
@@ -1777,6 +1808,29 @@ export default function GuichetApp() {
     if (net.type === "momo" && phone.replace(/\D/g, "").length < 8) {
       setFormError("Le numéro de téléphone semble incomplet.");
       return;
+    }
+    const countryName = COUNTRY_CODES.find((c) => c.code === txCountryCode)?.name || txCountryCode;
+    if (net.id === "wave") {
+      if (!WAVE_AVAILABLE_COUNTRIES.includes(txCountryCode)) {
+        setFormError(`Wave n'est pas encore confirmé disponible en ${countryName}. Vérifie le pays ou change de réseau.`);
+        return;
+      }
+    } else if (["mtn", "orange", "moov"].includes(net.id)) {
+      const countryPrefixes = NETWORK_PREFIXES_BY_COUNTRY[txCountryCode];
+      if (countryPrefixes) {
+        if (!countryPrefixes[net.id]) {
+          setFormError(`${net.name} n'opère pas en ${countryName}. Vérifie le réseau ou le pays sélectionné.`);
+          return;
+        }
+        const digits = phone.replace(/\D/g, "");
+        const prefix = digits.slice(0, 2);
+        if (!countryPrefixes[net.id].includes(prefix)) {
+          setFormError(
+            `Ce numéro ne correspond pas à ${net.name} (préfixe attendu : ${countryPrefixes[net.id].join(", ")}). Vérifie le numéro ou change de réseau.`
+          );
+          return;
+        }
+      }
     }
     setDraftEntry({
       id: ticketCounter,
@@ -3233,6 +3287,20 @@ export default function GuichetApp() {
               <label className="text-xs mb-2 block" style={{ color: COLORS.textMuted }}>
                 {NETWORK_TYPE_LABELS[net.type].field}
               </label>
+              {net.type === "momo" && (
+                <select
+                  value={txCountryCode}
+                  onChange={(e) => setTxCountryCode(e.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-lg text-sm mb-2 outline-none"
+                  style={{ background: COLORS.bgSoft, border: `1px solid ${COLORS.surfaceLine}`, color: COLORS.text }}
+                >
+                  {COUNTRY_CODES.map((c) => (
+                    <option key={c.code} value={c.code}>
+                      {c.flag} {c.name} ({c.code})
+                    </option>
+                  ))}
+                </select>
+              )}
               <input
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
