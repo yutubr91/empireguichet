@@ -3288,18 +3288,9 @@ export default function GuichetApp() {
                 {NETWORK_TYPE_LABELS[net.type].field}
               </label>
               {net.type === "momo" && (
-                <select
-                  value={txCountryCode}
-                  onChange={(e) => setTxCountryCode(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-lg text-sm mb-2 outline-none"
-                  style={{ background: COLORS.bgSoft, border: `1px solid ${COLORS.surfaceLine}`, color: COLORS.text }}
-                >
-                  {COUNTRY_CODES.map((c) => (
-                    <option key={c.code} value={c.code}>
-                      {c.flag} {c.name} ({c.code})
-                    </option>
-                  ))}
-                </select>
+                <div className="mb-2">
+                  <CountryDropdown value={txCountryCode} onChange={setTxCountryCode} colors={COLORS} width="100%" />
+                </div>
               )}
               <input
                 value={phone}
