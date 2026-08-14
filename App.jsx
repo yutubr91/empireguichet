@@ -1226,7 +1226,7 @@ export default function GuichetApp() {
     }
     if (!isValidAdContact(adForm.contactPhone)) {
       setAdFormError(
-        "Numéro de contact invalide. Indique l'indicatif pays (ex. +225 07 49 45 11 38) ou une adresse e-mail valide."
+        "Numéro de contact invalide. Indique l'indicatif pays (ex. +225 01 02 03 04 05) ou une adresse e-mail valide."
       );
       return;
     }
@@ -3685,12 +3685,12 @@ export default function GuichetApp() {
                   <input
                     value={adForm.contactPhone}
                     onChange={(e) => setAdForm((f) => ({ ...f, contactPhone: e.target.value }))}
-                    placeholder="+225 07 49 45 11 38 ou email@gmail.com"
+                    placeholder="+225 01 02 03 04 05 ou email@gmail.com"
                     className="w-full px-3 py-2.5 rounded-lg text-sm outline-none"
                     style={{ background: COLORS.bgSoft, border: `1px solid ${COLORS.surfaceLine}`, color: COLORS.text }}
                   />
                   <div className="text-xs mt-1" style={{ color: COLORS.textMuted }}>
-                    Numéro avec indicatif pays (ex. +225 07 49 45 11 38) ou une adresse e-mail.
+                    Numéro avec indicatif pays (ex. +225 01 02 03 04 05) ou une adresse e-mail.
                   </div>
                 </div>
                 <div>
