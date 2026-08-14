@@ -1205,12 +1205,29 @@ export default function GuichetApp() {
 
   const ownerAdRevenue = agent?.isPlatformOwner ? allAds.reduce((s, a) => s + (a.amount_paid || 0), 0) : 0;
 
+  // Valide que le contact est soit un numéro avec indicatif pays (+225...), soit un e-mail
+  function isValidAdContact(raw) {
+    const trimmed = (raw || "").trim();
+    if (!trimmed) return false;
+    if (trimmed.includes("@")) {
+      return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed);
+    }
+    const compact = trimmed.replace(/[\s-]/g, "");
+    return /^\+\d{8,15}$/.test(compact);
+  }
+
   async function handleSubmitAd(e) {
     e.preventDefault();
     setAdFormError("");
     setAdSuccessMsg("");
     if (!adForm.title.trim() || !adForm.description.trim() || !adForm.contactPhone.trim()) {
       setAdFormError("Merci de remplir tous les champs.");
+      return;
+    }
+    if (!isValidAdContact(adForm.contactPhone)) {
+      setAdFormError(
+        "Numéro de contact invalide. Indique l'indicatif pays (ex. +225 07 49 45 11 38) ou une adresse e-mail valide."
+      );
       return;
     }
     const plan = AD_PRICING[adForm.planIndex];
@@ -1563,6 +1580,25 @@ export default function GuichetApp() {
 
   function handleAdClick(adId) {
     supabase.rpc("increment_ad_click", { ad_id_input: adId }).then(() => {});
+  }
+
+  // Ouvre WhatsApp pour un numéro de contact, ou Gmail si c'est une adresse e-mail
+  function contactAdOwner(ad) {
+    handleAdClick(ad.id);
+    const raw = (ad.contact_phone || "").trim();
+    if (!raw) return;
+    if (raw.includes("@")) {
+      window.open(
+        `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(raw)}`,
+        "_blank",
+        "noopener,noreferrer"
+      );
+    } else {
+      const digits = raw.replace(/[^\d]/g, "");
+      if (digits) {
+        window.open(`https://wa.me/${digits}`, "_blank", "noopener,noreferrer");
+      }
+    }
   }
 
   // Paramètres du compte : changer PIN / mot de passe
@@ -3645,13 +3681,18 @@ export default function GuichetApp() {
                   className="px-3 py-2.5 rounded-lg text-sm outline-none resize-none"
                   style={{ background: COLORS.bgSoft, border: `1px solid ${COLORS.surfaceLine}`, color: COLORS.text }}
                 />
-                <input
-                  value={adForm.contactPhone}
-                  onChange={(e) => setAdForm((f) => ({ ...f, contactPhone: e.target.value }))}
-                  placeholder="Numéro de contact"
-                  className="px-3 py-2.5 rounded-lg text-sm outline-none"
-                  style={{ background: COLORS.bgSoft, border: `1px solid ${COLORS.surfaceLine}`, color: COLORS.text }}
-                />
+                <div>
+                  <input
+                    value={adForm.contactPhone}
+                    onChange={(e) => setAdForm((f) => ({ ...f, contactPhone: e.target.value }))}
+                    placeholder="+225 07 49 45 11 38 ou email@gmail.com"
+                    className="w-full px-3 py-2.5 rounded-lg text-sm outline-none"
+                    style={{ background: COLORS.bgSoft, border: `1px solid ${COLORS.surfaceLine}`, color: COLORS.text }}
+                  />
+                  <div className="text-xs mt-1" style={{ color: COLORS.textMuted }}>
+                    Numéro avec indicatif pays (ex. +225 07 49 45 11 38) ou une adresse e-mail.
+                  </div>
+                </div>
                 <div>
                   <div className="text-xs mb-2" style={{ color: COLORS.textMuted }}>Image de la publicité (optionnel)</div>
                   {adImagePreview ? (
@@ -4378,7 +4419,7 @@ export default function GuichetApp() {
                 <p className="text-xs mb-3" style={{ color: COLORS.textMuted }}>{ad.description}</p>
                 <button
                   type="button"
-                  onClick={(e) => { e.stopPropagation(); handleAdClick(ad.id); }}
+                  onClick={(e) => { e.stopPropagation(); contactAdOwner(ad); }}
                   className="gc-btn flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium w-fit"
                   style={{ background: COLORS.gold, color: "#052E36" }}
                 >
@@ -4551,7 +4592,7 @@ export default function GuichetApp() {
               <p className="text-sm mb-4" style={{ color: COLORS.textMuted }}>{selectedAdPreview.description}</p>
               <button
                 type="button"
-                onClick={() => handleAdClick(selectedAdPreview.id)}
+                onClick={() => contactAdOwner(selectedAdPreview)}
                 className="gc-btn flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium"
                 style={{ background: COLORS.gold, color: "#052E36" }}
               >
