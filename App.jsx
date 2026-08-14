@@ -2083,9 +2083,8 @@ export default function GuichetApp() {
               onClick={() => {
                 if (isAuthenticated) {
                   setTab("dashboard");
-                } else {
-                  window.scrollTo({ top: 0, behavior: "smooth" });
                 }
+                window.scrollTo({ top: 0, behavior: "smooth" });
               }}
               className="flex items-center gap-2.5 gc-btn"
               style={{ background: "none", border: "none", padding: 0, cursor: "pointer", textAlign: "left" }}
