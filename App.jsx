@@ -2078,7 +2078,19 @@ export default function GuichetApp() {
       >
         <div style={{ background: COLORS.headerBg }}>
           <div className="max-w-6xl mx-auto flex items-center justify-between px-5 py-4">
-            <div className="flex items-center gap-2.5">
+            <button
+              type="button"
+              onClick={() => {
+                if (isAuthenticated) {
+                  setTab("dashboard");
+                } else {
+                  window.scrollTo({ top: 0, behavior: "smooth" });
+                }
+              }}
+              className="flex items-center gap-2.5 gc-btn"
+              style={{ background: "none", border: "none", padding: 0, cursor: "pointer", textAlign: "left" }}
+              aria-label={isAuthenticated ? "Retour au tableau de bord" : "Retour à l'accueil"}
+            >
               <img
                 src={LOGO_DATA_URI}
                 alt="EmpireGuichet"
@@ -2088,7 +2100,7 @@ export default function GuichetApp() {
                 <div className="gc-display text-lg font-semibold tracking-tight">EmpireGuichet</div>
                 <div className="text-[10px]" style={{ color: COLORS.textMuted }}>par Empire Digital CI</div>
               </div>
-            </div>
+            </button>
             <nav className="hidden md:flex items-center gap-7 text-sm" style={{ color: COLORS.textMuted }}>
               <a href="#reseaux" className="hover:text-white">Réseaux</a>
               <a href="#demo" className="hover:text-white" onClick={scrollToDemo}>Démo</a>
