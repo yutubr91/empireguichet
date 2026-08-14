@@ -654,6 +654,7 @@ export default function GuichetApp() {
   const [lastReceipt, setLastReceipt] = useState(null);
   const [formError, setFormError] = useState("");
   const demoRef = useRef(null);
+  const annonceursRef = useRef(null);
 
   // Connexion à une vraie base de données (Supabase)
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -1975,6 +1976,19 @@ export default function GuichetApp() {
     demoRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
+  function scrollToAnnonceurs() {
+    annonceursRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function handleBecomeAdvertiser() {
+    if (isAuthenticated) {
+      setTab("publicites");
+      demoRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    } else {
+      scrollToDemo();
+    }
+  }
+
   const INTRO_SLIDES = [
     {
       icon: Wallet3D,
@@ -2139,7 +2153,7 @@ export default function GuichetApp() {
             <nav className="hidden md:flex items-center gap-7 text-sm" style={{ color: COLORS.textMuted }}>
               <a href="#reseaux" className="hover:text-white">Réseaux</a>
               <a href="#demo" className="hover:text-white" onClick={scrollToDemo}>Démo</a>
-              <a href="#annonceurs" className="hover:text-white">Annonceurs</a>
+              <a href="#annonceurs" className="hover:text-white" onClick={(e) => { e.preventDefault(); scrollToAnnonceurs(); }}>Annonceurs</a>
             </nav>
             {isAuthenticated ? (
               <div className="hidden md:flex items-center gap-3">
@@ -2233,7 +2247,7 @@ export default function GuichetApp() {
             <div className="md:hidden px-5 pb-4 flex flex-col gap-3 text-sm" style={{ color: COLORS.textMuted }}>
               <a href="#reseaux" onClick={() => setMenuOpen(false)}>Réseaux</a>
               <a href="#demo" onClick={() => { setMenuOpen(false); scrollToDemo(); }}>Démo</a>
-              <a href="#annonceurs" onClick={() => setMenuOpen(false)}>Annonceurs</a>
+              <a href="#annonceurs" onClick={(e) => { e.preventDefault(); setMenuOpen(false); scrollToAnnonceurs(); }}>Annonceurs</a>
               {isAuthenticated ? (
                 <button onClick={() => { handleLogout(); setMenuOpen(false); }} className="flex items-center gap-1.5 text-left">
                   <LogOut size={14} /> Déconnexion ({agent?.name})
@@ -2306,6 +2320,7 @@ export default function GuichetApp() {
             </button>
             <a
               href="#annonceurs"
+              onClick={(e) => { e.preventDefault(); scrollToAnnonceurs(); }}
               className="gc-btn px-5 py-3 rounded-lg text-sm font-medium border"
               style={{ borderColor: COLORS.surfaceLine, color: COLORS.text }}
             >
@@ -2382,6 +2397,72 @@ export default function GuichetApp() {
             </div>
           ))}
         </div>
+      </section>
+
+      {/* ===== Espace annonceurs ===== */}
+      <section id="annonceurs" ref={annonceursRef} className="max-w-6xl mx-auto px-5 py-14" style={{ borderTop: `1px solid ${COLORS.surfaceLine}` }}>
+        <div className="flex flex-wrap items-end justify-between gap-4 mb-8">
+          <div>
+            <h2 className="gc-display text-2xl font-semibold mb-2">Espace annonceurs</h2>
+            <p className="text-sm max-w-xl" style={{ color: COLORS.textMuted }}>
+              Chaque agent EmpireGuichet peut promouvoir son activité auprès de tout le réseau —
+              agents et visiteurs de la plateforme voient les annonces actives directement ici.
+            </p>
+          </div>
+          <button
+            onClick={handleBecomeAdvertiser}
+            className="gc-btn flex items-center gap-1.5 px-5 py-2.5 rounded-lg text-sm font-medium flex-shrink-0"
+            style={{ background: COLORS.gold, color: "#052E36" }}
+          >
+            <Megaphone size={15} /> Devenir annonceur
+          </button>
+        </div>
+
+        {adsLoading ? (
+          <p className="text-sm" style={{ color: COLORS.textMuted }}>Chargement des annonces…</p>
+        ) : activeAds.length === 0 ? (
+          <div
+            className="p-8 rounded-xl text-center"
+            style={{ background: COLORS.surface, border: `1px dashed ${COLORS.surfaceLine}` }}
+          >
+            <Megaphone size={22} style={{ color: COLORS.textMuted, margin: "0 auto 10px" }} />
+            <p className="text-sm" style={{ color: COLORS.textMuted }}>
+              Aucune annonce active pour le moment. Sois le premier agent à publier la tienne.
+            </p>
+          </div>
+        ) : (
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {activeAds.map((ad) => (
+              <div
+                key={ad.id}
+                onClick={() => setSelectedAdPreview(ad)}
+                className="gc-card rounded-xl overflow-hidden cursor-pointer flex flex-col"
+                style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}` }}
+              >
+                {ad.image_url ? (
+                  <img src={ad.image_url} alt={ad.title} className="w-full object-cover" style={{ height: 140 }} />
+                ) : (
+                  <div className="w-full flex items-center justify-center" style={{ height: 140, background: COLORS.bgSoft }}>
+                    <Megaphone size={22} style={{ color: COLORS.surfaceLine }} />
+                  </div>
+                )}
+                <div className="p-4 flex-1 flex flex-col">
+                  <div className="text-sm font-medium mb-1 truncate">{ad.title}</div>
+                  <p className="text-xs mb-3 flex-1" style={{ color: COLORS.textMuted, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
+                    {ad.description}
+                  </p>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); contactAdOwner(ad); }}
+                    className="gc-btn flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-medium"
+                    style={{ background: COLORS.bgSoft, color: COLORS.gold, border: `1px solid ${COLORS.surfaceLine}` }}
+                  >
+                    <Phone size={12} /> Contacter
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </section>
 
       {/* ===== Demo App ===== */}
