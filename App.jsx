@@ -1197,6 +1197,7 @@ export default function GuichetApp() {
   useEffect(() => {
     // Chargées dès l'ouverture du site, connecté ou non (vitrine publique)
     loadActiveAds();
+    loadActivePublicites();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -4631,10 +4632,10 @@ export default function GuichetApp() {
       </section>
 
       {/* ===== Affiches publicitaires (avant le pied de page) ===== */}
-      {activeAds.length > 0 && (
+      {(activeAds.length > 0 || activePublicites.length > 0) && (
         <section className="max-w-6xl mx-auto px-5 pb-14">
           <div className="grid md:grid-cols-2 gap-4 max-w-3xl">
-          {activeAds.map((ad) => (
+          {[...activeAds, ...activePublicites].map((ad) => (
             <div
               key={ad.id}
               onClick={() => setSelectedAdPreview(ad)}
@@ -4655,7 +4656,7 @@ export default function GuichetApp() {
                   className="inline-flex items-center gap-1.5 text-xs px-2.5 py-0.5 rounded-full mb-2 w-fit"
                   style={{ background: COLORS.bgSoft, color: COLORS.goldSoft, border: `1px solid ${COLORS.surfaceLine}` }}
                 >
-                  <Megaphone size={11} /> Publicité
+                  <Megaphone size={11} /> {ad.kind === "annonce" ? "Annonce" : "Publicité"}
                 </span>
                 <h3 className="text-sm font-semibold mb-1">{ad.title}</h3>
                 <p className="text-xs mb-3" style={{ color: COLORS.textMuted }}>{ad.description}</p>
