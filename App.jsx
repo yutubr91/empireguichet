@@ -1115,6 +1115,7 @@ export default function GuichetApp() {
     { days: 30, price: 40000, label: "30 jours" },
   ];
   const [activeAds, setActiveAds] = useState([]);
+  const [activePublicites, setActivePublicites] = useState([]);
   const [selectedAdPreview, setSelectedAdPreview] = useState(null);
   const [adsLoading, setAdsLoading] = useState(false);
   const [myAds, setMyAds] = useState([]);
@@ -1152,10 +1153,24 @@ export default function GuichetApp() {
       .from("ads")
       .select("*")
       .eq("status", "active")
+      .eq("kind", "annonce")
       .gt("ends_at", new Date().toISOString())
       .order("created_at", { ascending: false });
     setAdsLoading(false);
     if (!error) setActiveAds(data || []);
+  }
+
+  async function loadActivePublicites() {
+    setAdsLoading(true);
+    const { data, error } = await supabase
+      .from("ads")
+      .select("*")
+      .eq("status", "active")
+      .eq("kind", "publicite")
+      .gt("ends_at", new Date().toISOString())
+      .order("created_at", { ascending: false });
+    setAdsLoading(false);
+    if (!error) setActivePublicites(data || []);
   }
 
   async function loadMyAds() {
@@ -1186,8 +1201,15 @@ export default function GuichetApp() {
   }, []);
 
   useEffect(() => {
+    // Le pool "publicités" (agents/chefs) est nécessaire dès la connexion,
+    // car il est aussi affiché sur le tableau de bord.
+    if (agent) loadActivePublicites();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [agent?.id]);
+
+  useEffect(() => {
     if (tab === "publicites" && agent) {
-      loadActiveAds();
+      loadActivePublicites();
       loadMyAds();
     }
     if (tab === "annonceur" && agent?.isPlatformOwner) {
@@ -1220,7 +1242,7 @@ export default function GuichetApp() {
     return /^\+\d{8,15}$/.test(compact);
   }
 
-  async function handleSubmitAd(e) {
+  async function handleSubmitAd(e, kind) {
     e.preventDefault();
     setAdFormError("");
     setAdSuccessMsg("");
@@ -1259,6 +1281,7 @@ export default function GuichetApp() {
       created_by: agent.id,
       agency_id: agent.agencyId,
       agency_name: agent.agency,
+      kind: kind === "annonce" ? "annonce" : "publicite",
       title: adForm.title.trim(),
       description: adForm.description.trim(),
       contact_phone: adForm.contactPhone.trim(),
@@ -1278,15 +1301,19 @@ export default function GuichetApp() {
     }
     setAdSuccessMsg(
       isFree
-        ? `Publicité publiée gratuitement et en ligne pour ${plan.days} jours ✅`
+        ? `${kind === "annonce" ? "Annonce" : "Publicité"} publiée gratuitement et en ligne pour ${plan.days} jours ✅`
         : `Publicité payée (${formatFCFA(plan.price)}) et en ligne pour ${plan.days} jours ✅`
     );
     if (!isFree) setAdSpend((s) => s + plan.price);
     setAdImageFile(null);
     setAdImagePreview("");
     setAdForm({ title: "", description: "", contactPhone: "", planIndex: 0 });
-    pushNotification("Publicité publiée avec succès 📣");
-    loadActiveAds();
+    pushNotification(`${kind === "annonce" ? "Annonce" : "Publicité"} publiée avec succès 📣`);
+    if (kind === "annonce") {
+      loadActiveAds();
+    } else {
+      loadActivePublicites();
+    }
     loadMyAds();
   }
 
@@ -1569,18 +1596,19 @@ export default function GuichetApp() {
     });
   }
 
-  // Suivi impressions/clics des publicités actives — s'appuie sur activeAds déjà chargé par loadActiveAds()
+  // Suivi impressions/clics des publicités actives — s'appuie sur activeAds/activePublicites déjà chargés
   const countedImpressionsRef = useRef(new Set());
   useEffect(() => {
-    if (activeAds.length === 0) return;
-    activeAds.forEach((ad) => {
+    const pool = [...activeAds, ...activePublicites];
+    if (pool.length === 0) return;
+    pool.forEach((ad) => {
       if (!countedImpressionsRef.current.has(ad.id)) {
         countedImpressionsRef.current.add(ad.id);
         supabase.rpc("increment_ad_impression", { ad_id_input: ad.id }).then(() => {});
       }
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeAds]);
+  }, [activeAds, activePublicites]);
 
   function handleAdClick(adId) {
     supabase.rpc("increment_ad_click", { ad_id_input: adId }).then(() => {});
@@ -2922,11 +2950,11 @@ export default function GuichetApp() {
               ))}
             </div>
 
-            {activeAds.length > 0 && (
+            {activePublicites.length > 0 && (
               <div className="mb-4">
                 <div className="text-xs font-medium mb-3" style={{ color: COLORS.textMuted }}>PUBLICITÉS SUR LA PLATEFORME</div>
                 <div className="space-y-2">
-                  {activeAds.map((ad) => (
+                  {activePublicites.map((ad) => (
                     <div
                       key={ad.id}
                       onClick={() => setSelectedAdPreview(ad)}
@@ -3685,13 +3713,13 @@ export default function GuichetApp() {
               <div className="text-xs font-medium mb-3" style={{ color: COLORS.textMuted }}>ANNONCES EN LIGNE</div>
               {adsLoading ? (
                 <div className="text-xs" style={{ color: COLORS.textMuted }}>Chargement…</div>
-              ) : activeAds.length === 0 ? (
+              ) : activePublicites.length === 0 ? (
                 <div className="p-5 rounded-xl text-xs" style={{ background: COLORS.surface, border: `1px dashed ${COLORS.surfaceLine}`, color: COLORS.textMuted }}>
                   Aucune publicité en ligne pour le moment.
                 </div>
               ) : (
                 <div className="space-y-2">
-                  {activeAds.map((ad) => (
+                  {activePublicites.map((ad) => (
                     <div
                       key={ad.id}
                       onClick={() => setSelectedAdPreview(ad)}
@@ -3731,7 +3759,7 @@ export default function GuichetApp() {
                   {adFormError}
                 </div>
               )}
-              <form onSubmit={handleSubmitAd} className="flex flex-col gap-3">
+              <form onSubmit={(e) => handleSubmitAd(e, "publicite")} className="flex flex-col gap-3">
                 <input
                   value={adForm.title}
                   onChange={(e) => setAdForm((f) => ({ ...f, title: e.target.value }))}
@@ -3825,11 +3853,11 @@ export default function GuichetApp() {
             </div>
 
             {/* Mes publicités */}
-            {myAds.length > 0 && (
+            {myAds.filter((a) => a.kind === "publicite").length > 0 && (
               <div>
                 <div className="text-xs font-medium mb-3" style={{ color: COLORS.textMuted }}>MES PUBLICITÉS</div>
                 <div className="flex flex-col gap-2">
-                  {myAds.map((ad) => {
+                  {myAds.filter((a) => a.kind === "publicite").map((ad) => {
                     const isActive = ad.status === "active" && new Date(ad.ends_at) > new Date();
                     return (
                       <div key={ad.id} className="p-3.5 rounded-lg flex items-center gap-3" style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}` }}>
@@ -3888,7 +3916,7 @@ export default function GuichetApp() {
                   {adFormError}
                 </div>
               )}
-              <form onSubmit={handleSubmitAd} className="flex flex-col gap-3">
+              <form onSubmit={(e) => handleSubmitAd(e, "annonce")} className="flex flex-col gap-3">
                 <input
                   value={adForm.title}
                   onChange={(e) => setAdForm((f) => ({ ...f, title: e.target.value }))}
@@ -3973,11 +4001,11 @@ export default function GuichetApp() {
             </div>
 
             {/* Mes annonces publiées */}
-            {myAds.length > 0 && (
+            {myAds.filter((a) => a.kind === "annonce").length > 0 && (
               <div>
                 <div className="text-xs font-medium mb-3" style={{ color: COLORS.textMuted }}>MES ANNONCES</div>
                 <div className="flex flex-col gap-2">
-                  {myAds.map((ad) => {
+                  {myAds.filter((a) => a.kind === "annonce").map((ad) => {
                     const isActive = ad.status === "active" && new Date(ad.ends_at) > new Date();
                     return (
                       <div key={ad.id} className="p-3.5 rounded-lg flex items-center gap-3" style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}` }}>
