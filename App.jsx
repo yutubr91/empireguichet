@@ -55,6 +55,7 @@ import {
   Eye,
   EyeOff,
   Image as ImageIcon,
+  Trash2,
 } from "lucide-react";
 import {
   BarChart,
@@ -4136,31 +4137,39 @@ export default function GuichetApp() {
               <div className="text-xs" style={{ color: COLORS.textMuted }}>Chargement…</div>
             ) : (
               <>
-                <div className="grid md:grid-cols-3 gap-4 mb-6">
-                  {(() => {
-                    const totalImpressions = allAds.reduce((s, a) => s + (a.impressions || 0), 0);
-                    const totalClicks = allAds.reduce((s, a) => s + (a.clicks || 0), 0);
-                    const totalRevenue = allAds.reduce((s, a) => s + (a.amount_paid || 0), 0);
-                    const ctr = totalImpressions > 0 ? ((totalClicks / totalImpressions) * 100).toFixed(1) : "0.0";
-                    return [
-                      { label: "Impressions ce mois", value: totalImpressions.toLocaleString("fr-FR") },
-                      { label: "Taux de clic moyen", value: `${ctr} %` },
-                      { label: "Revenu publicitaire", value: formatFCFA(totalRevenue) },
-                    ];
-                  })().map((s) => (
-                    <div key={s.label} className="p-5 rounded-xl" style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}` }}>
-                      <div className="text-xs mb-1.5" style={{ color: COLORS.textMuted }}>{s.label}</div>
-                      <div className="gc-display text-2xl font-semibold gc-mono">{s.value}</div>
+                {(() => {
+                  const pubOnly = allAds.filter((a) => a.kind !== "annonce");
+                  const totalImpressions = pubOnly.reduce((s, a) => s + (a.impressions || 0), 0);
+                  const totalClicks = pubOnly.reduce((s, a) => s + (a.clicks || 0), 0);
+                  const totalRevenue = pubOnly.reduce((s, a) => s + (a.amount_paid || 0), 0);
+                  const ctr = totalImpressions > 0 ? ((totalClicks / totalImpressions) * 100).toFixed(1) : "0.0";
+                  const stats = [
+                    { label: "Impressions ce mois", value: totalImpressions.toLocaleString("fr-FR") },
+                    { label: "Taux de clic moyen", value: `${ctr} %` },
+                    { label: "Revenu publicitaire", value: formatFCFA(totalRevenue) },
+                  ];
+                  return (
+                    <div className="grid md:grid-cols-3 gap-4 mb-6">
+                      {stats.map((s) => (
+                        <div key={s.label} className="p-5 rounded-xl" style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}` }}>
+                          <div className="text-xs mb-1.5" style={{ color: COLORS.textMuted }}>{s.label}</div>
+                          <div className="gc-display text-2xl font-semibold gc-mono">{s.value}</div>
+                        </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
+                  );
+                })()}
+                <p className="text-xs mb-4" style={{ color: COLORS.textMuted }}>
+                  Ces statistiques ne comptent que les publicités payantes des agents et chefs d'agence — tes annonces gratuites (onglet « Annonceur ») en sont exclues.
+                </p>
 
-                <div className="text-xs font-medium mb-3" style={{ color: COLORS.textMuted }}>TOUTES LES PUBLICITÉS ({allAds.length})</div>
+                <div className="text-xs font-medium mb-3" style={{ color: COLORS.textMuted }}>TOUTES LES PUBLICITÉS ET ANNONCES ({allAds.length})</div>
                 <div className="rounded-xl overflow-hidden" style={{ border: `1px solid ${COLORS.surfaceLine}` }}>
                   <table className="w-full text-xs">
                     <thead>
                       <tr style={{ background: COLORS.bgSoft, color: COLORS.textMuted }}>
                         <th className="text-left px-3 py-2.5">Titre</th>
+                        <th className="text-left px-3 py-2.5">Type</th>
                         <th className="text-left px-3 py-2.5">Agence</th>
                         <th className="text-left px-3 py-2.5">Montant</th>
                         <th className="text-left px-3 py-2.5">Statut</th>
@@ -4170,9 +4179,22 @@ export default function GuichetApp() {
                     <tbody>
                       {allAds.map((ad) => {
                         const isActive = ad.status === "active" && new Date(ad.ends_at) > new Date();
+                        const isAnnonce = ad.kind === "annonce";
                         return (
                           <tr key={ad.id} style={{ borderTop: `1px solid ${COLORS.surfaceLine}` }}>
                             <td className="px-3 py-2.5">{ad.title}</td>
+                            <td className="px-3 py-2.5">
+                              <span
+                                className="px-2 py-0.5 rounded-md"
+                                style={
+                                  isAnnonce
+                                    ? { background: "rgba(34,211,238,0.14)", color: COLORS.gold }
+                                    : { background: COLORS.bgSoft, color: COLORS.textMuted, border: `1px solid ${COLORS.surfaceLine}` }
+                                }
+                              >
+                                {isAnnonce ? "Annonce" : "Publicité"}
+                              </span>
+                            </td>
                             <td className="px-3 py-2.5" style={{ color: COLORS.textMuted }}>{ad.agency_name || "—"}</td>
                             <td className="px-3 py-2.5 gc-mono">{formatFCFA(ad.amount_paid)}</td>
                             <td className="px-3 py-2.5">
