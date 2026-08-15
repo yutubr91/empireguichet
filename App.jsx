@@ -1188,10 +1188,10 @@ export default function GuichetApp() {
   useEffect(() => {
     if (tab === "publicites" && agent) {
       loadActiveAds();
-      loadMyAds();
     }
     if (tab === "backoffice-pub" && agent?.isPlatformOwner) {
       loadAllAdsForBackoffice();
+      loadMyAds();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab]);
@@ -3691,12 +3691,12 @@ export default function GuichetApp() {
             <div className="mb-6">
               <h2 className="text-lg font-semibold mb-1">Publicités sur la plateforme</h2>
               <p className="text-xs" style={{ color: COLORS.textMuted, maxWidth: 620 }}>
-                Découvre les annonces en ligne, ou publie la tienne pour la faire apparaître auprès de tous les agents et chefs d'agence.
+                Découvre les annonces actuellement en ligne, visibles par tous les agents et chefs d'agence.
               </p>
             </div>
 
             {/* Pubs actives */}
-            <div className="mb-8">
+            <div>
               <div className="text-xs font-medium mb-3" style={{ color: COLORS.textMuted }}>ANNONCES EN LIGNE</div>
               {adsLoading ? (
                 <div className="text-xs" style={{ color: COLORS.textMuted }}>Chargement…</div>
@@ -3732,10 +3732,20 @@ export default function GuichetApp() {
                 </div>
               )}
             </div>
+          </div>
+        )}
 
-            {/* Publier une pub */}
+        {/* Backoffice publicité — réservé au propriétaire de la plateforme */}
+        {tab === "backoffice-pub" && agent?.isPlatformOwner && (
+          <div className="gc-fade-in">
+            <div className="mb-6">
+              <h2 className="text-lg font-semibold mb-1">Backoffice publicité</h2>
+              <p className="text-xs" style={{ color: COLORS.textMuted }}>Visible uniquement par toi — seul le compte principal peut publier une annonce.</p>
+            </div>
+
+            {/* Publier une annonce */}
             <div className="p-5 rounded-xl mb-6" style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}` }}>
-              <div className="text-sm font-medium mb-3">Publier ma publicité</div>
+              <div className="text-sm font-medium mb-3">Publier une nouvelle annonce</div>
               {adSuccessMsg && (
                 <div className="text-xs p-3 rounded-lg mb-3 flex items-center gap-2" style={{ background: "rgba(43,191,138,0.12)", color: COLORS.teal }}>
                   <CheckCircle2 size={14} /> {adSuccessMsg}
@@ -3775,7 +3785,7 @@ export default function GuichetApp() {
                   </div>
                 </div>
                 <div>
-                  <div className="text-xs mb-2" style={{ color: COLORS.textMuted }}>Image de la publicité (optionnel)</div>
+                  <div className="text-xs mb-2" style={{ color: COLORS.textMuted }}>Image de l'annonce (optionnel)</div>
                   {adImagePreview ? (
                     <div className="relative w-full mb-2" style={{ height: 140 }}>
                       <img src={adImagePreview} alt="Aperçu" className="w-full h-full object-cover rounded-lg" />
@@ -3814,7 +3824,7 @@ export default function GuichetApp() {
                             : { background: COLORS.bgSoft, color: COLORS.textMuted, border: `1px solid ${COLORS.surfaceLine}` }
                         }
                       >
-                        {plan.label}<br />{agent?.isPlatformOwner ? "Gratuit" : formatFCFA(plan.price)}
+                        {plan.label}<br />Gratuit
                       </button>
                     ))}
                   </div>
@@ -3825,24 +3835,15 @@ export default function GuichetApp() {
                   className="gc-btn py-3 rounded-lg text-sm font-medium mt-1"
                   style={{ background: COLORS.gold, color: "#052E36", opacity: adSubmitting ? 0.6 : 1 }}
                 >
-                  {adSubmitting
-                    ? "Publication en cours…"
-                    : agent?.isPlatformOwner
-                    ? "Publier gratuitement"
-                    : `Payer ${formatFCFA(AD_PRICING[adForm.planIndex].price)} et publier`}
+                  {adSubmitting ? "Publication en cours…" : "Publier l'annonce"}
                 </button>
-                <p className="text-xs" style={{ color: COLORS.textMuted }}>
-                  {agent?.isPlatformOwner
-                    ? "En tant que compte principal, tes publicités sont gratuites."
-                    : "Paiement simulé pour cette démo — l'annonce passe en ligne immédiatement après confirmation."}
-                </p>
               </form>
             </div>
 
-            {/* Mes publicités */}
+            {/* Mes annonces publiées */}
             {myAds.length > 0 && (
-              <div>
-                <div className="text-xs font-medium mb-3" style={{ color: COLORS.textMuted }}>MES PUBLICITÉS</div>
+              <div className="mb-8">
+                <div className="text-xs font-medium mb-3" style={{ color: COLORS.textMuted }}>MES ANNONCES</div>
                 <div className="flex flex-col gap-2">
                   {myAds.map((ad) => {
                     const isActive = ad.status === "active" && new Date(ad.ends_at) > new Date();
@@ -3856,22 +3857,22 @@ export default function GuichetApp() {
                           </div>
                         )}
                         <div className="min-w-0 flex-1 flex items-center justify-between">
-                        <div className="min-w-0">
-                          <div className="text-sm font-medium truncate">{ad.title}</div>
-                          <div className="text-xs" style={{ color: COLORS.textMuted }}>
-                            {formatFCFA(ad.amount_paid)} · {ad.duration_days} jours · expire le {new Date(ad.ends_at).toLocaleDateString("fr-FR")}
+                          <div className="min-w-0">
+                            <div className="text-sm font-medium truncate">{ad.title}</div>
+                            <div className="text-xs" style={{ color: COLORS.textMuted }}>
+                              {ad.duration_days} jours · expire le {new Date(ad.ends_at).toLocaleDateString("fr-FR")}
+                            </div>
                           </div>
-                        </div>
-                        <span
-                          className="text-xs px-2.5 py-1 rounded-md flex-shrink-0"
-                          style={
-                            isActive
-                              ? { background: "rgba(43,191,138,0.12)", color: COLORS.teal }
-                              : { background: COLORS.bgSoft, color: COLORS.textMuted }
-                          }
-                        >
-                          {isActive ? "En ligne" : "Expirée"}
-                        </span>
+                          <span
+                            className="text-xs px-2.5 py-1 rounded-md flex-shrink-0"
+                            style={
+                              isActive
+                                ? { background: "rgba(43,191,138,0.12)", color: COLORS.teal }
+                                : { background: COLORS.bgSoft, color: COLORS.textMuted }
+                            }
+                          >
+                            {isActive ? "En ligne" : "Expirée"}
+                          </span>
                         </div>
                       </div>
                     );
@@ -3879,16 +3880,7 @@ export default function GuichetApp() {
                 </div>
               </div>
             )}
-          </div>
-        )}
 
-        {/* Backoffice publicité — réservé au propriétaire de la plateforme */}
-        {tab === "backoffice-pub" && agent?.isPlatformOwner && (
-          <div className="gc-fade-in">
-            <div className="mb-6">
-              <h2 className="text-lg font-semibold mb-1">Backoffice publicité</h2>
-              <p className="text-xs" style={{ color: COLORS.textMuted }}>Visible uniquement par toi.</p>
-            </div>
             {allAdsLoading ? (
               <div className="text-xs" style={{ color: COLORS.textMuted }}>Chargement…</div>
             ) : (
