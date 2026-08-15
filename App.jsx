@@ -119,17 +119,25 @@ const NETWORKS = [
 ];
 
 const COUNTRY_CODES = [
-  { code: "+225", iso: "ci", flag: "🇨🇮", name: "Côte d'Ivoire" },
-  { code: "+221", iso: "sn", flag: "🇸🇳", name: "Sénégal" },
-  { code: "+223", iso: "ml", flag: "🇲🇱", name: "Mali" },
-  { code: "+226", iso: "bf", flag: "🇧🇫", name: "Burkina Faso" },
-  { code: "+229", iso: "bj", flag: "🇧🇯", name: "Bénin" },
-  { code: "+228", iso: "tg", flag: "🇹🇬", name: "Togo" },
-  { code: "+224", iso: "gn", flag: "🇬🇳", name: "Guinée" },
-  { code: "+227", iso: "ne", flag: "🇳🇪", name: "Niger" },
-  { code: "+237", iso: "cm", flag: "🇨🇲", name: "Cameroun" },
-  { code: "+33", iso: "fr", flag: "🇫🇷", name: "France" },
+  { code: "+225", iso: "ci", flag: "🇨🇮", name: "Côte d'Ivoire", phoneLength: 10 },
+  { code: "+221", iso: "sn", flag: "🇸🇳", name: "Sénégal", phoneLength: 9 },
+  { code: "+223", iso: "ml", flag: "🇲🇱", name: "Mali", phoneLength: 8 },
+  { code: "+226", iso: "bf", flag: "🇧🇫", name: "Burkina Faso", phoneLength: 8 },
+  { code: "+229", iso: "bj", flag: "🇧🇯", name: "Bénin", phoneLength: 10 },
+  { code: "+228", iso: "tg", flag: "🇹🇬", name: "Togo", phoneLength: 8 },
+  { code: "+224", iso: "gn", flag: "🇬🇳", name: "Guinée", phoneLength: 9 },
+  { code: "+227", iso: "ne", flag: "🇳🇪", name: "Niger", phoneLength: 8 },
+  { code: "+237", iso: "cm", flag: "🇨🇲", name: "Cameroun", phoneLength: 9 },
+  { code: "+33", iso: "fr", flag: "🇫🇷", name: "France", phoneLength: 10 },
 ];
+
+// Ne garde que les chiffres et tronque à la longueur attendue pour le pays sélectionné
+// (ex. 10 chiffres pour la Côte d'Ivoire, indicatif pays exclu).
+function sanitizePhoneDigits(raw, countryCode) {
+  const digitsOnly = raw.replace(/\D/g, "");
+  const maxLen = COUNTRY_CODES.find((c) => c.code === countryCode)?.phoneLength || 10;
+  return digitsOnly.slice(0, maxLen);
+}
 
 function Wallet3D({ size = 120 }) {
   return (
@@ -2604,9 +2612,10 @@ export default function GuichetApp() {
                     <CountryDropdown value={loginCountryCode} onChange={setLoginCountryCode} colors={COLORS} />
                     <input
                       value={loginPhone}
-                      onChange={(e) => setLoginPhone(e.target.value)}
+                      onChange={(e) => setLoginPhone(sanitizePhoneDigits(e.target.value, loginCountryCode))}
                       placeholder="07 XX XX XX XX"
                       type="tel"
+                      maxLength={COUNTRY_CODES.find((c) => c.code === loginCountryCode)?.phoneLength || 10}
                       className="flex-1 px-3.5 py-2.5 rounded-lg text-sm outline-none"
                       style={{ background: COLORS.bgSoft, border: `1px solid ${COLORS.surfaceLine}`, color: COLORS.text }}
                     />
@@ -2653,9 +2662,10 @@ export default function GuichetApp() {
                     <CountryDropdown value={signupCountryCode} onChange={setSignupCountryCode} colors={COLORS} />
                     <input
                       value={signupPhone}
-                      onChange={(e) => setSignupPhone(e.target.value)}
+                      onChange={(e) => setSignupPhone(sanitizePhoneDigits(e.target.value, signupCountryCode))}
                       placeholder="07 XX XX XX XX"
                       type="tel"
+                      maxLength={COUNTRY_CODES.find((c) => c.code === signupCountryCode)?.phoneLength || 10}
                       className="flex-1 px-3.5 py-2.5 rounded-lg text-sm outline-none"
                       style={{ background: COLORS.bgSoft, border: `1px solid ${COLORS.surfaceLine}`, color: COLORS.text }}
                     />
@@ -2773,9 +2783,10 @@ export default function GuichetApp() {
                         <CountryDropdown value={recoveryCountryCode} onChange={setRecoveryCountryCode} colors={COLORS} />
                         <input
                           value={recoveryPhone}
-                          onChange={(e) => setRecoveryPhone(e.target.value)}
+                          onChange={(e) => setRecoveryPhone(sanitizePhoneDigits(e.target.value, recoveryCountryCode))}
                           placeholder="07 XX XX XX XX"
                           type="tel"
+                          maxLength={COUNTRY_CODES.find((c) => c.code === recoveryCountryCode)?.phoneLength || 10}
                           className="flex-1 px-3.5 py-2.5 rounded-lg text-sm outline-none"
                           style={{ background: COLORS.bgSoft, border: `1px solid ${COLORS.surfaceLine}`, color: COLORS.text }}
                         />
@@ -3475,8 +3486,11 @@ export default function GuichetApp() {
               )}
               <input
                 value={phone}
-                onChange={(e) => setPhone(e.target.value)}
+                onChange={(e) =>
+                  setPhone(net.type === "momo" ? sanitizePhoneDigits(e.target.value, txCountryCode) : e.target.value)
+                }
                 placeholder={NETWORK_TYPE_LABELS[net.type].placeholder}
+                maxLength={net.type === "momo" ? (COUNTRY_CODES.find((c) => c.code === txCountryCode)?.phoneLength || 10) : undefined}
                 className="w-full px-3.5 py-2.5 rounded-lg text-sm mb-5 outline-none"
                 style={{ background: COLORS.bgSoft, border: `1px solid ${COLORS.surfaceLine}`, color: COLORS.text }}
               />
