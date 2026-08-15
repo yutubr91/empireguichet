@@ -1189,9 +1189,11 @@ export default function GuichetApp() {
     if (tab === "publicites" && agent) {
       loadActiveAds();
     }
+    if (tab === "annonceur" && agent?.isPlatformOwner) {
+      loadMyAds();
+    }
     if (tab === "backoffice-pub" && agent?.isPlatformOwner) {
       loadAllAdsForBackoffice();
-      loadMyAds();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab]);
@@ -1980,15 +1982,6 @@ export default function GuichetApp() {
     annonceursRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
-  function handleBecomeAdvertiser() {
-    if (isAuthenticated) {
-      setTab("publicites");
-      demoRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-    } else {
-      scrollToDemo();
-    }
-  }
-
   const INTRO_SLIDES = [
     {
       icon: Wallet3D,
@@ -2401,21 +2394,11 @@ export default function GuichetApp() {
 
       {/* ===== Espace annonceurs ===== */}
       <section id="annonceurs" ref={annonceursRef} className="max-w-6xl mx-auto px-5 py-14" style={{ borderTop: `1px solid ${COLORS.surfaceLine}` }}>
-        <div className="flex flex-wrap items-end justify-between gap-4 mb-8">
-          <div>
-            <h2 className="gc-display text-2xl font-semibold mb-2">Espace annonceurs</h2>
-            <p className="text-sm max-w-xl" style={{ color: COLORS.textMuted }}>
-              Chaque agent EmpireGuichet peut promouvoir son activité auprès de tout le réseau —
-              agents et visiteurs de la plateforme voient les annonces actives directement ici.
-            </p>
-          </div>
-          <button
-            onClick={handleBecomeAdvertiser}
-            className="gc-btn flex items-center gap-1.5 px-5 py-2.5 rounded-lg text-sm font-medium flex-shrink-0"
-            style={{ background: COLORS.gold, color: "#052E36" }}
-          >
-            <Megaphone size={15} /> Devenir annonceur
-          </button>
+        <div className="mb-8">
+          <h2 className="gc-display text-2xl font-semibold mb-2">Espace annonceurs</h2>
+          <p className="text-sm max-w-xl" style={{ color: COLORS.textMuted }}>
+            Les annonces mises en avant par EmpireGuichet, visibles par tous les agents et visiteurs de la plateforme.
+          </p>
         </div>
 
         {adsLoading ? (
@@ -2894,6 +2877,7 @@ export default function GuichetApp() {
             { id: "kyc", label: kycVerified ? "Vérification KYC" : "Vérification KYC ⚠", icon: kycVerified ? FileCheck : AlertTriangle },
             { id: "transaction", label: "Nouvelle transaction", icon: ArrowRightLeft },
             { id: "historique", label: "Historique", icon: Clock },
+            ...(agent?.isPlatformOwner ? [{ id: "annonceur", label: "Annonceur", icon: Megaphone }] : []),
             { id: "publicites", label: "Publicités", icon: Megaphone },
             { id: "parrainage", label: "Parrainage", icon: Users },
             ...(agent?.role === "manager" ? [{ id: "equipe", label: "Équipe", icon: Crown }, { id: "kyc-review", label: "Vérifications KYC", icon: Fingerprint }] : []),
@@ -3736,10 +3720,10 @@ export default function GuichetApp() {
         )}
 
         {/* Backoffice publicité — réservé au propriétaire de la plateforme */}
-        {tab === "backoffice-pub" && agent?.isPlatformOwner && (
+        {tab === "annonceur" && agent?.isPlatformOwner && (
           <div className="gc-fade-in">
             <div className="mb-6">
-              <h2 className="text-lg font-semibold mb-1">Backoffice publicité</h2>
+              <h2 className="text-lg font-semibold mb-1">Annonceur</h2>
               <p className="text-xs" style={{ color: COLORS.textMuted }}>Visible uniquement par toi — seul le compte principal peut publier une annonce.</p>
             </div>
 
@@ -3842,7 +3826,7 @@ export default function GuichetApp() {
 
             {/* Mes annonces publiées */}
             {myAds.length > 0 && (
-              <div className="mb-8">
+              <div>
                 <div className="text-xs font-medium mb-3" style={{ color: COLORS.textMuted }}>MES ANNONCES</div>
                 <div className="flex flex-col gap-2">
                   {myAds.map((ad) => {
@@ -3880,6 +3864,15 @@ export default function GuichetApp() {
                 </div>
               </div>
             )}
+          </div>
+        )}
+
+        {tab === "backoffice-pub" && agent?.isPlatformOwner && (
+          <div className="gc-fade-in">
+            <div className="mb-6">
+              <h2 className="text-lg font-semibold mb-1">Backoffice publicité</h2>
+              <p className="text-xs" style={{ color: COLORS.textMuted }}>Visible uniquement par toi.</p>
+            </div>
 
             {allAdsLoading ? (
               <div className="text-xs" style={{ color: COLORS.textMuted }}>Chargement…</div>
