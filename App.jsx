@@ -4662,8 +4662,8 @@ export default function GuichetApp() {
               style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}` }}
             >
               {ad.image_url ? (
-                <div className="w-full flex items-center justify-center" style={{ height: 160, background: COLORS.bgSoft }}>
-                  <img src={ad.image_url} alt={ad.title} className="w-full h-full object-contain" />
+                <div className="w-full" style={{ height: 160, background: COLORS.bgSoft }}>
+                  <img src={ad.image_url} alt={ad.title} className="w-full h-full object-cover" />
                 </div>
               ) : (
                 <div className="w-full flex items-center justify-center" style={{ height: 160, background: COLORS.bgSoft }}>
