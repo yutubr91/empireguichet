@@ -1119,7 +1119,7 @@ export default function GuichetApp() {
   const [selectedAdPreview, setSelectedAdPreview] = useState(null);
   const [adsLoading, setAdsLoading] = useState(false);
   const [myAds, setMyAds] = useState([]);
-  const [adForm, setAdForm] = useState({ title: "", description: "", contactPhone: "", planIndex: 0 });
+  const [adForm, setAdForm] = useState({ title: "", description: "", contactPhone: "", planIndex: 0, customDays: 7 });
   const [adFormError, setAdFormError] = useState("");
   const [adSubmitting, setAdSubmitting] = useState(false);
   const [adSuccessMsg, setAdSuccessMsg] = useState("");
@@ -1226,6 +1226,10 @@ export default function GuichetApp() {
   }, [agent?.id]);
 
   useEffect(() => {
+    if (tab === "publicites" || tab === "annonceur") {
+      setAdSuccessMsg("");
+      setAdFormError("");
+    }
     if (tab === "publicites" && agent) {
       cleanupExpiredAds().then(() => {
         loadActivePublicites();
@@ -1276,9 +1280,18 @@ export default function GuichetApp() {
       );
       return;
     }
-    const plan = AD_PRICING[adForm.planIndex];
+    const isAnnonce = kind === "annonce";
+    let days, price;
+    if (isAnnonce) {
+      days = Math.min(30, Math.max(1, Math.round(Number(adForm.customDays) || 1)));
+      price = 0;
+    } else {
+      const plan = AD_PRICING[adForm.planIndex];
+      days = plan.days;
+      price = plan.price;
+    }
     const isFree = !!agent?.isPlatformOwner;
-    const amountToCharge = isFree ? 0 : plan.price;
+    const amountToCharge = isFree ? 0 : price;
     if (!isFree && amountToCharge > floatBalance) {
       setAdFormError(`Solde insuffisant. Solde disponible : ${formatFCFA(floatBalance)}.`);
       return;
@@ -1296,17 +1309,17 @@ export default function GuichetApp() {
     }
     // Paiement simulé — en production, appel réel à l'agrégateur de paiement ici
     const now = new Date();
-    const endsAt = new Date(now.getTime() + plan.days * 24 * 60 * 60 * 1000);
+    const endsAt = new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
     const { error } = await supabase.from("ads").insert({
       created_by: agent.id,
       agency_id: agent.agencyId,
       agency_name: agent.agency,
-      kind: kind === "annonce" ? "annonce" : "publicite",
+      kind: isAnnonce ? "annonce" : "publicite",
       title: adForm.title.trim(),
       description: adForm.description.trim(),
       contact_phone: adForm.contactPhone.trim(),
       image_url: imageUrl,
-      duration_days: plan.days,
+      duration_days: days,
       amount_paid: amountToCharge,
       status: "active",
       starts_at: now.toISOString(),
@@ -1321,15 +1334,15 @@ export default function GuichetApp() {
     }
     setAdSuccessMsg(
       isFree
-        ? `${kind === "annonce" ? "Annonce" : "Publicité"} publiée gratuitement et en ligne pour ${plan.days} jours ✅`
-        : `Publicité payée (${formatFCFA(plan.price)}) et en ligne pour ${plan.days} jours ✅`
+        ? `${isAnnonce ? "Annonce" : "Publicité"} publiée gratuitement et en ligne pour ${days} jour${days > 1 ? "s" : ""} ✅`
+        : `Publicité payée (${formatFCFA(price)}) et en ligne pour ${days} jours ✅`
     );
-    if (!isFree) setAdSpend((s) => s + plan.price);
+    if (!isFree) setAdSpend((s) => s + price);
     setAdImageFile(null);
     setAdImagePreview("");
-    setAdForm({ title: "", description: "", contactPhone: "", planIndex: 0 });
-    pushNotification(`${kind === "annonce" ? "Annonce" : "Publicité"} publiée avec succès 📣`);
-    if (kind === "annonce") {
+    setAdForm({ title: "", description: "", contactPhone: "", planIndex: 0, customDays: 7 });
+    pushNotification(`${isAnnonce ? "Annonce" : "Publicité"} publiée avec succès 📣`);
+    if (isAnnonce) {
       loadActiveAds();
     } else {
       loadActivePublicites();
@@ -3990,23 +4003,51 @@ export default function GuichetApp() {
                   )}
                 </div>
                 <div>
-                  <div className="text-xs mb-2" style={{ color: COLORS.textMuted }}>Durée de diffusion</div>
-                  <div className="grid grid-cols-3 gap-2">
-                    {AD_PRICING.map((plan, i) => (
-                      <button
-                        type="button"
-                        key={plan.days}
-                        onClick={() => setAdForm((f) => ({ ...f, planIndex: i }))}
-                        className="gc-btn py-2.5 rounded-lg text-xs font-medium"
-                        style={
-                          adForm.planIndex === i
-                            ? { background: COLORS.gold, color: "#052E36" }
-                            : { background: COLORS.bgSoft, color: COLORS.textMuted, border: `1px solid ${COLORS.surfaceLine}` }
-                        }
-                      >
-                        {plan.label}<br />Gratuit
-                      </button>
-                    ))}
+                  <div className="text-xs mb-2" style={{ color: COLORS.textMuted }}>
+                    Durée de diffusion — {adForm.customDays} jour{adForm.customDays > 1 ? "s" : ""}
+                    {adForm.customDays === 1 && " (24h)"}
+                  </div>
+                  <input
+                    type="range"
+                    min={1}
+                    max={30}
+                    step={1}
+                    value={adForm.customDays}
+                    onChange={(e) => setAdForm((f) => ({ ...f, customDays: Number(e.target.value) }))}
+                    className="w-full mb-2"
+                    style={{ accentColor: COLORS.gold }}
+                  />
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      min={1}
+                      max={30}
+                      value={adForm.customDays}
+                      onChange={(e) => {
+                        const v = Math.min(30, Math.max(1, Number(e.target.value) || 1));
+                        setAdForm((f) => ({ ...f, customDays: v }));
+                      }}
+                      className="w-20 px-3 py-2 rounded-lg text-sm outline-none"
+                      style={{ background: COLORS.bgSoft, border: `1px solid ${COLORS.surfaceLine}`, color: COLORS.text }}
+                    />
+                    <span className="text-xs" style={{ color: COLORS.textMuted }}>jours (min. 1 — max. 30)</span>
+                    <div className="flex items-center gap-1.5 ml-auto">
+                      {[1, 7, 15, 30].map((d) => (
+                        <button
+                          type="button"
+                          key={d}
+                          onClick={() => setAdForm((f) => ({ ...f, customDays: d }))}
+                          className="gc-btn px-2.5 py-1.5 rounded-md text-xs font-medium"
+                          style={
+                            adForm.customDays === d
+                              ? { background: COLORS.gold, color: "#052E36" }
+                              : { background: COLORS.bgSoft, color: COLORS.textMuted, border: `1px solid ${COLORS.surfaceLine}` }
+                          }
+                        >
+                          {d === 1 ? "24h" : `${d}j`}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 </div>
                 <button
