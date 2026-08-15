@@ -1147,6 +1147,16 @@ export default function GuichetApp() {
     return data.publicUrl;
   }
 
+  // Supprime définitivement les annonces/publicités expirées, pour éviter
+  // l'accumulation de données obsolètes dans le BackOffice.
+  async function cleanupExpiredAds() {
+    const { error } = await supabase.from("ads").delete().lt("ends_at", new Date().toISOString());
+    if (error) {
+      // Ignoré silencieusement — peut être bloqué par les règles RLS selon le compte connecté.
+      console.warn("Nettoyage des annonces expirées :", error.message);
+    }
+  }
+
   async function loadActiveAds() {
     setAdsLoading(true);
     const { data, error } = await supabase
@@ -1196,28 +1206,37 @@ export default function GuichetApp() {
 
   useEffect(() => {
     // Chargées dès l'ouverture du site, connecté ou non (vitrine publique)
-    loadActiveAds();
-    loadActivePublicites();
+    cleanupExpiredAds().then(() => {
+      loadActiveAds();
+      loadActivePublicites();
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
     // Le pool "publicités" (agents/chefs) est nécessaire dès la connexion,
-    // car il est aussi affiché sur le tableau de bord.
-    if (agent) loadActivePublicites();
+    // car il est aussi affiché sur le tableau de bord. On en profite pour
+    // purger les annonces/publicités expirées de ce compte.
+    if (agent) {
+      cleanupExpiredAds().then(() => {
+        loadActivePublicites();
+      });
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [agent?.id]);
 
   useEffect(() => {
     if (tab === "publicites" && agent) {
-      loadActivePublicites();
-      loadMyAds();
+      cleanupExpiredAds().then(() => {
+        loadActivePublicites();
+        loadMyAds();
+      });
     }
     if (tab === "annonceur" && agent?.isPlatformOwner) {
-      loadMyAds();
+      cleanupExpiredAds().then(() => loadMyAds());
     }
     if (tab === "backoffice-pub" && agent?.isPlatformOwner) {
-      loadAllAdsForBackoffice();
+      cleanupExpiredAds().then(() => loadAllAdsForBackoffice());
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab]);
