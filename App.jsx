@@ -1188,6 +1188,7 @@ export default function GuichetApp() {
   useEffect(() => {
     if (tab === "publicites" && agent) {
       loadActiveAds();
+      loadMyAds();
     }
     if (tab === "annonceur" && agent?.isPlatformOwner) {
       loadMyAds();
@@ -3675,7 +3676,7 @@ export default function GuichetApp() {
             <div className="mb-6">
               <h2 className="text-lg font-semibold mb-1">Publicités sur la plateforme</h2>
               <p className="text-xs" style={{ color: COLORS.textMuted, maxWidth: 620 }}>
-                Découvre les annonces actuellement en ligne, visibles par tous les agents et chefs d'agence.
+                Découvre les annonces en ligne, ou publie la tienne pour la faire apparaître auprès de tous les agents et chefs d'agence.
               </p>
             </div>
 
@@ -3716,6 +3717,153 @@ export default function GuichetApp() {
                 </div>
               )}
             </div>
+
+            {/* Publier une publicité (payant pour agents/chefs d'agence, gratuit pour le compte principal) */}
+            <div className="p-5 rounded-xl my-6" style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}` }}>
+              <div className="text-sm font-medium mb-3">Publier ma publicité</div>
+              {adSuccessMsg && (
+                <div className="text-xs p-3 rounded-lg mb-3 flex items-center gap-2" style={{ background: "rgba(43,191,138,0.12)", color: COLORS.teal }}>
+                  <CheckCircle2 size={14} /> {adSuccessMsg}
+                </div>
+              )}
+              {adFormError && (
+                <div className="text-xs p-3 rounded-lg mb-3" style={{ background: "rgba(226,104,94,0.12)", color: COLORS.danger }}>
+                  {adFormError}
+                </div>
+              )}
+              <form onSubmit={handleSubmitAd} className="flex flex-col gap-3">
+                <input
+                  value={adForm.title}
+                  onChange={(e) => setAdForm((f) => ({ ...f, title: e.target.value }))}
+                  placeholder="Titre de l'annonce"
+                  className="px-3 py-2.5 rounded-lg text-sm outline-none"
+                  style={{ background: COLORS.bgSoft, border: `1px solid ${COLORS.surfaceLine}`, color: COLORS.text }}
+                />
+                <textarea
+                  value={adForm.description}
+                  onChange={(e) => setAdForm((f) => ({ ...f, description: e.target.value }))}
+                  placeholder="Description courte"
+                  rows={3}
+                  className="px-3 py-2.5 rounded-lg text-sm outline-none resize-none"
+                  style={{ background: COLORS.bgSoft, border: `1px solid ${COLORS.surfaceLine}`, color: COLORS.text }}
+                />
+                <div>
+                  <input
+                    value={adForm.contactPhone}
+                    onChange={(e) => setAdForm((f) => ({ ...f, contactPhone: e.target.value }))}
+                    placeholder="+225 01 02 03 04 05 ou email@gmail.com"
+                    className="w-full px-3 py-2.5 rounded-lg text-sm outline-none"
+                    style={{ background: COLORS.bgSoft, border: `1px solid ${COLORS.surfaceLine}`, color: COLORS.text }}
+                  />
+                  <div className="text-xs mt-1" style={{ color: COLORS.textMuted }}>
+                    Numéro avec indicatif pays (ex. +225 01 02 03 04 05) ou une adresse e-mail.
+                  </div>
+                </div>
+                <div>
+                  <div className="text-xs mb-2" style={{ color: COLORS.textMuted }}>Image de la publicité (optionnel)</div>
+                  {adImagePreview ? (
+                    <div className="relative w-full mb-2" style={{ height: 140 }}>
+                      <img src={adImagePreview} alt="Aperçu" className="w-full h-full object-cover rounded-lg" />
+                      <button
+                        type="button"
+                        onClick={() => { setAdImageFile(null); setAdImagePreview(""); }}
+                        className="absolute top-2 right-2 w-7 h-7 rounded-full flex items-center justify-center"
+                        style={{ background: "rgba(0,0,0,0.6)", color: "#fff" }}
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+                  ) : (
+                    <label
+                      className="flex flex-col items-center justify-center gap-1.5 py-5 rounded-lg cursor-pointer text-xs"
+                      style={{ background: COLORS.bgSoft, border: `1px dashed ${COLORS.surfaceLine}`, color: COLORS.textMuted }}
+                    >
+                      <ImageIcon size={18} />
+                      Ajouter une image (JPG, PNG)
+                      <input type="file" accept="image/*" onChange={handleAdImageChange} className="hidden" />
+                    </label>
+                  )}
+                </div>
+                <div>
+                  <div className="text-xs mb-2" style={{ color: COLORS.textMuted }}>Durée de diffusion</div>
+                  <div className="grid grid-cols-3 gap-2">
+                    {AD_PRICING.map((plan, i) => (
+                      <button
+                        type="button"
+                        key={plan.days}
+                        onClick={() => setAdForm((f) => ({ ...f, planIndex: i }))}
+                        className="gc-btn py-2.5 rounded-lg text-xs font-medium"
+                        style={
+                          adForm.planIndex === i
+                            ? { background: COLORS.gold, color: "#052E36" }
+                            : { background: COLORS.bgSoft, color: COLORS.textMuted, border: `1px solid ${COLORS.surfaceLine}` }
+                        }
+                      >
+                        {plan.label}<br />{agent?.isPlatformOwner ? "Gratuit" : formatFCFA(plan.price)}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <button
+                  type="submit"
+                  disabled={adSubmitting}
+                  className="gc-btn py-3 rounded-lg text-sm font-medium mt-1"
+                  style={{ background: COLORS.gold, color: "#052E36", opacity: adSubmitting ? 0.6 : 1 }}
+                >
+                  {adSubmitting
+                    ? "Publication en cours…"
+                    : agent?.isPlatformOwner
+                    ? "Publier gratuitement"
+                    : `Payer ${formatFCFA(AD_PRICING[adForm.planIndex].price)} et publier`}
+                </button>
+                <p className="text-xs" style={{ color: COLORS.textMuted }}>
+                  {agent?.isPlatformOwner
+                    ? "En tant que compte principal, tes publicités sont gratuites."
+                    : "Paiement simulé pour cette démo — l'annonce passe en ligne immédiatement après confirmation."}
+                </p>
+              </form>
+            </div>
+
+            {/* Mes publicités */}
+            {myAds.length > 0 && (
+              <div>
+                <div className="text-xs font-medium mb-3" style={{ color: COLORS.textMuted }}>MES PUBLICITÉS</div>
+                <div className="flex flex-col gap-2">
+                  {myAds.map((ad) => {
+                    const isActive = ad.status === "active" && new Date(ad.ends_at) > new Date();
+                    return (
+                      <div key={ad.id} className="p-3.5 rounded-lg flex items-center gap-3" style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}` }}>
+                        {ad.image_url ? (
+                          <img src={ad.image_url} alt={ad.title} className="w-11 h-11 rounded-lg object-cover flex-shrink-0" />
+                        ) : (
+                          <div className="w-11 h-11 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: COLORS.bgSoft }}>
+                            <Megaphone size={16} style={{ color: COLORS.goldSoft }} />
+                          </div>
+                        )}
+                        <div className="min-w-0 flex-1 flex items-center justify-between">
+                          <div className="min-w-0">
+                            <div className="text-sm font-medium truncate">{ad.title}</div>
+                            <div className="text-xs" style={{ color: COLORS.textMuted }}>
+                              {formatFCFA(ad.amount_paid)} · {ad.duration_days} jours · expire le {new Date(ad.ends_at).toLocaleDateString("fr-FR")}
+                            </div>
+                          </div>
+                          <span
+                            className="text-xs px-2.5 py-1 rounded-md flex-shrink-0"
+                            style={
+                              isActive
+                                ? { background: "rgba(43,191,138,0.12)", color: COLORS.teal }
+                                : { background: COLORS.bgSoft, color: COLORS.textMuted }
+                            }
+                          >
+                            {isActive ? "En ligne" : "Expirée"}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </div>
         )}
 
