@@ -10,6 +10,7 @@ import {
   CheckCircle2,
   Clock,
   ChevronRight,
+  ChevronLeft,
   Menu,
   X,
   Coins,
@@ -655,6 +656,8 @@ export default function GuichetApp() {
   const [formError, setFormError] = useState("");
   const demoRef = useRef(null);
   const annonceursRef = useRef(null);
+  const annoncesScrollRef = useRef(null);
+  const publicitesScrollRef = useRef(null);
 
   // Connexion à une vraie base de données (Supabase)
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -2042,6 +2045,10 @@ export default function GuichetApp() {
 
   function scrollToAnnonceurs() {
     annonceursRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function scrollAdCarousel(ref, direction) {
+    ref.current?.scrollBy({ left: direction * 300, behavior: "smooth" });
   }
 
   const INTRO_SLIDES = [
@@ -4693,45 +4700,150 @@ export default function GuichetApp() {
 
       {/* ===== Affiches publicitaires (avant le pied de page) ===== */}
       {(activeAds.length > 0 || activePublicites.length > 0) && (
-        <section className="max-w-6xl mx-auto px-5 pb-14">
-          <div className="grid md:grid-cols-2 gap-4 max-w-3xl">
-          {[...activeAds, ...activePublicites].map((ad) => (
-            <div
-              key={ad.id}
-              onClick={() => setSelectedAdPreview(ad)}
-              className="rounded-xl overflow-hidden cursor-pointer"
-              style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}` }}
-            >
-              {ad.image_url ? (
-                <div className="w-full" style={{ height: 160, background: COLORS.bgSoft }}>
-                  <img src={ad.image_url} alt={ad.title} className="w-full h-full object-cover" />
-                </div>
-              ) : (
-                <div className="w-full flex items-center justify-center" style={{ height: 160, background: COLORS.bgSoft }}>
-                  <Megaphone size={28} style={{ color: COLORS.surfaceLine }} />
-                </div>
-              )}
-              <div className="p-4">
-                <span
-                  className="inline-flex items-center gap-1.5 text-xs px-2.5 py-0.5 rounded-full mb-2 w-fit"
-                  style={{ background: COLORS.bgSoft, color: COLORS.goldSoft, border: `1px solid ${COLORS.surfaceLine}` }}
-                >
-                  <Megaphone size={11} /> {ad.kind === "annonce" ? "Annonce" : "Publicité"}
-                </span>
-                <h3 className="text-sm font-semibold mb-1">{ad.title}</h3>
-                <p className="text-xs mb-3" style={{ color: COLORS.textMuted }}>{ad.description}</p>
-                <button
-                  type="button"
-                  onClick={(e) => { e.stopPropagation(); contactAdOwner(ad); }}
-                  className="gc-btn flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium w-fit"
-                  style={{ background: COLORS.gold, color: "#052E36" }}
-                >
-                  <Phone size={12} /> {ad.contact_phone}
-                </button>
+        <section className="max-w-6xl mx-auto px-5 pb-14 flex flex-col gap-10">
+          {activeAds.length > 0 && (
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-semibold" style={{ color: COLORS.text }}>Annonces</h3>
+                {activeAds.length >= 4 && (
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => scrollAdCarousel(annoncesScrollRef, -1)}
+                      className="w-8 h-8 rounded-full flex items-center justify-center"
+                      style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}`, color: COLORS.text }}
+                      aria-label="Précédent"
+                    >
+                      <ChevronLeft size={16} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => scrollAdCarousel(annoncesScrollRef, 1)}
+                      className="w-8 h-8 rounded-full flex items-center justify-center"
+                      style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}`, color: COLORS.text }}
+                      aria-label="Suivant"
+                    >
+                      <ChevronRight size={16} />
+                    </button>
+                  </div>
+                )}
+              </div>
+              <div
+                ref={annoncesScrollRef}
+                className="flex gap-4 overflow-x-auto pb-2"
+                style={{ scrollSnapType: "x mandatory", scrollbarWidth: "none" }}
+              >
+                {activeAds.map((ad) => (
+                  <div
+                    key={ad.id}
+                    onClick={() => setSelectedAdPreview(ad)}
+                    className="rounded-xl overflow-hidden cursor-pointer flex-shrink-0"
+                    style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}`, width: 280, scrollSnapAlign: "start" }}
+                  >
+                    {ad.image_url ? (
+                      <div className="w-full" style={{ height: 160, background: COLORS.bgSoft }}>
+                        <img src={ad.image_url} alt={ad.title} className="w-full h-full object-cover" />
+                      </div>
+                    ) : (
+                      <div className="w-full flex items-center justify-center" style={{ height: 160, background: COLORS.bgSoft }}>
+                        <Megaphone size={28} style={{ color: COLORS.surfaceLine }} />
+                      </div>
+                    )}
+                    <div className="p-4">
+                      <span
+                        className="inline-flex items-center gap-1.5 text-xs px-2.5 py-0.5 rounded-full mb-2 w-fit"
+                        style={{ background: COLORS.bgSoft, color: COLORS.goldSoft, border: `1px solid ${COLORS.surfaceLine}` }}
+                      >
+                        <Megaphone size={11} /> Annonce
+                      </span>
+                      <h3 className="text-sm font-semibold mb-1">{ad.title}</h3>
+                      <p className="text-xs mb-3" style={{ color: COLORS.textMuted }}>{ad.description}</p>
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); contactAdOwner(ad); }}
+                        className="gc-btn flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium w-fit"
+                        style={{ background: COLORS.gold, color: "#052E36" }}
+                      >
+                        <Phone size={12} /> {ad.contact_phone}
+                      </button>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
-          ))}
-          </div>
+          )}
+
+          {activePublicites.length > 0 && (
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-semibold" style={{ color: COLORS.text }}>Publicités</h3>
+                {activePublicites.length >= 4 && (
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => scrollAdCarousel(publicitesScrollRef, -1)}
+                      className="w-8 h-8 rounded-full flex items-center justify-center"
+                      style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}`, color: COLORS.text }}
+                      aria-label="Précédent"
+                    >
+                      <ChevronLeft size={16} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => scrollAdCarousel(publicitesScrollRef, 1)}
+                      className="w-8 h-8 rounded-full flex items-center justify-center"
+                      style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}`, color: COLORS.text }}
+                      aria-label="Suivant"
+                    >
+                      <ChevronRight size={16} />
+                    </button>
+                  </div>
+                )}
+              </div>
+              <div
+                ref={publicitesScrollRef}
+                className="flex gap-4 overflow-x-auto pb-2"
+                style={{ scrollSnapType: "x mandatory", scrollbarWidth: "none" }}
+              >
+                {activePublicites.map((ad) => (
+                  <div
+                    key={ad.id}
+                    onClick={() => setSelectedAdPreview(ad)}
+                    className="rounded-xl overflow-hidden cursor-pointer flex-shrink-0"
+                    style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}`, width: 280, scrollSnapAlign: "start" }}
+                  >
+                    {ad.image_url ? (
+                      <div className="w-full" style={{ height: 160, background: COLORS.bgSoft }}>
+                        <img src={ad.image_url} alt={ad.title} className="w-full h-full object-cover" />
+                      </div>
+                    ) : (
+                      <div className="w-full flex items-center justify-center" style={{ height: 160, background: COLORS.bgSoft }}>
+                        <Megaphone size={28} style={{ color: COLORS.surfaceLine }} />
+                      </div>
+                    )}
+                    <div className="p-4">
+                      <span
+                        className="inline-flex items-center gap-1.5 text-xs px-2.5 py-0.5 rounded-full mb-2 w-fit"
+                        style={{ background: COLORS.bgSoft, color: COLORS.goldSoft, border: `1px solid ${COLORS.surfaceLine}` }}
+                      >
+                        <Megaphone size={11} /> Publicité
+                      </span>
+                      <h3 className="text-sm font-semibold mb-1">{ad.title}</h3>
+                      <p className="text-xs mb-3" style={{ color: COLORS.textMuted }}>{ad.description}</p>
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); contactAdOwner(ad); }}
+                        className="gc-btn flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium w-fit"
+                        style={{ background: COLORS.gold, color: "#052E36" }}
+                      >
+                        <Phone size={12} /> {ad.contact_phone}
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </section>
       )}
 
