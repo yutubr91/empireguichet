@@ -688,6 +688,10 @@ export default function GuichetApp() {
   const [authError, setAuthError] = useState("");
   const [authLoading, setAuthLoading] = useState(false);
   const [signupCooldown, setSignupCooldown] = useState(0);
+  const [signupEmailCodeStep, setSignupEmailCodeStep] = useState(1);
+  const [signupEmailCode, setSignupEmailCode] = useState("");
+  const [signupEmailCodeInput, setSignupEmailCodeInput] = useState("");
+  const [signupEmailCodeError, setSignupEmailCodeError] = useState("");
 
   // Capture le parrain depuis le lien de parrainage (?parrain=...) dès l'ouverture du site
   const [referredByPhone, setReferredByPhone] = useState("");
@@ -817,6 +821,7 @@ export default function GuichetApp() {
   const [recoveryNewPassword, setRecoveryNewPassword] = useState("");
   const [recoveryConfirmPassword, setRecoveryConfirmPassword] = useState("");
   const [recoveryError, setRecoveryError] = useState("");
+  const [recoveryLoading, setRecoveryLoading] = useState(false);
   const DEMO_RECOVERY_CODE = "852741";
 
   function maskEmail(email) {
@@ -826,7 +831,7 @@ export default function GuichetApp() {
     return `${visible}${"*".repeat(Math.max(user.length - 2, 2))}@${domain}`;
   }
 
-  function handleRecoveryRequestCode(e) {
+  async function handleRecoveryRequestCode(e) {
     e.preventDefault();
     if (!recoveryPhone || !recoveryEmail) {
       setRecoveryError("Renseigne ton numéro et ton adresse Gmail.");
@@ -837,6 +842,22 @@ export default function GuichetApp() {
       return;
     }
     setRecoveryError("");
+    setRecoveryLoading(true);
+    const fullPhone = `${recoveryCountryCode} ${recoveryPhone}`.trim();
+    const { data, error } = await supabase
+      .from("agents")
+      .select("email")
+      .eq("phone", fullPhone)
+      .maybeSingle();
+    setRecoveryLoading(false);
+    if (error || !data) {
+      setRecoveryError("Aucun compte trouvé avec ce numéro de téléphone.");
+      return;
+    }
+    if ((data.email || "").trim().toLowerCase() !== recoveryEmail.trim().toLowerCase()) {
+      setRecoveryError("Cette adresse Gmail ne correspond pas à celle enregistrée pour ce numéro.");
+      return;
+    }
     setRecoveryStep(2);
   }
 
@@ -1405,8 +1426,59 @@ export default function GuichetApp() {
     setIsAuthenticated(true);
   }
 
+  // Génère un code de vérification à 6 chiffres — simule l'envoi d'un e-mail.
+  // ⚠️ En production, cet appel doit passer par une fonction serveur (ex. Supabase Edge Function,
+  // gratuite jusqu'à un gros volume d'appels) qui déclenche un vrai envoi d'e-mail via le SMTP
+  // intégré de Supabase (gratuit, avec un débit limité) ou un fournisseur comme Resend/Brevo pour
+  // un envoi plus fiable en production : le code ne doit jamais être généré ni visible côté client.
+  function generateEmailCode() {
+    return String(Math.floor(100000 + Math.random() * 900000));
+  }
+
+  function handleSignupRequestCode(e) {
+    e.preventDefault();
+    if (!signupName || !signupPhone || !signupEmail || !signupAgency || !signupPassword || signupPin.length !== 4) {
+      setAuthError(signupPin.length !== 4 ? "Le code PIN doit contenir exactement 4 chiffres." : "Merci de remplir tous les champs.");
+      return;
+    }
+    if (signupPassword !== signupConfirmPassword) {
+      setAuthError("Les deux mots de passe ne correspondent pas.");
+      return;
+    }
+    if (!signupEmail.toLowerCase().endsWith("@gmail.com")) {
+      setAuthError("Merci d'utiliser une adresse Gmail (ex. toncompte@gmail.com).");
+      return;
+    }
+    if (signupRole === "agent" && !signupAgencyCode) {
+      setAuthError("Demande le code d'agence à ton chef d'agence pour rejoindre son équipe.");
+      return;
+    }
+    setAuthError("");
+    setSignupEmailCode(generateEmailCode());
+    setSignupEmailCodeInput("");
+    setSignupEmailCodeError("");
+    setSignupEmailCodeStep(2);
+  }
+
+  function handleResendSignupCode() {
+    setSignupEmailCode(generateEmailCode());
+    setSignupEmailCodeInput("");
+    setSignupEmailCodeError("");
+  }
+
+  function backToSignupForm() {
+    setSignupEmailCodeStep(1);
+    setSignupEmailCodeInput("");
+    setSignupEmailCodeError("");
+  }
+
   async function handleSignup(e) {
     e.preventDefault();
+    if (signupEmailCodeInput.trim() !== signupEmailCode) {
+      setSignupEmailCodeError("Code incorrect. Vérifie l'e-mail reçu et réessaie.");
+      return;
+    }
+    setSignupEmailCodeError("");
     if (!signupName || !signupPhone || !signupEmail || !signupAgency || !signupPassword || signupPin.length !== 4) {
       setAuthError(signupPin.length !== 4 ? "Le code PIN doit contenir exactement 4 chiffres." : "Merci de remplir tous les champs.");
       return;
@@ -1519,6 +1591,9 @@ export default function GuichetApp() {
     });
     setIsAuthenticated(true);
     setAuthError("");
+    setSignupPhoneStep(1);
+    setSignupPhoneCode("");
+    setSignupPhoneCodeInput("");
     setTab("kyc");
   }
 
@@ -2649,7 +2724,8 @@ export default function GuichetApp() {
                   </button>
                 </form>
               ) : authMode === "signup" ? (
-                <form onSubmit={handleSignup} className="max-w-sm">
+                signupEmailCodeStep === 1 ? (
+                <form onSubmit={handleSignupRequestCode} className="max-w-sm">
                   <label className="text-xs mb-2 block" style={{ color: COLORS.textMuted }}>Nom complet</label>
                   <input
                     value={signupName}
@@ -2761,17 +2837,49 @@ export default function GuichetApp() {
                   )}
                   <button
                     type="submit"
-                    disabled={authLoading || signupCooldown > 0}
+                    disabled={signupCooldown > 0}
                     className="gc-btn w-full py-3 rounded-lg text-sm font-medium disabled:opacity-50"
                     style={{ background: COLORS.gold, color: "#052E36" }}
                   >
-                    {signupCooldown > 0
-                      ? `Réessaie dans ${signupCooldown}s`
-                      : authLoading
-                      ? "Création du compte…"
-                      : "Créer mon compte agent"}
+                    {signupCooldown > 0 ? `Réessaie dans ${signupCooldown}s` : "Recevoir mon code par e-mail"}
                   </button>
                 </form>
+                ) : (
+                <form onSubmit={handleSignup} className="max-w-sm">
+                  <p className="text-xs mb-4" style={{ color: COLORS.textMuted }}>
+                    Un code de confirmation à 6 chiffres a été envoyé à{" "}
+                    <strong>{maskEmail(signupEmail)}</strong>. Entre-le ci-dessous pour créer ton compte.
+                  </p>
+                  <label className="text-xs mb-2 block" style={{ color: COLORS.textMuted }}>Code de vérification</label>
+                  <input
+                    value={signupEmailCodeInput}
+                    onChange={(e) => setSignupEmailCodeInput(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                    placeholder="••••••"
+                    inputMode="numeric"
+                    maxLength={6}
+                    className="w-full px-3.5 py-2.5 rounded-lg text-sm mb-4 outline-none gc-mono tracking-widest text-center"
+                    style={{ background: COLORS.bgSoft, border: `1px solid ${COLORS.surfaceLine}`, color: COLORS.text }}
+                  />
+                  {signupEmailCodeError && <p className="text-xs mb-4" style={{ color: COLORS.danger }}>{signupEmailCodeError}</p>}
+                  {authError && <p className="text-xs mb-4" style={{ color: COLORS.danger }}>{authError}</p>}
+                  <button
+                    type="submit"
+                    disabled={authLoading}
+                    className="gc-btn w-full py-3 rounded-lg text-sm font-medium disabled:opacity-50 mb-2.5"
+                    style={{ background: COLORS.gold, color: "#052E36" }}
+                  >
+                    {authLoading ? "Création du compte…" : "Confirmer et créer mon compte"}
+                  </button>
+                  <div className="flex items-center justify-between text-xs">
+                    <button type="button" onClick={backToSignupForm} className="gc-btn" style={{ color: COLORS.textMuted }}>
+                      ← Modifier mes informations
+                    </button>
+                    <button type="button" onClick={handleResendSignupCode} className="gc-btn" style={{ color: COLORS.gold }}>
+                      Renvoyer le code
+                    </button>
+                  </div>
+                </form>
+                )
               ) : (
                 <div className="max-w-sm">
                   {recoveryStep === 1 && (
@@ -2804,10 +2912,11 @@ export default function GuichetApp() {
                       {recoveryError && <p className="text-xs mb-4" style={{ color: COLORS.danger }}>{recoveryError}</p>}
                       <button
                         type="submit"
-                        className="gc-btn w-full py-3 rounded-lg text-sm font-medium"
+                        disabled={recoveryLoading}
+                        className="gc-btn w-full py-3 rounded-lg text-sm font-medium disabled:opacity-50"
                         style={{ background: COLORS.gold, color: "#052E36" }}
                       >
-                        Envoyer le code
+                        {recoveryLoading ? "Vérification…" : "Envoyer le code"}
                       </button>
                     </form>
                   )}
