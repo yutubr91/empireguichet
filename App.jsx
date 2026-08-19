@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import bcrypt from "bcryptjs";
 import {
   Wallet,
   ArrowRightLeft,
@@ -672,6 +673,10 @@ export default function GuichetApp() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [authMode, setAuthMode] = useState("login");
   const [agent, setAgent] = useState(null);
+  const [forcedPinInput, setForcedPinInput] = useState("");
+  const [forcedPinConfirmInput, setForcedPinConfirmInput] = useState("");
+  const [forcedPinError, setForcedPinError] = useState("");
+  const [forcedPinLoading, setForcedPinLoading] = useState(false);
   const [loginPhone, setLoginPhone] = useState("");
   const [loginCountryCode, setLoginCountryCode] = useState("+225");
   const [loginPassword, setLoginPassword] = useState("");
@@ -716,6 +721,13 @@ export default function GuichetApp() {
     return `${base}-${rand}`;
   }
 
+  // Un hash bcrypt commence toujours par $2a$, $2b$ ou $2y$. Si pin_hash ne
+  // correspond pas à ce format, c'est un ancien PIN stocké en clair (avant la
+  // mise en place du hashage) : l'agent devra en recréer un nouveau.
+  function isBcryptHash(value) {
+    return typeof value === "string" && /^\$2[aby]\$/.test(value);
+  }
+
   async function fetchAgentProfile(userId) {
     const { data, error } = await supabase.from("agents").select("*").eq("id", userId).single();
     if (error || !data) return null;
@@ -726,7 +738,8 @@ export default function GuichetApp() {
       email: data.email,
       agency: data.agency_name,
       agencyId: data.agency_id,
-      pin: data.pin_hash,
+      pinHash: data.pin_hash,
+      pinNeedsReset: !!data.pin_hash && !isBcryptHash(data.pin_hash),
       role: data.role,
       kycEmailVerified: data.kyc_email_verified,
       kycStatus: data.kyc_status || "incomplete",
@@ -1426,6 +1439,32 @@ export default function GuichetApp() {
     setIsAuthenticated(true);
   }
 
+  // Traite la création d'un nouveau PIN pour les agents dont l'ancien PIN
+  // était stocké en clair (avant la mise en place du hashage bcrypt).
+  async function handleForcedPinReset(e) {
+    e.preventDefault();
+    setForcedPinError("");
+    if (forcedPinInput.length !== 4) {
+      setForcedPinError("Le code PIN doit contenir exactement 4 chiffres.");
+      return;
+    }
+    if (forcedPinInput !== forcedPinConfirmInput) {
+      setForcedPinError("Les deux codes ne correspondent pas.");
+      return;
+    }
+    setForcedPinLoading(true);
+    const newPinHash = bcrypt.hashSync(forcedPinInput, 10);
+    const { error } = await supabase.from("agents").update({ pin_hash: newPinHash }).eq("id", agent.id);
+    setForcedPinLoading(false);
+    if (error) {
+      setForcedPinError("Erreur : " + error.message);
+      return;
+    }
+    setAgent((a) => ({ ...a, pinHash: newPinHash, pinNeedsReset: false }));
+    setForcedPinInput("");
+    setForcedPinConfirmInput("");
+  }
+
   // Génère un code de vérification à 6 chiffres — simule l'envoi d'un e-mail.
   // ⚠️ En production, cet appel doit passer par une fonction serveur (ex. Supabase Edge Function,
   // gratuite jusqu'à un gros volume d'appels) qui déclenche un vrai envoi d'e-mail via le SMTP
@@ -1557,6 +1596,7 @@ export default function GuichetApp() {
     }
 
     const fullPhone = `${signupCountryCode} ${signupPhone}`.trim();
+    const signupPinHash = bcrypt.hashSync(signupPin, 10);
 
     const { error: insertErr } = await supabase.from("agents").insert({
       id: userId,
@@ -1566,7 +1606,7 @@ export default function GuichetApp() {
       agency_id: agencyId,
       agency_name: agencyName,
       role: signupRole,
-      pin_hash: signupPin,
+      pin_hash: signupPinHash,
       kyc_email_verified: false,
       referred_by_phone: referredByPhone || null,
     });
@@ -1583,7 +1623,7 @@ export default function GuichetApp() {
       email: signupEmail,
       agency: agencyName,
       agencyId,
-      pin: signupPin,
+      pinHash: signupPinHash,
       role: signupRole,
       kycEmailVerified: false,
       kycStatus: "incomplete",
@@ -1762,9 +1802,16 @@ export default function GuichetApp() {
   const [confirmPasswordInput, setConfirmPasswordInput] = useState("");
   const [passwordChangeMsg, setPasswordChangeMsg] = useState({ type: "", text: "" });
 
+  // Vérifie un PIN saisi contre le hash stocké (bcrypt). Si l'agent n'a pas encore
+  // de hash (compte de démo), on retombe sur DEMO_PIN en clair pour ne pas casser la démo.
+  function verifyPin(inputPin) {
+    if (agent?.pinHash) return bcrypt.compareSync(inputPin, agent.pinHash);
+    return inputPin === DEMO_PIN;
+  }
+
   async function handleChangePin(e) {
     e.preventDefault();
-    if (currentPinInput !== (agent?.pin || DEMO_PIN)) {
+    if (!verifyPin(currentPinInput)) {
       setPinChangeMsg({ type: "error", text: "Code PIN actuel incorrect." });
       return;
     }
@@ -1776,12 +1823,13 @@ export default function GuichetApp() {
       setPinChangeMsg({ type: "error", text: "Les deux codes ne correspondent pas." });
       return;
     }
-    const { error } = await supabase.from("agents").update({ pin_hash: newPinInput }).eq("id", agent.id);
+    const newPinHash = bcrypt.hashSync(newPinInput, 10);
+    const { error } = await supabase.from("agents").update({ pin_hash: newPinHash }).eq("id", agent.id);
     if (error) {
       setPinChangeMsg({ type: "error", text: "Erreur : " + error.message });
       return;
     }
-    setAgent((a) => ({ ...a, pin: newPinInput }));
+    setAgent((a) => ({ ...a, pinHash: newPinHash }));
     setCurrentPinInput("");
     setNewPinInput("");
     setConfirmPinInput("");
@@ -2036,7 +2084,7 @@ export default function GuichetApp() {
 
   function handlePinConfirm(e) {
     e.preventDefault();
-    if (pinInput !== (agent?.pin || DEMO_PIN)) {
+    if (!verifyPin(pinInput)) {
       setPinError("Code PIN incorrect. Réessaie.");
       setPinInput("");
       return;
@@ -2152,6 +2200,78 @@ export default function GuichetApp() {
       text: "Suis ton volume, tes commissions et ton équipe en temps réel depuis le tableau de bord.",
     },
   ];
+
+  if (isAuthenticated && agent?.pinNeedsReset) {
+    return (
+      <div
+        style={{
+          background: COLORS.bg,
+          color: COLORS.text,
+          minHeight: "100%",
+          fontFamily: "'IBM Plex Sans', sans-serif",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: 24,
+        }}
+      >
+        <div style={{ width: "100%", maxWidth: 340 }}>
+          <div className="flex flex-col items-center mb-6 text-center">
+            <ShieldCheck size={40} style={{ color: COLORS.gold, marginBottom: 12 }} />
+            <h2 className="gc-display text-lg font-semibold mb-2">Sécurise ton code PIN</h2>
+            <p className="text-sm" style={{ color: COLORS.textMuted }}>
+              Pour ta sécurité, nous avons renforcé le stockage des codes PIN. Merci de créer un nouveau code PIN avant de continuer.
+            </p>
+          </div>
+          <form onSubmit={handleForcedPinReset}>
+            <label className="text-xs mb-1.5 block" style={{ color: COLORS.textMuted }}>Nouveau code PIN (4 chiffres)</label>
+            <input
+              value={forcedPinInput}
+              type="password"
+              inputMode="numeric"
+              maxLength={4}
+              autoFocus
+              onChange={(e) => { setForcedPinInput(e.target.value.replace(/\D/g, "").slice(0, 4)); setForcedPinError(""); }}
+              placeholder="••••"
+              className="w-full px-3.5 py-3 rounded-lg text-center text-lg mb-3 outline-none gc-mono tracking-[0.5em]"
+              style={{ background: COLORS.bgSoft, border: `1px solid ${COLORS.surfaceLine}`, color: COLORS.text }}
+            />
+            <label className="text-xs mb-1.5 block" style={{ color: COLORS.textMuted }}>Confirme le nouveau code PIN</label>
+            <input
+              value={forcedPinConfirmInput}
+              type="password"
+              inputMode="numeric"
+              maxLength={4}
+              onChange={(e) => { setForcedPinConfirmInput(e.target.value.replace(/\D/g, "").slice(0, 4)); setForcedPinError(""); }}
+              placeholder="••••"
+              className="w-full px-3.5 py-3 rounded-lg text-center text-lg mb-3 outline-none gc-mono tracking-[0.5em]"
+              style={{ background: COLORS.bgSoft, border: `1px solid ${COLORS.surfaceLine}`, color: COLORS.text }}
+            />
+            {forcedPinError && (
+              <p className="text-xs mb-3" style={{ color: COLORS.danger }}>{forcedPinError}</p>
+            )}
+            <button
+              type="submit"
+              disabled={forcedPinLoading || forcedPinInput.length !== 4}
+              className="gc-btn w-full py-3 rounded-lg text-sm font-medium disabled:opacity-50"
+              style={{ background: COLORS.gold, color: "#052E36" }}
+            >
+              {forcedPinLoading ? "Enregistrement..." : "Enregistrer mon nouveau PIN"}
+            </button>
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="w-full py-3 mt-2 rounded-lg text-sm"
+              style={{ color: COLORS.textMuted }}
+            >
+              Se déconnecter
+            </button>
+          </form>
+        </div>
+      </div>
+    );
+  }
 
   if (introStep < 4) {
     return (
@@ -5093,8 +5213,10 @@ export default function GuichetApp() {
             />
             {pinError ? (
               <p className="text-xs mb-4" style={{ color: COLORS.danger }}>{pinError}</p>
+            ) : !agent?.pinHash ? (
+              <p className="text-xs mb-4" style={{ color: COLORS.textMuted }}>Code démo : {DEMO_PIN}</p>
             ) : (
-              <p className="text-xs mb-4" style={{ color: COLORS.textMuted }}>Code démo : {agent?.pin || DEMO_PIN}</p>
+              <div className="mb-4" />
             )}
             <div className="flex gap-2">
               <button
