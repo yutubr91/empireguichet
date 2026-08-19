@@ -664,6 +664,18 @@ export default function GuichetApp() {
   const [pending, setPending] = useState(null);
   const [lastReceipt, setLastReceipt] = useState(null);
   const [formError, setFormError] = useState("");
+  // --- Gestion hors-ligne : statut de connexion + file d'attente locale des
+  // transactions non encore synchronisées avec Supabase ---
+  const [isOnline, setIsOnline] = useState(typeof navigator !== "undefined" ? navigator.onLine : true);
+  const [offlineQueue, setOfflineQueue] = useState(() => {
+    try {
+      const raw = localStorage.getItem("eg_offline_queue");
+      return raw ? JSON.parse(raw) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [syncingOffline, setSyncingOffline] = useState(false);
   const demoRef = useRef(null);
   const annonceursRef = useRef(null);
   const annoncesScrollRef = useRef(null);
@@ -1965,6 +1977,70 @@ export default function GuichetApp() {
     }
   }
 
+  // Écrit la file d'attente hors-ligne à la fois en mémoire et dans
+  // localStorage, pour qu'elle survive à une fermeture de l'appli.
+  function persistOfflineQueue(queue) {
+    setOfflineQueue(queue);
+    try {
+      localStorage.setItem("eg_offline_queue", JSON.stringify(queue));
+    } catch {
+      // stockage plein ou indisponible — la file reste au moins en mémoire
+    }
+  }
+
+  // Tente d'envoyer à Supabase toutes les transactions en attente. Les
+  // envois réussis sont retirés de la file ; les échecs y restent pour le
+  // prochain essai.
+  async function flushOfflineQueue() {
+    if (syncingOffline) return;
+    setOfflineQueue((current) => {
+      if (current.length === 0) return current;
+      (async () => {
+        setSyncingOffline(true);
+        const remaining = [];
+        let syncedCount = 0;
+        for (const tx of current) {
+          const { error } = await supabase.from("transactions").insert(tx);
+          if (error) remaining.push(tx);
+          else syncedCount++;
+        }
+        persistOfflineQueue(remaining);
+        setSyncingOffline(false);
+        if (syncedCount > 0) {
+          pushNotification(
+            syncedCount === 1
+              ? "1 transaction hors-ligne synchronisée."
+              : `${syncedCount} transactions hors-ligne synchronisées.`
+          );
+          if (agent?.id) loadMyHistory();
+        }
+      })();
+      return current;
+    });
+  }
+
+  // Surveille l'état de la connexion. Dès que le réseau revient, on tente
+  // aussitôt de vider la file d'attente hors-ligne.
+  useEffect(() => {
+    function handleOnline() {
+      setIsOnline(true);
+      flushOfflineQueue();
+    }
+    function handleOffline() {
+      setIsOnline(false);
+    }
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+    // Si l'appli s'ouvre déjà connectée avec des éléments en attente
+    // (ex. fermée puis rouverte), on tente aussi une synchronisation.
+    if (navigator.onLine) flushOfflineQueue();
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   useEffect(() => {
     if (agent?.id) loadMyHistory();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1977,10 +2053,13 @@ export default function GuichetApp() {
       setHistory((h) => [completed, ...h]);
       setLastReceipt(completed);
       setPending(null);
-      pushNotification(`Transaction confirmée — Ticket #${String(completed.id).padStart(5, "0")} (${formatFCFA(completed.amount)})`);
-      // Enregistrement réel dans Supabase — visible en temps réel par le chef d'agence
+      // Enregistrement dans Supabase — visible en temps réel par le chef d'agence.
+      // Si l'agent est hors-ligne (ou si l'envoi échoue malgré une connexion
+      // apparente), la transaction est mise en file d'attente locale et sera
+      // envoyée automatiquement dès que le réseau reviendra. Le ticket/reçu
+      // reste disponible immédiatement dans les deux cas.
       if (agent?.id) {
-        await supabase.from("transactions").insert({
+        const txPayload = {
           agent_id: agent.id,
           agency_id: agent.agencyId,
           ticket_id: completed.id,
@@ -1989,7 +2068,19 @@ export default function GuichetApp() {
           phone: completed.phone,
           direction: completed.direction,
           status: "Terminé",
-        });
+        };
+        if (!navigator.onLine) {
+          persistOfflineQueue([...offlineQueue, txPayload]);
+          pushNotification(`Ticket #${String(completed.id).padStart(5, "0")} enregistré hors-ligne — sera synchronisé au retour du réseau.`);
+        } else {
+          const { error } = await supabase.from("transactions").insert(txPayload);
+          if (error) {
+            persistOfflineQueue([...offlineQueue, txPayload]);
+            pushNotification(`Ticket #${String(completed.id).padStart(5, "0")} : échec d'envoi, mis en attente de synchronisation.`);
+          } else {
+            pushNotification(`Transaction confirmée — Ticket #${String(completed.id).padStart(5, "0")} (${formatFCFA(completed.amount)})`);
+          }
+        }
       }
     }, 1400);
     return () => clearTimeout(t);
@@ -2386,6 +2477,23 @@ export default function GuichetApp() {
           .gc-btn, .gc-card, .gc-fade-in { animation: none !important; transition: none !important; }
         }
       `}</style>
+
+      {/* ===== Bannière de connexion / synchronisation hors-ligne ===== */}
+      {(!isOnline || offlineQueue.length > 0) && (
+        <div
+          className="sticky top-0 z-30 px-4 py-2 text-center text-xs font-medium"
+          style={{
+            background: !isOnline ? COLORS.danger : COLORS.gold,
+            color: !isOnline ? "#FFFFFF" : "#052E36",
+          }}
+        >
+          {!isOnline
+            ? `Pas de connexion — les transactions sont enregistrées localement${offlineQueue.length > 0 ? ` (${offlineQueue.length} en attente)` : ""}.`
+            : syncingOffline
+            ? `Synchronisation de ${offlineQueue.length} transaction${offlineQueue.length > 1 ? "s" : ""} en cours...`
+            : `${offlineQueue.length} transaction${offlineQueue.length > 1 ? "s" : ""} en attente de synchronisation.`}
+        </div>
+      )}
 
       {/* ===== Header ===== */}
       <header
