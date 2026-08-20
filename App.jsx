@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import bcrypt from "bcryptjs";
+import { Html5Qrcode } from "html5-qrcode";
 import {
   Wallet,
   ArrowRightLeft,
@@ -658,6 +659,9 @@ export default function GuichetApp() {
   const [txDirection, setTxDirection] = useState("depot"); // "depot" (envoi) ou "retrait" (réception)
   const [amount, setAmount] = useState("");
   const [phone, setPhone] = useState("");
+  const [showQrScanner, setShowQrScanner] = useState(false);
+  const [qrScannerError, setQrScannerError] = useState("");
+  const qrScannerInstanceRef = useRef(null);
   const [txCountryCode, setTxCountryCode] = useState("+225");
   const [ticketCounter, setTicketCounter] = useState(4);
   const [history, setHistory] = useState([]);
@@ -2146,6 +2150,66 @@ export default function GuichetApp() {
   const fee = amtNum * net.fee;
   const total = amtNum + fee;
 
+  // Ouvre la caméra et lance le scan du QR code du client. Le champ ciblé (numéro
+  // mobile money ou adresse crypto) dépend du réseau sélectionné (net.type).
+  async function openQrScanner() {
+    setQrScannerError("");
+    setShowQrScanner(true);
+  }
+
+  function closeQrScanner() {
+    const instance = qrScannerInstanceRef.current;
+    if (instance) {
+      instance
+        .stop()
+        .then(() => instance.clear())
+        .catch(() => {});
+      qrScannerInstanceRef.current = null;
+    }
+    setShowQrScanner(false);
+    setQrScannerError("");
+  }
+
+  // Traite le texte décodé du QR code : extrait un numéro de téléphone pour les
+  // réseaux mobile money, ou utilise le texte tel quel pour une adresse crypto.
+  function handleQrDecoded(decodedText) {
+    if (net.type === "crypto") {
+      setPhone(decodedText.trim());
+    } else {
+      const digitsOnly = decodedText.replace(/\D/g, "");
+      // Retire un éventuel indicatif pays déjà présent dans le QR (ex. 225XXXXXXXXXX)
+      // pour ne garder que le numéro local, à la longueur attendue pour le pays sélectionné.
+      const expectedLen = COUNTRY_CODES.find((c) => c.code === txCountryCode)?.phoneLength || 10;
+      const localDigits = digitsOnly.length > expectedLen ? digitsOnly.slice(-expectedLen) : digitsOnly;
+      setPhone(sanitizePhoneDigits(localDigits, txCountryCode));
+    }
+    closeQrScanner();
+  }
+
+  useEffect(() => {
+    if (!showQrScanner) return;
+    const instance = new Html5Qrcode("qr-reader-box");
+    qrScannerInstanceRef.current = instance;
+    instance
+      .start(
+        { facingMode: "environment" },
+        { fps: 10, qrbox: { width: 240, height: 240 } },
+        (decodedText) => handleQrDecoded(decodedText),
+        () => {} // erreurs de frame ignorées, normales tant qu'aucun QR n'est détecté
+      )
+      .catch(() => {
+        setQrScannerError("Impossible d'accéder à la caméra. Vérifie les autorisations de ton navigateur.");
+      });
+    return () => {
+      instance
+        .stop()
+        .then(() => instance.clear())
+        .catch(() => {});
+      qrScannerInstanceRef.current = null;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showQrScanner]);
+
   // Préfixes officiels des opérateurs télécom, vérifiés pays par pays (sources : régulateurs
   // télécom nationaux / Wikipédia). Un réseau absent de la liste d'un pays (ex. MTN au Sénégal,
   // qui n'y opère pas) n'est volontairement pas vérifié pour ce pays — voir message à l'agent.
@@ -2570,6 +2634,41 @@ export default function GuichetApp() {
               style={{ color: COLORS.textMuted }}
             >
               Plus tard
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ===== Scanner de QR code (dépôt/retrait) ===== */}
+      {showQrScanner && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center px-5"
+          style={{ background: "rgba(0,0,0,0.8)" }}
+        >
+          <div
+            className="w-full max-w-sm rounded-2xl p-5 text-center"
+            style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}` }}
+          >
+            <h2 className="gc-display text-base font-semibold mb-3">Scanner le QR code du client</h2>
+            {qrScannerError ? (
+              <p className="text-sm mb-4" style={{ color: COLORS.danger }}>{qrScannerError}</p>
+            ) : (
+              <p className="text-xs mb-3" style={{ color: COLORS.textMuted }}>
+                Cadre le QR code du client dans la zone ci-dessous.
+              </p>
+            )}
+            <div
+              id="qr-reader-box"
+              className="w-full rounded-xl overflow-hidden mb-4"
+              style={{ background: "#000", minHeight: 260 }}
+            />
+            <button
+              type="button"
+              onClick={closeQrScanner}
+              className="gc-btn w-full py-3 rounded-lg text-sm font-medium"
+              style={{ background: COLORS.bgSoft, color: COLORS.text, border: `1px solid ${COLORS.surfaceLine}` }}
+            >
+              Annuler
             </button>
           </div>
         </div>
@@ -3930,16 +4029,29 @@ export default function GuichetApp() {
                   <CountryDropdown value={txCountryCode} onChange={setTxCountryCode} colors={COLORS} width="100%" />
                 </div>
               )}
-              <input
-                value={phone}
-                onChange={(e) =>
-                  setPhone(net.type === "momo" ? sanitizePhoneDigits(e.target.value, txCountryCode) : e.target.value)
-                }
-                placeholder={NETWORK_TYPE_LABELS[net.type].placeholder}
-                maxLength={net.type === "momo" ? (COUNTRY_CODES.find((c) => c.code === txCountryCode)?.phoneLength || 10) : undefined}
-                className="w-full px-3.5 py-2.5 rounded-lg text-sm mb-5 outline-none"
-                style={{ background: COLORS.bgSoft, border: `1px solid ${COLORS.surfaceLine}`, color: COLORS.text }}
-              />
+              <div className="flex gap-2 mb-5">
+                <input
+                  value={phone}
+                  onChange={(e) =>
+                    setPhone(net.type === "momo" ? sanitizePhoneDigits(e.target.value, txCountryCode) : e.target.value)
+                  }
+                  placeholder={NETWORK_TYPE_LABELS[net.type].placeholder}
+                  maxLength={net.type === "momo" ? (COUNTRY_CODES.find((c) => c.code === txCountryCode)?.phoneLength || 10) : undefined}
+                  className="flex-1 min-w-0 px-3.5 py-2.5 rounded-lg text-sm outline-none"
+                  style={{ background: COLORS.bgSoft, border: `1px solid ${COLORS.surfaceLine}`, color: COLORS.text }}
+                />
+                {(net.type === "momo" || net.type === "crypto") && (
+                  <button
+                    type="button"
+                    onClick={openQrScanner}
+                    aria-label="Scanner le QR code du client"
+                    className="gc-btn shrink-0 flex items-center justify-center rounded-lg"
+                    style={{ width: 44, background: COLORS.bgSoft, border: `1px solid ${COLORS.surfaceLine}` }}
+                  >
+                    <QrCode size={18} style={{ color: COLORS.gold }} />
+                  </button>
+                )}
+              </div>
 
               <label className="text-xs mb-2 block" style={{ color: COLORS.textMuted }}>Montant (FCFA)</label>
               <input
