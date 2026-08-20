@@ -705,6 +705,7 @@ export default function GuichetApp() {
   const [authError, setAuthError] = useState("");
   const [authLoading, setAuthLoading] = useState(false);
   const [signupCooldown, setSignupCooldown] = useState(0);
+  const [signupUserId, setSignupUserId] = useState(null);
   const [signupEmailCodeStep, setSignupEmailCodeStep] = useState(1);
   const [signupEmailCode, setSignupEmailCode] = useState("");
   const [signupEmailCodeInput, setSignupEmailCodeInput] = useState("");
@@ -847,7 +848,6 @@ export default function GuichetApp() {
   const [recoveryConfirmPassword, setRecoveryConfirmPassword] = useState("");
   const [recoveryError, setRecoveryError] = useState("");
   const [recoveryLoading, setRecoveryLoading] = useState(false);
-  const DEMO_RECOVERY_CODE = "852741";
 
   function maskEmail(email) {
     const [user, domain] = email.split("@");
@@ -874,29 +874,49 @@ export default function GuichetApp() {
       .select("email")
       .eq("phone", fullPhone)
       .maybeSingle();
-    setRecoveryLoading(false);
     if (error || !data) {
+      setRecoveryLoading(false);
       setRecoveryError("Aucun compte trouvé avec ce numéro de téléphone.");
       return;
     }
     if ((data.email || "").trim().toLowerCase() !== recoveryEmail.trim().toLowerCase()) {
+      setRecoveryLoading(false);
       setRecoveryError("Cette adresse Gmail ne correspond pas à celle enregistrée pour ce numéro.");
+      return;
+    }
+    // Déclenche le VRAI envoi d'un code de récupération via Supabase Auth (Brevo derrière).
+    const { error: resetErr } = await supabase.auth.resetPasswordForEmail(recoveryEmail);
+    setRecoveryLoading(false);
+    if (resetErr) {
+      const waitMatch = resetErr.message.match(/after (\d+) seconds?/i);
+      setRecoveryError(
+        waitMatch
+          ? `Merci de patienter ${waitMatch[1]} secondes avant de redemander un code.`
+          : "Erreur lors de l'envoi du code : " + resetErr.message
+      );
       return;
     }
     setRecoveryStep(2);
   }
 
-  function handleRecoveryVerifyCode(e) {
+  async function handleRecoveryVerifyCode(e) {
     e.preventDefault();
-    if (recoveryCode !== DEMO_RECOVERY_CODE) {
-      setRecoveryError("Code incorrect. Réessaie.");
+    setRecoveryError("");
+    setRecoveryLoading(true);
+    const { error } = await supabase.auth.verifyOtp({
+      email: recoveryEmail,
+      token: recoveryCode,
+      type: "recovery",
+    });
+    setRecoveryLoading(false);
+    if (error) {
+      setRecoveryError("Code incorrect ou expiré. Réessaie.");
       return;
     }
-    setRecoveryError("");
     setRecoveryStep(3);
   }
 
-  function handleRecoveryReset(e) {
+  async function handleRecoveryReset(e) {
     e.preventDefault();
     if (recoveryNewPassword.length < 6) {
       setRecoveryError("Le mot de passe doit contenir au moins 6 caractères.");
@@ -904,6 +924,19 @@ export default function GuichetApp() {
     }
     if (recoveryNewPassword !== recoveryConfirmPassword) {
       setRecoveryError("Les deux mots de passe ne correspondent pas.");
+      return;
+    }
+    setRecoveryError("");
+    setRecoveryLoading(true);
+    // La vérification du code (étape précédente) a ouvert une session temporaire
+    // de récupération : on peut donc mettre à jour le mot de passe directement.
+    const { error } = await supabase.auth.updateUser({ password: recoveryNewPassword });
+    // On referme cette session temporaire — l'agent devra se reconnecter normalement
+    // avec son nouveau mot de passe, comme n'importe quelle connexion.
+    await supabase.auth.signOut();
+    setRecoveryLoading(false);
+    if (error) {
+      setRecoveryError("Erreur lors de la mise à jour du mot de passe : " + error.message);
       return;
     }
     setRecoveryError("");
@@ -1477,15 +1510,6 @@ export default function GuichetApp() {
     setForcedPinConfirmInput("");
   }
 
-  // Génère un code de vérification à 6 chiffres — simule l'envoi d'un e-mail.
-  // ⚠️ En production, cet appel doit passer par une fonction serveur (ex. Supabase Edge Function,
-  // gratuite jusqu'à un gros volume d'appels) qui déclenche un vrai envoi d'e-mail via le SMTP
-  // intégré de Supabase (gratuit, avec un débit limité) ou un fournisseur comme Resend/Brevo pour
-  // un envoi plus fiable en production : le code ne doit jamais être généré ni visible côté client.
-  function generateEmailCode() {
-    return String(Math.floor(100000 + Math.random() * 900000));
-  }
-
   function handleSignupRequestCode(e) {
     e.preventDefault();
     if (!signupName || !signupPhone || !signupEmail || !signupAgency || !signupPassword || signupPin.length !== 4) {
@@ -1504,17 +1528,51 @@ export default function GuichetApp() {
       setAuthError("Demande le code d'agence à ton chef d'agence pour rejoindre son équipe.");
       return;
     }
+    requestSignupOtp();
+  }
+
+  // Déclenche le VRAI envoi d'e-mail via Supabase Auth : ceci crée le compte
+  // (non confirmé tant que le code n'est pas vérifié) et envoie un e-mail
+  // contenant un code à 6 chiffres, à condition que le modèle "Confirm signup"
+  // soit configuré pour afficher {{ .Token }} dans le dashboard Supabase.
+  async function requestSignupOtp() {
+    setAuthLoading(true);
     setAuthError("");
-    setSignupEmailCode(generateEmailCode());
+    const { data, error } = await supabase.auth.signUp({
+      email: signupEmail,
+      password: signupPassword,
+    });
+    setAuthLoading(false);
+    if (error) {
+      const waitMatch = error.message.match(/after (\d+) seconds?/i);
+      if (waitMatch) {
+        setSignupCooldown(parseInt(waitMatch[1], 10));
+        setAuthError("");
+      } else if (error.message.toLowerCase().includes("already registered")) {
+        setAuthError("Un compte existe déjà avec cet e-mail. Essaie de te connecter.");
+      } else {
+        setAuthError(error.message);
+      }
+      return;
+    }
+    setSignupUserId(data.user?.id || null);
     setSignupEmailCodeInput("");
     setSignupEmailCodeError("");
     setSignupEmailCodeStep(2);
   }
 
-  function handleResendSignupCode() {
-    setSignupEmailCode(generateEmailCode());
-    setSignupEmailCodeInput("");
+  // Redemande l'envoi d'un code via le mécanisme officiel de Supabase
+  // (limité à quelques envois par heure pour éviter les abus — c'est normal).
+  async function handleResendSignupCode() {
     setSignupEmailCodeError("");
+    const { error } = await supabase.auth.resend({ type: "signup", email: signupEmail });
+    if (error) {
+      const waitMatch = error.message.match(/after (\d+) seconds?/i);
+      if (waitMatch) setSignupCooldown(parseInt(waitMatch[1], 10));
+      else setSignupEmailCodeError("Impossible de renvoyer le code pour l'instant : " + error.message);
+    } else {
+      setSignupEmailCodeInput("");
+    }
   }
 
   function backToSignupForm() {
@@ -1525,51 +1583,30 @@ export default function GuichetApp() {
 
   async function handleSignup(e) {
     e.preventDefault();
-    if (signupEmailCodeInput.trim() !== signupEmailCode) {
-      setSignupEmailCodeError("Code incorrect. Vérifie l'e-mail reçu et réessaie.");
+    if (signupEmailCodeInput.trim().length !== 6) {
+      setSignupEmailCodeError("Entre le code à 6 chiffres reçu par e-mail.");
       return;
     }
     setSignupEmailCodeError("");
-    if (!signupName || !signupPhone || !signupEmail || !signupAgency || !signupPassword || signupPin.length !== 4) {
-      setAuthError(signupPin.length !== 4 ? "Le code PIN doit contenir exactement 4 chiffres." : "Merci de remplir tous les champs.");
-      return;
-    }
-    if (signupPassword !== signupConfirmPassword) {
-      setAuthError("Les deux mots de passe ne correspondent pas.");
-      return;
-    }
-    if (!signupEmail.toLowerCase().endsWith("@gmail.com")) {
-      setAuthError("Merci d'utiliser une adresse Gmail (ex. toncompte@gmail.com).");
-      return;
-    }
-    if (signupRole === "agent" && !signupAgencyCode) {
-      setAuthError("Demande le code d'agence à ton chef d'agence pour rejoindre son équipe.");
-      return;
-    }
-
     setAuthLoading(true);
     setAuthError("");
 
-    const { data, error } = await supabase.auth.signUp({
+    // Vérifie le code auprès de Supabase Auth — c'est le seul endroit où le
+    // vrai code existe, jamais côté client.
+    const { data: verifyData, error: verifyErr } = await supabase.auth.verifyOtp({
       email: signupEmail,
-      password: signupPassword,
+      token: signupEmailCodeInput.trim(),
+      type: "signup",
     });
-    if (error) {
+    if (verifyErr) {
       setAuthLoading(false);
-      const waitMatch = error.message.match(/after (\d+) seconds?/i);
-      if (waitMatch) {
-        setSignupCooldown(parseInt(waitMatch[1], 10));
-        setAuthError("");
-      } else {
-        setAuthError(error.message);
-      }
+      setSignupEmailCodeError("Code incorrect ou expiré. Vérifie l'e-mail reçu ou redemande un code.");
       return;
     }
-    const userId = data.user?.id;
+    const userId = verifyData.user?.id || signupUserId;
     if (!userId) {
       setAuthLoading(false);
-      setAuthError("Compte créé — vérifie ta boîte Gmail pour confirmer ton adresse, puis connecte-toi.");
-      setAuthMode("login");
+      setSignupEmailCodeError("Une erreur est survenue. Réessaie de demander un code.");
       return;
     }
 
@@ -1619,7 +1656,7 @@ export default function GuichetApp() {
       agency_name: agencyName,
       role: signupRole,
       pin_hash: signupPinHash,
-      kyc_email_verified: false,
+      kyc_email_verified: true,
       referred_by_phone: referredByPhone || null,
     });
     setAuthLoading(false);
@@ -1637,7 +1674,7 @@ export default function GuichetApp() {
       agencyId,
       pinHash: signupPinHash,
       role: signupRole,
-      kycEmailVerified: false,
+      kycEmailVerified: true,
       kycStatus: "incomplete",
       agencyCode: agencyCodeForAgent,
     });
@@ -3164,14 +3201,24 @@ export default function GuichetApp() {
                         className="w-full px-3.5 py-2.5 rounded-lg text-sm mb-2 outline-none gc-mono tracking-widest text-center"
                         style={{ background: COLORS.bgSoft, border: `1px solid ${COLORS.surfaceLine}`, color: COLORS.text }}
                       />
-                      <p className="text-xs mb-4" style={{ color: COLORS.textMuted }}>Code démo : {DEMO_RECOVERY_CODE}</p>
+                      <p className="text-xs mb-4" style={{ color: COLORS.textMuted }}>Le code expire après un court délai — clique sur "Renvoyer le code" si besoin.</p>
                       {recoveryError && <p className="text-xs mb-4" style={{ color: COLORS.danger }}>{recoveryError}</p>}
                       <button
                         type="submit"
-                        className="gc-btn w-full py-3 rounded-lg text-sm font-medium"
+                        disabled={recoveryLoading || recoveryCode.length !== 6}
+                        className="gc-btn w-full py-3 rounded-lg text-sm font-medium disabled:opacity-50"
                         style={{ background: COLORS.gold, color: "#052E36" }}
                       >
-                        Vérifier le code
+                        {recoveryLoading ? "Vérification..." : "Vérifier le code"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleRecoveryRequestCode}
+                        disabled={recoveryLoading}
+                        className="w-full py-3 mt-2 rounded-lg text-sm disabled:opacity-50"
+                        style={{ color: COLORS.textMuted }}
+                      >
+                        Renvoyer le code
                       </button>
                     </form>
                   )}
@@ -3199,10 +3246,11 @@ export default function GuichetApp() {
                       {recoveryError && <p className="text-xs mb-4" style={{ color: COLORS.danger }}>{recoveryError}</p>}
                       <button
                         type="submit"
-                        className="gc-btn w-full py-3 rounded-lg text-sm font-medium"
+                        disabled={recoveryLoading}
+                        className="gc-btn w-full py-3 rounded-lg text-sm font-medium disabled:opacity-50"
                         style={{ background: COLORS.gold, color: "#052E36" }}
                       >
-                        Réinitialiser le mot de passe
+                        {recoveryLoading ? "Enregistrement..." : "Réinitialiser le mot de passe"}
                       </button>
                     </form>
                   )}
