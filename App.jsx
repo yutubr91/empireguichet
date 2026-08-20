@@ -2152,8 +2152,21 @@ export default function GuichetApp() {
 
   // Ouvre la caméra et lance le scan du QR code du client. Le champ ciblé (numéro
   // mobile money ou adresse crypto) dépend du réseau sélectionné (net.type).
+  // La demande d'autorisation caméra est déclenchée ici, directement dans le clic,
+  // pour rester bien rattachée au geste de l'utilisateur (certains navigateurs
+  // bloquent la demande si elle arrive après un délai, ex. via un effet React).
   async function openQrScanner() {
     setQrScannerError("");
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      stream.getTracks().forEach((track) => track.stop());
+    } catch {
+      setQrScannerError(
+        "Impossible d'accéder à la caméra. Ferme les autres onglets ouverts, ou vérifie les autorisations caméra de ton navigateur pour ce site."
+      );
+      setShowQrScanner(true);
+      return;
+    }
     setShowQrScanner(true);
   }
 
