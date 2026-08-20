@@ -4239,8 +4239,8 @@ export default function GuichetApp() {
               </div>
             )}
 
-          <div className="rounded-xl overflow-hidden" style={{ border: `1px solid ${COLORS.surfaceLine}` }}>
-            <table className="w-full text-sm">
+          <div className="rounded-xl overflow-x-auto" style={{ border: `1px solid ${COLORS.surfaceLine}` }}>
+            <table className="w-full text-sm" style={{ minWidth: 480 }}>
               <thead>
                 <tr style={{ background: COLORS.surface, color: COLORS.textMuted }}>
                   <th className="text-left font-normal px-4 py-3">Ticket</th>
@@ -4721,8 +4721,8 @@ export default function GuichetApp() {
                 </p>
 
                 <div className="text-xs font-medium mb-3" style={{ color: COLORS.textMuted }}>TOUTES LES PUBLICITÉS ET ANNONCES ({allAds.length})</div>
-                <div className="rounded-xl overflow-hidden" style={{ border: `1px solid ${COLORS.surfaceLine}` }}>
-                  <table className="w-full text-xs">
+                <div className="rounded-xl overflow-x-auto" style={{ border: `1px solid ${COLORS.surfaceLine}` }}>
+                  <table className="w-full text-xs" style={{ minWidth: 560 }}>
                     <thead>
                       <tr style={{ background: COLORS.bgSoft, color: COLORS.textMuted }}>
                         <th className="text-left px-3 py-2.5">Titre</th>
@@ -4907,8 +4907,8 @@ export default function GuichetApp() {
               ))}
             </div>
 
-            <div className="rounded-xl overflow-hidden" style={{ border: `1px solid ${COLORS.surfaceLine}` }}>
-              <table className="w-full text-sm">
+            <div className="rounded-xl overflow-x-auto" style={{ border: `1px solid ${COLORS.surfaceLine}` }}>
+              <table className="w-full text-sm" style={{ minWidth: 520 }}>
                 <thead>
                   <tr style={{ background: COLORS.surface, color: COLORS.textMuted }}>
                     <th className="text-left font-normal px-4 py-3">Agent</th>
