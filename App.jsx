@@ -685,6 +685,7 @@ export default function GuichetApp() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [authMode, setAuthMode] = useState("login");
   const [agent, setAgent] = useState(null);
+  const [showWelcomePopup, setShowWelcomePopup] = useState(false);
   const [forcedPinInput, setForcedPinInput] = useState("");
   const [forcedPinConfirmInput, setForcedPinConfirmInput] = useState("");
   const [forcedPinError, setForcedPinError] = useState("");
@@ -801,6 +802,23 @@ export default function GuichetApp() {
     if (tab === "parrainage" && agent) loadRealReferrals();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab]);
+
+  // Pop-up de bienvenue : affichée une seule fois, à la toute première connexion
+  // d'un agent, tant que son KYC n'a pas encore été soumis.
+  useEffect(() => {
+    if (!isAuthenticated || !agent?.id) return;
+    if (agent.pinNeedsReset) return; // priorité à l'écran de sécurisation du PIN
+    if (agent.kycStatus !== "incomplete") return;
+    const seenKey = `eg_welcome_seen_${agent.id}`;
+    try {
+      if (localStorage.getItem(seenKey)) return;
+      localStorage.setItem(seenKey, "1");
+    } catch {
+      // stockage indisponible — on affiche quand même, sans persistance
+    }
+    setShowWelcomePopup(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthenticated, agent?.id, agent?.pinNeedsReset, agent?.kycStatus]);
 
   // Transactions de l'équipe (chef d'agence) — chargées puis mises à jour en temps réel
   const [teamTransactions, setTeamTransactions] = useState([]);
@@ -2514,6 +2532,48 @@ export default function GuichetApp() {
           .gc-btn, .gc-card, .gc-fade-in { animation: none !important; transition: none !important; }
         }
       `}</style>
+
+      {/* ===== Pop-up de bienvenue (première connexion, KYC non commencé) ===== */}
+      {showWelcomePopup && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center px-5"
+          style={{ background: "rgba(0,0,0,0.55)" }}
+          onClick={() => setShowWelcomePopup(false)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-sm rounded-2xl p-6 text-center"
+            style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}` }}
+          >
+            <div
+              className="mx-auto mb-4 flex items-center justify-center rounded-full"
+              style={{ width: 56, height: 56, background: COLORS.bgSoft }}
+            >
+              <FileCheck size={28} style={{ color: COLORS.gold }} />
+            </div>
+            <h2 className="gc-display text-lg font-semibold mb-2">Bienvenue sur EmpireGuichet !</h2>
+            <p className="text-sm mb-6" style={{ color: COLORS.textMuted }}>
+              Pour commencer à envoyer de l'argent à tes clients, commence par compléter ton KYC (Vérification d'identité) en cliquant sur l'onglet correspondant.
+            </p>
+            <button
+              type="button"
+              onClick={() => { setShowWelcomePopup(false); setTab("kyc"); }}
+              className="gc-btn w-full py-3 rounded-lg text-sm font-medium mb-2"
+              style={{ background: COLORS.gold, color: "#052E36" }}
+            >
+              Compléter mon KYC
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowWelcomePopup(false)}
+              className="w-full py-2 rounded-lg text-sm"
+              style={{ color: COLORS.textMuted }}
+            >
+              Plus tard
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* ===== Bannière de connexion / synchronisation hors-ligne ===== */}
       {(!isOnline || offlineQueue.length > 0) && (
