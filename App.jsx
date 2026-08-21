@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
 import bcrypt from "bcryptjs";
-import { Html5Qrcode } from "html5-qrcode";
 import {
   Wallet,
   ArrowRightLeft,
@@ -58,6 +57,10 @@ import {
   EyeOff,
   Image as ImageIcon,
   Trash2,
+  CreditCard,
+  Gift,
+  MessageSquare,
+  Lock,
 } from "lucide-react";
 import {
   BarChart,
@@ -72,6 +75,17 @@ import {
   Cell,
 } from "recharts";
 import { supabase } from "./supabaseClient";
+
+// ===== Tarification de l'abonnement EmpireGuichet =====
+const SUBSCRIPTION_PERIOD_MONTHS = 6;
+const SUBSCRIPTION_PRICING = {
+  agent: 2500,
+  manager: 2500,
+};
+const HISTORY_UNLOCK_PRICE = 200;
+const REFERRAL_COMMISSION_AMOUNT = 300;
+// Numéro à composer pour envoyer le paiement (à remplacer par le vrai numéro marchand)
+const PAYMENT_RECEIVING_NUMBER = "+225 XX XX XX XX XX";
 
 const DARK_COLORS = {
   bg: "#1B2A41",
@@ -659,9 +673,6 @@ export default function GuichetApp() {
   const [txDirection, setTxDirection] = useState("depot"); // "depot" (envoi) ou "retrait" (réception)
   const [amount, setAmount] = useState("");
   const [phone, setPhone] = useState("");
-  const [showQrScanner, setShowQrScanner] = useState(false);
-  const [qrScannerError, setQrScannerError] = useState("");
-  const qrScannerInstanceRef = useRef(null);
   const [txCountryCode, setTxCountryCode] = useState("+225");
   const [ticketCounter, setTicketCounter] = useState(4);
   const [history, setHistory] = useState([]);
@@ -689,7 +700,6 @@ export default function GuichetApp() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [authMode, setAuthMode] = useState("login");
   const [agent, setAgent] = useState(null);
-  const [showWelcomePopup, setShowWelcomePopup] = useState(false);
   const [forcedPinInput, setForcedPinInput] = useState("");
   const [forcedPinConfirmInput, setForcedPinConfirmInput] = useState("");
   const [forcedPinError, setForcedPinError] = useState("");
@@ -715,6 +725,28 @@ export default function GuichetApp() {
   const [signupEmailCode, setSignupEmailCode] = useState("");
   const [signupEmailCodeInput, setSignupEmailCodeInput] = useState("");
   const [signupEmailCodeError, setSignupEmailCodeError] = useState("");
+
+  // ===== Abonnement & paiements =====
+  const [subscription, setSubscription] = useState(null);
+  const [subscriptionLoading, setSubscriptionLoading] = useState(false);
+  const [myPayments, setMyPayments] = useState([]);
+  const [paymentRefInput, setPaymentRefInput] = useState("");
+  const [paymentSubmitting, setPaymentSubmitting] = useState(false);
+  const [paymentSubmitMsg, setPaymentSubmitMsg] = useState("");
+  const [historyRefInput, setHistoryRefInput] = useState("");
+  const [historySubmitting, setHistorySubmitting] = useState(false);
+  const [historySubmitMsg, setHistorySubmitMsg] = useState("");
+  const [myReferralCommissions, setMyReferralCommissions] = useState([]);
+
+  // ===== Backoffice abonnements (propriétaire de la plateforme) =====
+  const [pendingSubPayments, setPendingSubPayments] = useState([]);
+  const [pendingSubPaymentsLoading, setPendingSubPaymentsLoading] = useState(false);
+
+  // ===== Discussion entre agents =====
+  const [agentChatMessages, setAgentChatMessages] = useState([]);
+  const [agentChatInput, setAgentChatInput] = useState("");
+  const [agentChatLoading, setAgentChatLoading] = useState(false);
+  const agentChatEndRef = useRef(null);
 
   // Capture le parrain depuis le lien de parrainage (?parrain=...) dès l'ouverture du site
   const [referredByPhone, setReferredByPhone] = useState("");
@@ -781,6 +813,183 @@ export default function GuichetApp() {
     return data.code;
   }
 
+  // ===== Abonnement =====
+  // Période de 2 mois pour l'historique payant : Jan-Fév, Mar-Avr, Mai-Juin, Juil-Août, Sep-Oct, Nov-Déc
+  function bimonthStart(d = new Date()) {
+    const bucketMonth = Math.floor(d.getMonth() / 2) * 2;
+    return new Date(d.getFullYear(), bucketMonth, 1).toISOString().slice(0, 10);
+  }
+
+  async function fetchSubscription(agentId) {
+    setSubscriptionLoading(true);
+    const { data, error } = await supabase.from("subscriptions").select("*").eq("agent_id", agentId).maybeSingle();
+    setSubscriptionLoading(false);
+    if (error || !data) return null;
+    return data;
+  }
+
+  async function createPendingSubscription(agentId, role) {
+    const plan = role === "manager" ? "manager" : "agent";
+    const { data, error } = await supabase
+      .from("subscriptions")
+      .insert({
+        agent_id: agentId,
+        plan,
+        monthly_amount: SUBSCRIPTION_PRICING[plan],
+        status: "pending_payment",
+      })
+      .select()
+      .single();
+    if (!error) setSubscription(data);
+    return data;
+  }
+
+  async function loadMyPayments() {
+    if (!agent) return;
+    const { data, error } = await supabase
+      .from("subscription_payments")
+      .select("*")
+      .eq("agent_id", agent.id)
+      .order("created_at", { ascending: false });
+    if (!error && data) setMyPayments(data);
+  }
+
+  async function loadMyReferralCommissions() {
+    if (!agent) return;
+    const { data, error } = await supabase
+      .from("referral_commissions")
+      .select("*")
+      .eq("referrer_agent_id", agent.id)
+      .order("created_at", { ascending: false });
+    if (!error && data) setMyReferralCommissions(data);
+  }
+
+  // Statuts dérivés de l'abonnement (pas d'essai gratuit : accès uniquement si abonnement actif)
+  const isSubscriptionActive =
+    subscription?.status === "active" &&
+    subscription?.current_period_end &&
+    new Date(subscription.current_period_end).getTime() > Date.now();
+  // Le propriétaire de la plateforme n'est jamais bloqué
+  const hasFullAccess = !!agent?.isPlatformOwner || isSubscriptionActive;
+
+  const currentBimonthKey = bimonthStart();
+  const historyUnlockedThisPeriod =
+    !!agent?.isPlatformOwner ||
+    myPayments.some((p) => p.type === "historique" && p.period_month === currentBimonthKey && p.status === "validated");
+
+  async function handleDeclarePayment(type) {
+    if (!agent || !subscription) return;
+    const isHistory = type === "historique";
+    const refValue = isHistory ? historyRefInput : paymentRefInput;
+    if (!refValue.trim()) {
+      const msg = "Indique la référence de ton paiement mobile money avant d'envoyer.";
+      isHistory ? setHistorySubmitMsg(msg) : setPaymentSubmitMsg(msg);
+      return;
+    }
+    isHistory ? setHistorySubmitting(true) : setPaymentSubmitting(true);
+    const amount = isHistory ? HISTORY_UNLOCK_PRICE : subscription.monthly_amount;
+    const { error } = await supabase.from("subscription_payments").insert({
+      agent_id: agent.id,
+      type,
+      amount,
+      period_month: currentBimonthKey,
+      payment_reference: refValue.trim(),
+      status: "pending",
+    });
+    isHistory ? setHistorySubmitting(false) : setPaymentSubmitting(false);
+    if (error) {
+      const msg = "Erreur : " + error.message;
+      isHistory ? setHistorySubmitMsg(msg) : setPaymentSubmitMsg(msg);
+      return;
+    }
+    isHistory ? setHistoryRefInput("") : setPaymentRefInput("");
+    const okMsg = "Déclaration envoyée ✔ En attente de validation par l'équipe EmpireGuichet.";
+    isHistory ? setHistorySubmitMsg(okMsg) : setPaymentSubmitMsg(okMsg);
+    loadMyPayments();
+  }
+
+  // ===== Backoffice abonnements (propriétaire) =====
+  async function loadPendingSubPayments() {
+    setPendingSubPaymentsLoading(true);
+    const { data, error } = await supabase
+      .from("subscription_payments")
+      .select("*, agents:agent_id(full_name, phone, role)")
+      .eq("status", "pending")
+      .order("created_at", { ascending: true });
+    setPendingSubPaymentsLoading(false);
+    if (!error && data) setPendingSubPayments(data);
+  }
+
+  async function validateSubPayment(payment, approve) {
+    if (approve) {
+      const { error } = await supabase
+        .from("subscription_payments")
+        .update({ status: "validated", validated_at: new Date().toISOString() })
+        .eq("id", payment.id);
+      if (error) return;
+      if (payment.type === "abonnement") {
+        const periodEnd = new Date();
+        periodEnd.setMonth(periodEnd.getMonth() + SUBSCRIPTION_PERIOD_MONTHS);
+        await supabase
+          .from("subscriptions")
+          .update({ status: "active", current_period_end: periodEnd.toISOString(), updated_at: new Date().toISOString() })
+          .eq("agent_id", payment.agent_id);
+      }
+    } else {
+      await supabase.from("subscription_payments").update({ status: "rejected" }).eq("id", payment.id);
+    }
+    loadPendingSubPayments();
+  }
+
+  // ===== Discussion entre agents (chat) =====
+  async function loadChatMessages() {
+    setAgentChatLoading(true);
+    const { data, error } = await supabase
+      .from("chat_messages")
+      .select("*")
+      .order("created_at", { ascending: true })
+      .limit(100);
+    setAgentChatLoading(false);
+    if (!error && data) setAgentChatMessages(data);
+  }
+
+  async function handleSendChatMessage() {
+    if (!agent || !agentChatInput.trim()) return;
+    const content = agentChatInput.trim();
+    setAgentChatInput("");
+    await supabase.from("chat_messages").insert({
+      agent_id: agent.id,
+      agent_name: agent.name,
+      agent_role: agent.role,
+      content,
+    });
+  }
+
+  useEffect(() => {
+    if (tab === "discussion" && agent) {
+      loadChatMessages();
+      const channel = supabase
+        .channel("chat-messages")
+        .on(
+          "postgres_changes",
+          { event: "INSERT", schema: "public", table: "chat_messages" },
+          (payload) => setAgentChatMessages((prev) => [...prev, payload.new])
+        )
+        .subscribe();
+      return () => supabase.removeChannel(channel);
+    }
+  }, [tab, agent?.id]);
+
+  useEffect(() => {
+    if (agentChatEndRef.current) agentChatEndRef.current.scrollIntoView({ behavior: "smooth" });
+  }, [agentChatMessages]);
+
+  useEffect(() => {
+    if (tab === "abonnement" && agent) loadMyPayments();
+    if (tab === "parrainage" && agent) loadMyReferralCommissions();
+    if (tab === "backoffice-abonnements" && agent?.isPlatformOwner) loadPendingSubPayments();
+  }, [tab, agent?.id]);
+
   // ===== Équipe réelle (chef d'agence) et filleuls réels (parrainage) =====
   const [realTeam, setRealTeam] = useState([]);
   const [realTeamLoading, setRealTeamLoading] = useState(false);
@@ -806,23 +1015,6 @@ export default function GuichetApp() {
     if (tab === "parrainage" && agent) loadRealReferrals();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab]);
-
-  // Pop-up de bienvenue : affichée une seule fois, à la toute première connexion
-  // d'un agent, tant que son KYC n'a pas encore été soumis.
-  useEffect(() => {
-    if (!isAuthenticated || !agent?.id) return;
-    if (agent.pinNeedsReset) return; // priorité à l'écran de sécurisation du PIN
-    if (agent.kycStatus !== "incomplete") return;
-    const seenKey = `eg_welcome_seen_${agent.id}`;
-    try {
-      if (localStorage.getItem(seenKey)) return;
-      localStorage.setItem(seenKey, "1");
-    } catch {
-      // stockage indisponible — on affiche quand même, sans persistance
-    }
-    setShowWelcomePopup(true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAuthenticated, agent?.id, agent?.pinNeedsReset, agent?.kycStatus]);
 
   // Transactions de l'équipe (chef d'agence) — chargées puis mises à jour en temps réel
   const [teamTransactions, setTeamTransactions] = useState([]);
@@ -1504,6 +1696,8 @@ export default function GuichetApp() {
     }
     setAgent(profile);
     setIsAuthenticated(true);
+    const sub = await fetchSubscription(profile.id);
+    setSubscription(sub);
   }
 
   // Traite la création d'un nouveau PIN pour les agents dont l'ancien PIN
@@ -1702,6 +1896,7 @@ export default function GuichetApp() {
     });
     setIsAuthenticated(true);
     setAuthError("");
+    createPendingSubscription(userId, signupRole);
     setSignupPhoneStep(1);
     setSignupPhoneCode("");
     setSignupPhoneCodeInput("");
@@ -2150,79 +2345,6 @@ export default function GuichetApp() {
   const fee = amtNum * net.fee;
   const total = amtNum + fee;
 
-  // Ouvre la caméra et lance le scan du QR code du client. Le champ ciblé (numéro
-  // mobile money ou adresse crypto) dépend du réseau sélectionné (net.type).
-  // La demande d'autorisation caméra est déclenchée ici, directement dans le clic,
-  // pour rester bien rattachée au geste de l'utilisateur (certains navigateurs
-  // bloquent la demande si elle arrive après un délai, ex. via un effet React).
-  async function openQrScanner() {
-    setQrScannerError("");
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-      stream.getTracks().forEach((track) => track.stop());
-    } catch {
-      setQrScannerError(
-        "Impossible d'accéder à la caméra. Ferme les autres onglets ouverts, ou vérifie les autorisations caméra de ton navigateur pour ce site."
-      );
-      setShowQrScanner(true);
-      return;
-    }
-    setShowQrScanner(true);
-  }
-
-  function closeQrScanner() {
-    const instance = qrScannerInstanceRef.current;
-    if (instance) {
-      instance
-        .stop()
-        .then(() => instance.clear())
-        .catch(() => {});
-      qrScannerInstanceRef.current = null;
-    }
-    setShowQrScanner(false);
-    setQrScannerError("");
-  }
-
-  // Traite le texte décodé du QR code : extrait un numéro de téléphone pour les
-  // réseaux mobile money, ou utilise le texte tel quel pour une adresse crypto.
-  function handleQrDecoded(decodedText) {
-    if (net.type === "crypto") {
-      setPhone(decodedText.trim());
-    } else {
-      const digitsOnly = decodedText.replace(/\D/g, "");
-      // Retire un éventuel indicatif pays déjà présent dans le QR (ex. 225XXXXXXXXXX)
-      // pour ne garder que le numéro local, à la longueur attendue pour le pays sélectionné.
-      const expectedLen = COUNTRY_CODES.find((c) => c.code === txCountryCode)?.phoneLength || 10;
-      const localDigits = digitsOnly.length > expectedLen ? digitsOnly.slice(-expectedLen) : digitsOnly;
-      setPhone(sanitizePhoneDigits(localDigits, txCountryCode));
-    }
-    closeQrScanner();
-  }
-
-  useEffect(() => {
-    if (!showQrScanner) return;
-    const instance = new Html5Qrcode("qr-reader-box");
-    qrScannerInstanceRef.current = instance;
-    instance
-      .start(
-        { facingMode: "environment" },
-        { fps: 10, qrbox: { width: 240, height: 240 } },
-        (decodedText) => handleQrDecoded(decodedText),
-        () => {} // erreurs de frame ignorées, normales tant qu'aucun QR n'est détecté
-      )
-      .catch(() => {
-        setQrScannerError("Impossible d'accéder à la caméra. Vérifie les autorisations de ton navigateur.");
-      });
-    return () => {
-      instance
-        .stop()
-        .then(() => instance.clear())
-        .catch(() => {});
-      qrScannerInstanceRef.current = null;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showQrScanner]);
-
   // Préfixes officiels des opérateurs télécom, vérifiés pays par pays (sources : régulateurs
   // télécom nationaux / Wikipédia). Un réseau absent de la liste d'un pays (ex. MTN au Sénégal,
   // qui n'y opère pas) n'est volontairement pas vérifié pour ce pays — voir message à l'agent.
@@ -2388,6 +2510,8 @@ export default function GuichetApp() {
             }
             setAgent(profile);
             setIsAuthenticated(true);
+            const sub = await fetchSubscription(profile.id);
+            setSubscription(sub);
           }
         });
       }
@@ -2609,83 +2733,6 @@ export default function GuichetApp() {
           .gc-btn, .gc-card, .gc-fade-in { animation: none !important; transition: none !important; }
         }
       `}</style>
-
-      {/* ===== Pop-up de bienvenue (première connexion, KYC non commencé) ===== */}
-      {showWelcomePopup && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center px-5"
-          style={{ background: "rgba(0,0,0,0.55)" }}
-          onClick={() => setShowWelcomePopup(false)}
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-sm rounded-2xl p-6 text-center"
-            style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}` }}
-          >
-            <div
-              className="mx-auto mb-4 flex items-center justify-center rounded-full"
-              style={{ width: 56, height: 56, background: COLORS.bgSoft }}
-            >
-              <FileCheck size={28} style={{ color: COLORS.gold }} />
-            </div>
-            <h2 className="gc-display text-lg font-semibold mb-2">Bienvenue sur EmpireGuichet !</h2>
-            <p className="text-sm mb-6" style={{ color: COLORS.textMuted }}>
-              Pour commencer à envoyer de l'argent à tes clients, commence par compléter ton KYC (Vérification d'identité) en cliquant sur l'onglet correspondant.
-            </p>
-            <button
-              type="button"
-              onClick={() => { setShowWelcomePopup(false); setTab("kyc"); }}
-              className="gc-btn w-full py-3 rounded-lg text-sm font-medium mb-2"
-              style={{ background: COLORS.gold, color: "#052E36" }}
-            >
-              Compléter mon KYC
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowWelcomePopup(false)}
-              className="w-full py-2 rounded-lg text-sm"
-              style={{ color: COLORS.textMuted }}
-            >
-              Plus tard
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* ===== Scanner de QR code (dépôt/retrait) ===== */}
-      {showQrScanner && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center px-5"
-          style={{ background: "rgba(0,0,0,0.8)" }}
-        >
-          <div
-            className="w-full max-w-sm rounded-2xl p-5 text-center"
-            style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}` }}
-          >
-            <h2 className="gc-display text-base font-semibold mb-3">Scanner le QR code du client</h2>
-            {qrScannerError ? (
-              <p className="text-sm mb-4" style={{ color: COLORS.danger }}>{qrScannerError}</p>
-            ) : (
-              <p className="text-xs mb-3" style={{ color: COLORS.textMuted }}>
-                Cadre le QR code du client dans la zone ci-dessous.
-              </p>
-            )}
-            <div
-              id="qr-reader-box"
-              className="w-full rounded-xl overflow-hidden mb-4"
-              style={{ background: "#000", minHeight: 260 }}
-            />
-            <button
-              type="button"
-              onClick={closeQrScanner}
-              className="gc-btn w-full py-3 rounded-lg text-sm font-medium"
-              style={{ background: COLORS.bgSoft, color: COLORS.text, border: `1px solid ${COLORS.surfaceLine}` }}
-            >
-              Annuler
-            </button>
-          </div>
-        </div>
-      )}
 
       {/* ===== Bannière de connexion / synchronisation hors-ligne ===== */}
       {(!isOnline || offlineQueue.length > 0) && (
@@ -3518,8 +3565,20 @@ export default function GuichetApp() {
             ...(agent?.isPlatformOwner ? [{ id: "annonceur", label: "Annonceur", icon: Megaphone }] : []),
             { id: "publicites", label: "Publicités", icon: Megaphone },
             { id: "parrainage", label: "Parrainage", icon: Users },
+            {
+              id: "abonnement",
+              label: hasFullAccess ? "Abonnement" : "Abonnement ⚠",
+              icon: hasFullAccess ? CreditCard : Lock,
+            },
+            { id: "discussion", label: "Discussion", icon: MessageSquare },
             ...(agent?.role === "manager" ? [{ id: "equipe", label: "Équipe", icon: Crown }, { id: "kyc-review", label: "Vérifications KYC", icon: Fingerprint }] : []),
-            ...(agent?.isPlatformOwner ? [{ id: "kyc-review-managers", label: "Vérif. chefs d'agence", icon: ShieldCheck }, { id: "backoffice-pub", label: "Backoffice publicité", icon: BarChart3 }] : []),
+            ...(agent?.isPlatformOwner
+              ? [
+                  { id: "kyc-review-managers", label: "Vérif. chefs d'agence", icon: ShieldCheck },
+                  { id: "backoffice-pub", label: "Backoffice publicité", icon: BarChart3 },
+                  { id: "backoffice-abonnements", label: "Backoffice abonnements", icon: CreditCard },
+                ]
+              : []),
             { id: "parametres", label: "Paramètres", icon: Settings },
           ].map((t) => (
             <button
@@ -3537,8 +3596,45 @@ export default function GuichetApp() {
           ))}
         </div>
 
+        {/* Bandeau abonnement à activer */}
+        {!hasFullAccess && !agent?.isPlatformOwner && (
+          <div
+            className="flex items-center justify-between gap-3 p-3.5 rounded-xl mb-4"
+            style={{ background: "rgba(232,169,59,0.1)", border: `1px solid ${COLORS.gold}` }}
+          >
+            <div className="flex items-center gap-2 text-sm">
+              <Lock size={15} style={{ color: COLORS.goldSoft }} />
+              Ton abonnement de {formatFCFA(subscription?.monthly_amount || 0)} (valable 6 mois) n'est pas encore actif.
+            </div>
+            <button
+              onClick={() => setTab("abonnement")}
+              className="gc-btn text-xs font-medium px-3 py-1.5 rounded-lg"
+              style={{ background: COLORS.gold, color: "#052E36" }}
+            >
+              Activer maintenant
+            </button>
+          </div>
+        )}
+
         {/* Transaction tab */}
-        {tab === "dashboard" && (
+        {["dashboard", "transaction", "historique"].includes(tab) && !hasFullAccess ? (
+          <div className="gc-fade-in flex flex-col items-center justify-center text-center py-16 px-6 rounded-xl" style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}` }}>
+            <div className="w-14 h-14 rounded-full flex items-center justify-center mb-4" style={{ background: "rgba(232,169,59,0.15)" }}>
+              <Lock size={22} style={{ color: COLORS.goldSoft }} />
+            </div>
+            <div className="text-base font-semibold mb-2">Abonnement requis</div>
+            <p className="text-sm mb-5 max-w-md" style={{ color: COLORS.textMuted }}>
+              Pour utiliser EmpireGuichet (transactions, tableau de bord, historique), active ton abonnement de {formatFCFA(subscription?.monthly_amount || 0)}, valable 6 mois.
+            </p>
+            <button
+              onClick={() => setTab("abonnement")}
+              className="gc-btn flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium"
+              style={{ background: COLORS.gold, color: "#052E36" }}
+            >
+              <CreditCard size={15} /> Activer mon abonnement
+            </button>
+          </div>
+        ) : tab === "dashboard" && (
           <div className="gc-fade-in">
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
               {[
@@ -3954,7 +4050,7 @@ export default function GuichetApp() {
           </div>
         )}
 
-        {tab === "transaction" && !kycVerified && (
+        {tab === "transaction" && hasFullAccess && !kycVerified && (
           <div className="gc-fade-in p-8 rounded-xl text-center" style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}` }}>
             <AlertTriangle size={28} style={{ color: COLORS.goldSoft, margin: "0 auto 12px" }} />
             <p className="text-sm font-medium mb-2">Vérification KYC requise</p>
@@ -3971,7 +4067,7 @@ export default function GuichetApp() {
           </div>
         )}
 
-        {tab === "transaction" && kycVerified && (
+        {tab === "transaction" && hasFullAccess && kycVerified && (
           <div className="grid md:grid-cols-2 gap-6 gc-fade-in">
             <form
               onSubmit={handleSubmit}
@@ -4042,29 +4138,16 @@ export default function GuichetApp() {
                   <CountryDropdown value={txCountryCode} onChange={setTxCountryCode} colors={COLORS} width="100%" />
                 </div>
               )}
-              <div className="flex gap-2 mb-5">
-                <input
-                  value={phone}
-                  onChange={(e) =>
-                    setPhone(net.type === "momo" ? sanitizePhoneDigits(e.target.value, txCountryCode) : e.target.value)
-                  }
-                  placeholder={NETWORK_TYPE_LABELS[net.type].placeholder}
-                  maxLength={net.type === "momo" ? (COUNTRY_CODES.find((c) => c.code === txCountryCode)?.phoneLength || 10) : undefined}
-                  className="flex-1 min-w-0 px-3.5 py-2.5 rounded-lg text-sm outline-none"
-                  style={{ background: COLORS.bgSoft, border: `1px solid ${COLORS.surfaceLine}`, color: COLORS.text }}
-                />
-                {(net.type === "momo" || net.type === "crypto") && (
-                  <button
-                    type="button"
-                    onClick={openQrScanner}
-                    aria-label="Scanner le QR code du client"
-                    className="gc-btn shrink-0 flex items-center justify-center rounded-lg"
-                    style={{ width: 44, background: COLORS.bgSoft, border: `1px solid ${COLORS.surfaceLine}` }}
-                  >
-                    <QrCode size={18} style={{ color: COLORS.gold }} />
-                  </button>
-                )}
-              </div>
+              <input
+                value={phone}
+                onChange={(e) =>
+                  setPhone(net.type === "momo" ? sanitizePhoneDigits(e.target.value, txCountryCode) : e.target.value)
+                }
+                placeholder={NETWORK_TYPE_LABELS[net.type].placeholder}
+                maxLength={net.type === "momo" ? (COUNTRY_CODES.find((c) => c.code === txCountryCode)?.phoneLength || 10) : undefined}
+                className="w-full px-3.5 py-2.5 rounded-lg text-sm mb-5 outline-none"
+                style={{ background: COLORS.bgSoft, border: `1px solid ${COLORS.surfaceLine}`, color: COLORS.text }}
+              />
 
               <label className="text-xs mb-2 block" style={{ color: COLORS.textMuted }}>Montant (FCFA)</label>
               <input
@@ -4185,7 +4268,26 @@ export default function GuichetApp() {
         )}
 
         {/* Historique tab */}
-        {tab === "historique" && (
+        {tab === "historique" && hasFullAccess && !historyUnlockedThisPeriod && (
+          <div className="gc-fade-in flex flex-col items-center justify-center text-center py-16 px-6 rounded-xl" style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}` }}>
+            <div className="w-14 h-14 rounded-full flex items-center justify-center mb-4" style={{ background: "rgba(43,191,138,0.12)" }}>
+              <Clock size={22} style={{ color: COLORS.teal }} />
+            </div>
+            <div className="text-base font-semibold mb-2">Historique de cette période</div>
+            <p className="text-sm mb-5 max-w-md" style={{ color: COLORS.textMuted }}>
+              L'accès à l'historique détaillé de tes transactions est débloqué tous les 2 mois pour {formatFCFA(HISTORY_UNLOCK_PRICE)}.
+            </p>
+            <button
+              onClick={() => setTab("abonnement")}
+              className="gc-btn flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium"
+              style={{ background: COLORS.teal, color: "#052E36" }}
+            >
+              <Clock size={15} /> Débloquer l'historique — {formatFCFA(HISTORY_UNLOCK_PRICE)}
+            </button>
+          </div>
+        )}
+
+        {tab === "historique" && hasFullAccess && historyUnlockedThisPeriod && (
           <div className="gc-fade-in">
             <div className="flex flex-col md:flex-row gap-2 mb-4">
               <div className="relative flex-1">
@@ -4252,8 +4354,8 @@ export default function GuichetApp() {
               </div>
             )}
 
-          <div className="rounded-xl overflow-x-auto" style={{ border: `1px solid ${COLORS.surfaceLine}` }}>
-            <table className="w-full text-sm" style={{ minWidth: 480 }}>
+          <div className="rounded-xl overflow-hidden" style={{ border: `1px solid ${COLORS.surfaceLine}` }}>
+            <table className="w-full text-sm">
               <thead>
                 <tr style={{ background: COLORS.surface, color: COLORS.textMuted }}>
                   <th className="text-left font-normal px-4 py-3">Ticket</th>
@@ -4734,8 +4836,8 @@ export default function GuichetApp() {
                 </p>
 
                 <div className="text-xs font-medium mb-3" style={{ color: COLORS.textMuted }}>TOUTES LES PUBLICITÉS ET ANNONCES ({allAds.length})</div>
-                <div className="rounded-xl overflow-x-auto" style={{ border: `1px solid ${COLORS.surfaceLine}` }}>
-                  <table className="w-full text-xs" style={{ minWidth: 560 }}>
+                <div className="rounded-xl overflow-hidden" style={{ border: `1px solid ${COLORS.surfaceLine}` }}>
+                  <table className="w-full text-xs">
                     <thead>
                       <tr style={{ background: COLORS.bgSoft, color: COLORS.textMuted }}>
                         <th className="text-left px-3 py-2.5">Titre</th>
@@ -4875,6 +4977,246 @@ export default function GuichetApp() {
                 Fais scanner ce code par une connaissance — elle arrivera directement sur la page d'inscription.
               </p>
             </div>
+
+            <div className="p-6 rounded-xl md:col-span-2" style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}` }}>
+              <div className="flex items-center gap-2 mb-1">
+                <Gift size={16} style={{ color: COLORS.teal }} />
+                <span className="text-sm font-medium">Tes commissions de parrainage</span>
+              </div>
+              <p className="text-xs mb-4" style={{ color: COLORS.textMuted }}>
+                Tu gagnes {formatFCFA(REFERRAL_COMMISSION_AMOUNT)} dès qu'une personne que tu as invitée active son abonnement (une seule génération — pas de cascade sur les filleuls de tes filleuls).
+              </p>
+              <div className="p-4 rounded-lg mb-4" style={{ background: "rgba(43,191,138,0.1)", border: `1px solid ${COLORS.surfaceLine}` }}>
+                <div className="text-xs mb-1" style={{ color: COLORS.textMuted }}>Total gagné</div>
+                <div className="gc-display gc-mono text-xl font-semibold" style={{ color: COLORS.teal }}>
+                  {formatFCFA(myReferralCommissions.reduce((sum, c) => sum + c.amount, 0))}
+                </div>
+              </div>
+              {myReferralCommissions.length === 0 ? (
+                <p className="text-xs" style={{ color: COLORS.textMuted }}>Aucune commission pour le moment.</p>
+              ) : (
+                <div className="space-y-2">
+                  {myReferralCommissions.map((c) => (
+                    <div key={c.id} className="p-3 rounded-lg flex items-center justify-between" style={{ background: COLORS.bgSoft, border: `1px solid ${COLORS.surfaceLine}` }}>
+                      <div className="text-sm gc-mono">{formatFCFA(c.amount)}</div>
+                      <span
+                        className="text-xs px-2 py-1 rounded-full"
+                        style={{
+                          background: c.status === "paid" ? "rgba(43,191,138,0.15)" : "rgba(217,164,65,0.15)",
+                          color: c.status === "paid" ? COLORS.teal : COLORS.goldSoft,
+                        }}
+                      >
+                        {c.status === "paid" ? "Payée" : "En attente"}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Onglet Abonnement */}
+        {tab === "abonnement" && (
+          <div className="gc-fade-in grid md:grid-cols-2 gap-4">
+            <div className="p-6 rounded-xl" style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}` }}>
+              <div className="flex items-center gap-2 mb-3">
+                <CreditCard size={16} style={{ color: COLORS.goldSoft }} />
+                <span className="text-sm font-medium">Mon abonnement</span>
+              </div>
+
+              <div className="p-4 rounded-lg mb-4" style={{ background: COLORS.bgSoft, border: `1px solid ${COLORS.surfaceLine}` }}>
+                <div className="text-xs mb-1" style={{ color: COLORS.textMuted }}>
+                  Formule {agent?.role === "manager" ? "Chef d'agence" : "Agent simple"}
+                </div>
+                <div className="gc-display gc-mono text-xl font-semibold">{formatFCFA(subscription?.monthly_amount || 0)} / 6 mois</div>
+              </div>
+
+              <div className="p-4 rounded-lg mb-5" style={{ background: agent?.isPlatformOwner || hasFullAccess ? "rgba(43,191,138,0.1)" : "rgba(200,60,60,0.1)", border: `1px solid ${COLORS.surfaceLine}` }}>
+                {agent?.isPlatformOwner ? (
+                  <div className="text-sm">Accès illimité — propriétaire de la plateforme.</div>
+                ) : isSubscriptionActive ? (
+                  <div className="text-sm">
+                    Abonnement actif jusqu'au {new Date(subscription.current_period_end).toLocaleDateString("fr-FR")}.
+                  </div>
+                ) : (
+                  <div className="text-sm">Ton accès n'est pas encore actif. Déclare ton paiement ci-dessous pour l'activer.</div>
+                )}
+              </div>
+
+              <p className="text-xs mb-2" style={{ color: COLORS.textMuted }}>
+                Envoie {formatFCFA(subscription?.monthly_amount || 0)} au numéro <span className="gc-mono">{PAYMENT_RECEIVING_NUMBER}</span> (Orange Money, MTN, Moov ou Wave), puis indique la référence de la transaction ci-dessous.
+              </p>
+              <input
+                value={paymentRefInput}
+                onChange={(e) => setPaymentRefInput(e.target.value)}
+                placeholder="Référence de la transaction"
+                className="w-full px-3.5 py-2.5 rounded-lg text-sm outline-none mb-2"
+                style={{ background: COLORS.bgSoft, border: `1px solid ${COLORS.surfaceLine}`, color: COLORS.text }}
+              />
+              <button
+                onClick={() => handleDeclarePayment("abonnement")}
+                disabled={paymentSubmitting}
+                className="gc-btn w-full flex items-center justify-center gap-1.5 py-2.5 rounded-lg text-sm font-medium"
+                style={{ background: COLORS.gold, color: "#052E36", opacity: paymentSubmitting ? 0.6 : 1 }}
+              >
+                <Send size={14} /> {paymentSubmitting ? "Envoi…" : "Déclarer mon paiement"}
+              </button>
+              {paymentSubmitMsg && (
+                <p className="text-xs mt-2" style={{ color: COLORS.teal }}>{paymentSubmitMsg}</p>
+              )}
+
+              {myPayments.length > 0 && (
+                <div className="mt-5 space-y-2">
+                  <div className="text-xs font-medium" style={{ color: COLORS.textMuted }}>HISTORIQUE DES DÉCLARATIONS</div>
+                  {myPayments.map((p) => (
+                    <div key={p.id} className="p-3 rounded-lg flex items-center justify-between" style={{ background: COLORS.bgSoft, border: `1px solid ${COLORS.surfaceLine}` }}>
+                      <div>
+                        <div className="text-sm">{p.type === "abonnement" ? "Abonnement" : "Historique"} — {formatFCFA(p.amount)}</div>
+                        <div className="text-xs" style={{ color: COLORS.textMuted }}>{new Date(p.created_at).toLocaleDateString("fr-FR")}</div>
+                      </div>
+                      <span
+                        className="text-xs px-2 py-1 rounded-full"
+                        style={{
+                          background: p.status === "validated" ? "rgba(43,191,138,0.15)" : p.status === "rejected" ? "rgba(200,60,60,0.15)" : "rgba(217,164,65,0.15)",
+                          color: p.status === "validated" ? COLORS.teal : p.status === "rejected" ? COLORS.danger : COLORS.goldSoft,
+                        }}
+                      >
+                        {p.status === "validated" ? "Validé" : p.status === "rejected" ? "Refusé" : "En attente"}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="p-6 rounded-xl" style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}` }}>
+              <div className="flex items-center gap-2 mb-3">
+                <Clock size={16} style={{ color: COLORS.teal }} />
+                <span className="text-sm font-medium">Débloquer l'historique (2 mois)</span>
+              </div>
+              <p className="text-xs mb-4" style={{ color: COLORS.textMuted }}>
+                L'accès à l'historique détaillé (recherche, filtres, export PDF/Excel) coûte {formatFCFA(HISTORY_UNLOCK_PRICE)} tous les 2 mois, séparément de l'abonnement.
+              </p>
+              {historyUnlockedThisPeriod ? (
+                <div className="p-4 rounded-lg text-sm" style={{ background: "rgba(43,191,138,0.1)", border: `1px solid ${COLORS.surfaceLine}` }}>
+                  Historique débloqué pour cette période ✔
+                </div>
+              ) : (
+                <>
+                  <input
+                    value={historyRefInput}
+                    onChange={(e) => setHistoryRefInput(e.target.value)}
+                    placeholder="Référence de la transaction"
+                    className="w-full px-3.5 py-2.5 rounded-lg text-sm outline-none mb-2"
+                    style={{ background: COLORS.bgSoft, border: `1px solid ${COLORS.surfaceLine}`, color: COLORS.text }}
+                  />
+                  <button
+                    onClick={() => handleDeclarePayment("historique")}
+                    disabled={historySubmitting}
+                    className="gc-btn w-full flex items-center justify-center gap-1.5 py-2.5 rounded-lg text-sm font-medium"
+                    style={{ background: COLORS.teal, color: "#052E36", opacity: historySubmitting ? 0.6 : 1 }}
+                  >
+                    <Send size={14} /> {historySubmitting ? "Envoi…" : `Déclarer — ${formatFCFA(HISTORY_UNLOCK_PRICE)}`}
+                  </button>
+                  {historySubmitMsg && (
+                    <p className="text-xs mt-2" style={{ color: COLORS.teal }}>{historySubmitMsg}</p>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Onglet Discussion entre agents */}
+        {tab === "discussion" && (
+          <div className="gc-fade-in p-4 rounded-xl flex flex-col" style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}`, height: 520 }}>
+            <div className="flex items-center gap-2 mb-3 pb-3" style={{ borderBottom: `1px solid ${COLORS.surfaceLine}` }}>
+              <MessageSquare size={16} style={{ color: COLORS.goldSoft }} />
+              <span className="text-sm font-medium">Discussion entre agents</span>
+              <span className="text-xs ml-auto" style={{ color: COLORS.textMuted }}>Idées, questions, entraide</span>
+            </div>
+            <div className="flex-1 overflow-y-auto space-y-3 pr-1">
+              {agentChatLoading && agentChatMessages.length === 0 && (
+                <div className="text-xs text-center py-6" style={{ color: COLORS.textMuted }}>Chargement…</div>
+              )}
+              {agentChatMessages.map((m) => (
+                <div key={m.id} className={`flex ${m.agent_id === agent?.id ? "justify-end" : "justify-start"}`}>
+                  <div
+                    className="max-w-[75%] p-3 rounded-xl text-sm"
+                    style={{
+                      background: m.agent_id === agent?.id ? COLORS.gold : COLORS.bgSoft,
+                      color: m.agent_id === agent?.id ? "#052E36" : COLORS.text,
+                      border: m.agent_id === agent?.id ? "none" : `1px solid ${COLORS.surfaceLine}`,
+                    }}
+                  >
+                    <div className="text-[10px] font-medium mb-1 flex items-center gap-1" style={{ opacity: 0.75 }}>
+                      {m.agent_name} {m.agent_role === "manager" && <Crown size={10} />}
+                    </div>
+                    {m.content}
+                  </div>
+                </div>
+              ))}
+              <div ref={agentChatEndRef} />
+            </div>
+            <div className="flex gap-2 pt-3 mt-2" style={{ borderTop: `1px solid ${COLORS.surfaceLine}` }}>
+              <input
+                value={agentChatInput}
+                onChange={(e) => setAgentChatInput(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleSendChatMessage()}
+                placeholder="Écris ton message…"
+                className="flex-1 px-3.5 py-2.5 rounded-lg text-sm outline-none"
+                style={{ background: COLORS.bgSoft, border: `1px solid ${COLORS.surfaceLine}`, color: COLORS.text }}
+              />
+              <button
+                onClick={handleSendChatMessage}
+                className="gc-btn px-4 py-2.5 rounded-lg"
+                style={{ background: COLORS.gold, color: "#052E36" }}
+              >
+                <Send size={15} />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Backoffice abonnements (propriétaire) */}
+        {tab === "backoffice-abonnements" && agent?.isPlatformOwner && (
+          <div className="gc-fade-in">
+            <div className="text-sm font-medium mb-3">Paiements en attente de validation</div>
+            {pendingSubPaymentsLoading ? (
+              <div className="text-xs" style={{ color: COLORS.textMuted }}>Chargement…</div>
+            ) : pendingSubPayments.length === 0 ? (
+              <div className="text-xs" style={{ color: COLORS.textMuted }}>Aucun paiement en attente.</div>
+            ) : (
+              <div className="space-y-2">
+                {pendingSubPayments.map((p) => (
+                  <div key={p.id} className="p-4 rounded-xl flex items-center justify-between gap-3" style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}` }}>
+                    <div>
+                      <div className="text-sm font-medium">{p.agents?.full_name} — {p.agents?.phone}</div>
+                      <div className="text-xs" style={{ color: COLORS.textMuted }}>
+                        {p.type === "abonnement" ? "Abonnement" : "Historique"} · {formatFCFA(p.amount)} · réf. {p.payment_reference}
+                      </div>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => validateSubPayment(p, true)}
+                        className="gc-btn px-3 py-1.5 rounded-lg text-xs font-medium"
+                        style={{ background: COLORS.teal, color: "#052E36" }}
+                      >
+                        Valider
+                      </button>
+                      <button
+                        onClick={() => validateSubPayment(p, false)}
+                        className="gc-btn px-3 py-1.5 rounded-lg text-xs font-medium border"
+                        style={{ borderColor: COLORS.surfaceLine, color: COLORS.textMuted }}
+                      >
+                        Refuser
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
@@ -4920,8 +5262,8 @@ export default function GuichetApp() {
               ))}
             </div>
 
-            <div className="rounded-xl overflow-x-auto" style={{ border: `1px solid ${COLORS.surfaceLine}` }}>
-              <table className="w-full text-sm" style={{ minWidth: 520 }}>
+            <div className="rounded-xl overflow-hidden" style={{ border: `1px solid ${COLORS.surfaceLine}` }}>
+              <table className="w-full text-sm">
                 <thead>
                   <tr style={{ background: COLORS.surface, color: COLORS.textMuted }}>
                     <th className="text-left font-normal px-4 py-3">Agent</th>
