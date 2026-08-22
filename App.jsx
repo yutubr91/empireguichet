@@ -753,6 +753,10 @@ export default function GuichetApp() {
   // ===== Discussion entre agents =====
   const [agentChatMessages, setAgentChatMessages] = useState([]);
   const [discussionOpen, setDiscussionOpen] = useState(false);
+  const [chatShowRealName, setChatShowRealName] = useState(false);
+  const [chatRecipient, setChatRecipient] = useState(null); // null = discussion générale
+  const [chatTeamList, setChatTeamList] = useState([]); // chef d'agence : ses agents
+  const [chatMyManager, setChatMyManager] = useState(null); // agent simple : son chef
   const [agentChatInput, setAgentChatInput] = useState("");
   const [agentChatLoading, setAgentChatLoading] = useState(false);
   const agentChatEndRef = useRef(null);
@@ -959,13 +963,44 @@ export default function GuichetApp() {
   }
 
   // ===== Discussion entre agents (chat) =====
+  // Nom affiché : pseudonyme stable par défaut, vrai nom seulement si l'agent
+  // a activé "chatShowRealName".
+  function chatDisplayName() {
+    if (!agent) return "Agent";
+    if (chatShowRealName) return agent.name;
+    return "Agent #" + String(agent.id || "").replace(/-/g, "").slice(-4).toUpperCase();
+  }
+
+  async function loadChatPrefs() {
+    if (!agent) return;
+    const { data } = await supabase.from("agents").select("chat_show_real_name").eq("id", agent.id).maybeSingle();
+    if (data) setChatShowRealName(!!data.chat_show_real_name);
+    if (agent.role === "manager") {
+      const { data: team } = await supabase.rpc("get_team_members");
+      if (team) setChatTeamList(team);
+    } else {
+      const { data: mgr } = await supabase.rpc("get_my_manager");
+      if (mgr && mgr.length > 0) setChatMyManager(mgr[0]);
+    }
+  }
+
+  async function toggleChatShowRealName() {
+    const next = !chatShowRealName;
+    setChatShowRealName(next);
+    if (agent) await supabase.from("agents").update({ chat_show_real_name: next }).eq("id", agent.id);
+  }
+
   async function loadChatMessages() {
     setAgentChatLoading(true);
-    const { data, error } = await supabase
-      .from("chat_messages")
-      .select("*")
-      .order("created_at", { ascending: true })
-      .limit(100);
+    let query = supabase.from("chat_messages").select("*").order("created_at", { ascending: true }).limit(100);
+    if (chatRecipient) {
+      query = query.or(
+        `and(agent_id.eq.${agent.id},recipient_id.eq.${chatRecipient.id}),and(agent_id.eq.${chatRecipient.id},recipient_id.eq.${agent.id})`
+      );
+    } else {
+      query = query.is("recipient_id", null);
+    }
+    const { data, error } = await query;
     setAgentChatLoading(false);
     if (!error && data) setAgentChatMessages(data);
   }
@@ -978,9 +1013,10 @@ export default function GuichetApp() {
       .from("chat_messages")
       .insert({
         agent_id: agent.id,
-        agent_name: agent.name,
+        agent_name: chatDisplayName(),
         agent_role: agent.role,
         content,
+        recipient_id: chatRecipient ? chatRecipient.id : null,
       })
       .select()
       .single();
@@ -996,19 +1032,25 @@ export default function GuichetApp() {
 
   useEffect(() => {
     if (discussionOpen && agent) {
+      loadChatPrefs();
       loadChatMessages();
       const channel = supabase
         .channel("chat-messages")
-        .on(
-          "postgres_changes",
-          { event: "INSERT", schema: "public", table: "chat_messages" },
-          (payload) =>
-            setAgentChatMessages((prev) => (prev.some((m) => m.id === payload.new.id) ? prev : [...prev, payload.new]))
-        )
+        .on("postgres_changes", { event: "INSERT", schema: "public", table: "chat_messages" }, (payload) => {
+          const m = payload.new;
+          // On ne garde que les messages qui appartiennent à la conversation
+          // actuellement ouverte (générale, ou privée avec la bonne personne).
+          const belongsHere = chatRecipient
+            ? (m.agent_id === agent.id && m.recipient_id === chatRecipient.id) ||
+              (m.agent_id === chatRecipient.id && m.recipient_id === agent.id)
+            : m.recipient_id === null;
+          if (!belongsHere) return;
+          setAgentChatMessages((prev) => (prev.some((x) => x.id === m.id) ? prev : [...prev, m]));
+        })
         .subscribe();
       return () => supabase.removeChannel(channel);
     }
-  }, [discussionOpen, agent?.id]);
+  }, [discussionOpen, agent?.id, chatRecipient?.id]);
 
   useEffect(() => {
     if (agentChatEndRef.current) agentChatEndRef.current.scrollIntoView({ behavior: "smooth" });
@@ -6063,17 +6105,74 @@ export default function GuichetApp() {
               }}
             >
               {/* Header */}
-              <div className="flex items-center justify-between px-4 py-3" style={{ borderBottom: `1px solid ${COLORS.surfaceLine}` }}>
-                <span className="text-sm font-medium">Discussion entre agents</span>
-                <button onClick={() => setDiscussionOpen(false)} aria-label="Fermer la discussion entre agents">
-                  <X size={18} style={{ color: COLORS.textMuted }} />
-                </button>
+              <div className="flex flex-col" style={{ borderBottom: `1px solid ${COLORS.surfaceLine}` }}>
+                <div className="flex items-center justify-between px-4 py-3">
+                  <span className="text-sm font-medium">
+                    {chatRecipient ? `Privé — ${chatRecipient.full_name}` : "Discussion entre agents"}
+                  </span>
+                  <button onClick={() => setDiscussionOpen(false)} aria-label="Fermer la discussion entre agents">
+                    <X size={18} style={{ color: COLORS.textMuted }} />
+                  </button>
+                </div>
+                {/* Sélecteur de conversation */}
+                <div className="flex items-center gap-1.5 px-3 pb-2.5 overflow-x-auto">
+                  <button
+                    onClick={() => setChatRecipient(null)}
+                    className="text-xs px-2.5 py-1 rounded-full whitespace-nowrap"
+                    style={{
+                      background: !chatRecipient ? COLORS.gold : COLORS.bgSoft,
+                      color: !chatRecipient ? "#052E36" : COLORS.textMuted,
+                    }}
+                  >
+                    Générale
+                  </button>
+                  {agent?.role === "manager" &&
+                    chatTeamList.map((t) => (
+                      <button
+                        key={t.id}
+                        onClick={() => setChatRecipient({ id: t.id, full_name: t.full_name })}
+                        className="text-xs px-2.5 py-1 rounded-full whitespace-nowrap"
+                        style={{
+                          background: chatRecipient?.id === t.id ? COLORS.gold : COLORS.bgSoft,
+                          color: chatRecipient?.id === t.id ? "#052E36" : COLORS.textMuted,
+                        }}
+                      >
+                        {t.full_name}
+                      </button>
+                    ))}
+                  {agent?.role === "agent" && chatMyManager && (
+                    <button
+                      onClick={() => setChatRecipient({ id: chatMyManager.id, full_name: chatMyManager.full_name })}
+                      className="text-xs px-2.5 py-1 rounded-full whitespace-nowrap flex items-center gap-1"
+                      style={{
+                        background: chatRecipient?.id === chatMyManager.id ? COLORS.gold : COLORS.bgSoft,
+                        color: chatRecipient?.id === chatMyManager.id ? "#052E36" : COLORS.textMuted,
+                      }}
+                    >
+                      <Crown size={10} /> {chatMyManager.full_name}
+                    </button>
+                  )}
+                  <button
+                    onClick={toggleChatShowRealName}
+                    className="text-xs px-2.5 py-1 rounded-full whitespace-nowrap ml-auto flex items-center gap-1 shrink-0"
+                    style={{ background: COLORS.bgSoft, color: COLORS.textMuted }}
+                    title={chatShowRealName ? "Ton vrai nom est visible" : "Tu es anonyme"}
+                  >
+                    {chatShowRealName ? <Eye size={11} /> : <EyeOff size={11} />}
+                    {chatShowRealName ? "Nom visible" : "Anonyme"}
+                  </button>
+                </div>
               </div>
 
               {/* Messages */}
               <div className="flex-1 overflow-y-auto p-3 space-y-3">
                 {agentChatLoading && agentChatMessages.length === 0 && (
                   <div className="text-xs text-center py-6" style={{ color: COLORS.textMuted }}>Chargement…</div>
+                )}
+                {!agentChatLoading && agentChatMessages.length === 0 && (
+                  <div className="text-xs text-center py-6" style={{ color: COLORS.textMuted }}>
+                    {chatRecipient ? "Aucun message privé pour l'instant." : "Sois le premier à écrire !"}
+                  </div>
                 )}
                 {agentChatMessages.map((m) => (
                   <div key={m.id} className={`flex ${m.agent_id === agent?.id ? "justify-end" : "justify-start"}`}>
@@ -6086,7 +6185,16 @@ export default function GuichetApp() {
                       }}
                     >
                       <div className="text-[10px] font-medium mb-1 flex items-center gap-1" style={{ opacity: 0.75 }}>
-                        {m.agent_name} {m.agent_role === "manager" && <Crown size={10} />}
+                        {m.agent_name}
+                        <span
+                          className="px-1.5 py-0.5 rounded-full text-[9px] font-semibold"
+                          style={{
+                            background: m.agent_role === "manager" ? "rgba(232,169,59,0.25)" : "rgba(43,191,138,0.2)",
+                            color: m.agent_id === agent?.id ? "#052E36" : m.agent_role === "manager" ? COLORS.goldSoft : COLORS.teal,
+                          }}
+                        >
+                          {m.agent_role === "manager" ? "Chef d'agence" : "Agent"}
+                        </span>
                       </div>
                       {m.content}
                     </div>
@@ -6101,7 +6209,7 @@ export default function GuichetApp() {
                   value={agentChatInput}
                   onChange={(e) => setAgentChatInput(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && handleSendChatMessage()}
-                  placeholder="Écris ton message…"
+                  placeholder={chatRecipient ? `Message privé à ${chatRecipient.full_name}…` : "Écris ton message…"}
                   className="flex-1 px-3.5 py-2.5 rounded-lg text-sm outline-none"
                   style={{ background: COLORS.bgSoft, border: `1px solid ${COLORS.surfaceLine}`, color: COLORS.text }}
                 />
