@@ -3576,6 +3576,7 @@ export default function GuichetApp() {
         {/* Tabs */}
         <div className="flex gap-2 mb-6 flex-wrap">
           {[
+            { id: "discussion", label: "Discussion", icon: MessageSquare },
             { id: "dashboard", label: "Tableau de bord", icon: BarChart3 },
             { id: "kyc", label: kycVerified ? "Vérification KYC" : "Vérification KYC ⚠", icon: kycVerified ? FileCheck : AlertTriangle },
             { id: "transaction", label: "Nouvelle transaction", icon: ArrowRightLeft },
@@ -3588,7 +3589,6 @@ export default function GuichetApp() {
               label: hasFullAccess ? "Abonnement" : "Abonnement ⚠",
               icon: hasFullAccess ? CreditCard : Lock,
             },
-            { id: "discussion", label: "Discussion", icon: MessageSquare },
             ...(agent?.role === "manager" ? [{ id: "equipe", label: "Équipe", icon: Crown }, { id: "kyc-review", label: "Vérifications KYC", icon: Fingerprint }] : []),
             ...(agent?.isPlatformOwner
               ? [
@@ -3604,7 +3604,9 @@ export default function GuichetApp() {
               onClick={() => setTab(t.id)}
               className="gc-btn flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium"
               style={
-                tab === t.id
+                t.id === "discussion"
+                  ? { background: COLORS.teal, color: "#08221A", border: "none" }
+                  : tab === t.id
                   ? { background: COLORS.gold, color: "#052E36" }
                   : { background: COLORS.surface, color: COLORS.textMuted, border: `1px solid ${COLORS.surfaceLine}` }
               }
@@ -6080,6 +6082,20 @@ export default function GuichetApp() {
               Fermer
             </button>
           </div>
+        </div>
+      )}
+
+      {/* ===== Bulle flottante — Discussion entre agents (au-dessus de la bulle service client) ===== */}
+      {isAuthenticated && (
+        <div style={{ position: "fixed", bottom: 92, right: 20, zIndex: 30 }}>
+          <button
+            onClick={() => setTab("discussion")}
+            aria-label="Discussion entre agents"
+            className="gc-btn w-14 h-14 rounded-full flex items-center justify-center"
+            style={{ background: COLORS.teal, color: "#08221A", boxShadow: "0 10px 30px -10px rgba(43,191,138,0.6)" }}
+          >
+            <MessageSquare size={22} />
+          </button>
         </div>
       )}
 
