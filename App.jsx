@@ -82,6 +82,14 @@ const SUBSCRIPTION_PRICING = {
   agent: 2500,
   manager: 2500,
 };
+// Montant à afficher : on privilégie la valeur enregistrée sur l'abonnement,
+// mais si elle est absente ou à 0 (abonnement pas encore créé en base, ou
+// ligne créée avant la mise en place du tarif), on retombe sur le tarif
+// courant du plan plutôt que d'afficher 0 FCFA.
+function getSubscriptionAmount(subscription, role) {
+  const fallback = SUBSCRIPTION_PRICING[role === "manager" ? "manager" : "agent"];
+  return subscription?.monthly_amount || fallback;
+}
 const HISTORY_UNLOCK_PRICE = 200;
 const REFERRAL_COMMISSION_AMOUNT = 300;
 // Numéro à composer pour envoyer le paiement (à remplacer par le vrai numéro marchand)
@@ -840,7 +848,15 @@ export default function GuichetApp() {
       })
       .select()
       .single();
-    if (!error) setSubscription(data);
+    if (error) {
+      // On loggue l'erreur au lieu de l'avaler silencieusement : sans ça,
+      // un agent reste bloqué sur "0 FCFA" pour toujours sans qu'on sache
+      // pourquoi la création de son abonnement a échoué (souvent une
+      // politique RLS ou un id agent qui ne correspond pas à auth.uid()).
+      console.error("Échec de création de l'abonnement :", error.message);
+      return null;
+    }
+    setSubscription(data);
     return data;
   }
 
@@ -1897,7 +1913,7 @@ export default function GuichetApp() {
     });
     setIsAuthenticated(true);
     setAuthError("");
-    createPendingSubscription(userId, signupRole);
+    await createPendingSubscription(userId, signupRole);
     setSignupPhoneStep(1);
     setSignupPhoneCode("");
     setSignupPhoneCodeInput("");
@@ -3606,7 +3622,7 @@ export default function GuichetApp() {
           >
             <div className="flex items-center gap-2 text-sm">
               <Lock size={15} style={{ color: COLORS.goldSoft }} />
-              Ton abonnement de {formatFCFA(subscription?.monthly_amount || 0)} (valable 6 mois) n'est pas encore actif.
+              Ton abonnement de {formatFCFA(getSubscriptionAmount(subscription, agent?.role))} (valable 6 mois) n'est pas encore actif.
             </div>
             <button
               onClick={() => setTab("abonnement")}
@@ -3626,7 +3642,7 @@ export default function GuichetApp() {
             </div>
             <div className="text-base font-semibold mb-2">Abonnement requis</div>
             <p className="text-sm mb-5 max-w-md" style={{ color: COLORS.textMuted }}>
-              Pour utiliser EmpireGuichet (transactions, tableau de bord, historique), active ton abonnement de {formatFCFA(subscription?.monthly_amount || 0)}, valable 6 mois.
+              Pour utiliser EmpireGuichet (transactions, tableau de bord, historique), active ton abonnement de {formatFCFA(getSubscriptionAmount(subscription, agent?.role))}, valable 6 mois.
             </p>
             <button
               onClick={() => setTab("abonnement")}
@@ -5031,7 +5047,7 @@ export default function GuichetApp() {
                 <div className="text-xs mb-1" style={{ color: COLORS.textMuted }}>
                   Formule {agent?.role === "manager" ? "Chef d'agence" : "Agent simple"}
                 </div>
-                <div className="gc-display gc-mono text-xl font-semibold">{formatFCFA(subscription?.monthly_amount || 0)} / 6 mois</div>
+                <div className="gc-display gc-mono text-xl font-semibold">{formatFCFA(getSubscriptionAmount(subscription, agent?.role))} / 6 mois</div>
               </div>
 
               <div className="p-4 rounded-lg mb-5" style={{ background: agent?.isPlatformOwner || hasFullAccess ? "rgba(43,191,138,0.1)" : "rgba(200,60,60,0.1)", border: `1px solid ${COLORS.surfaceLine}` }}>
@@ -5047,7 +5063,7 @@ export default function GuichetApp() {
               </div>
 
               <p className="text-xs mb-2" style={{ color: COLORS.textMuted }}>
-                Envoie {formatFCFA(subscription?.monthly_amount || 0)} au numéro <span className="gc-mono">{PAYMENT_RECEIVING_NUMBER}</span> (Orange Money, MTN, Moov ou Wave), puis indique la référence de la transaction ci-dessous.
+                Envoie {formatFCFA(getSubscriptionAmount(subscription, agent?.role))} au numéro <span className="gc-mono">{PAYMENT_RECEIVING_NUMBER}</span> (Orange Money, MTN, Moov ou Wave), puis indique la référence de la transaction ci-dessous.
               </p>
               <input
                 value={paymentRefInput}
