@@ -974,12 +974,24 @@ export default function GuichetApp() {
     if (!agent || !agentChatInput.trim()) return;
     const content = agentChatInput.trim();
     setAgentChatInput("");
-    await supabase.from("chat_messages").insert({
-      agent_id: agent.id,
-      agent_name: agent.name,
-      agent_role: agent.role,
-      content,
-    });
+    const { data, error } = await supabase
+      .from("chat_messages")
+      .insert({
+        agent_id: agent.id,
+        agent_name: agent.name,
+        agent_role: agent.role,
+        content,
+      })
+      .select()
+      .single();
+    if (error) {
+      console.error("Échec d'envoi du message :", error.message);
+      setAgentChatInput(content); // on remet le texte pour ne pas le perdre
+      return;
+    }
+    // Affichage immédiat : on n'attend pas l'événement temps réel, qui peut
+    // être indisponible ou en retard côté Supabase.
+    setAgentChatMessages((prev) => (prev.some((m) => m.id === data.id) ? prev : [...prev, data]));
   }
 
   useEffect(() => {
@@ -990,7 +1002,8 @@ export default function GuichetApp() {
         .on(
           "postgres_changes",
           { event: "INSERT", schema: "public", table: "chat_messages" },
-          (payload) => setAgentChatMessages((prev) => [...prev, payload.new])
+          (payload) =>
+            setAgentChatMessages((prev) => (prev.some((m) => m.id === payload.new.id) ? prev : [...prev, payload.new]))
         )
         .subscribe();
       return () => supabase.removeChannel(channel);
