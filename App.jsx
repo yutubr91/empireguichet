@@ -1120,16 +1120,26 @@ export default function GuichetApp() {
     return () => supabase.removeChannel(channel);
   }, [agent?.id]);
 
-  // Quand on ouvre une conversation privée, on efface sa pastille de non-lu.
+  // La pastille de non-lu ne s'efface QUE quand on QUITTE la conversation
+  // (fermeture de la bulle, ou changement de destinataire) — pas au moment
+  // où on l'ouvre, pour laisser le temps de vraiment lire le message avant
+  // qu'elle ne disparaisse.
+  const viewedConversationRef = useRef({ discussionOpen: false, chatRecipientId: null });
   useEffect(() => {
-    if (discussionOpen && chatRecipient) {
+    const was = viewedConversationRef.current;
+    const wasViewing = was.discussionOpen && was.chatRecipientId;
+    const stillViewingSame = discussionOpen && chatRecipient?.id === was.chatRecipientId;
+    if (wasViewing && !stillViewingSame) {
+      // On quitte (ou on change de) la conversation qu'on regardait : on la marque lue.
+      const leftId = was.chatRecipientId;
       setUnreadPrivateSenders((prev) => {
-        if (!prev.has(chatRecipient.id)) return prev;
+        if (!prev.has(leftId)) return prev;
         const next = new Set(prev);
-        next.delete(chatRecipient.id);
+        next.delete(leftId);
         return next;
       });
     }
+    viewedConversationRef.current = { discussionOpen, chatRecipientId: chatRecipient?.id || null };
   }, [discussionOpen, chatRecipient]);
 
   useEffect(() => {
