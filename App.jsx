@@ -1196,9 +1196,14 @@ export default function GuichetApp() {
       .select("email")
       .eq("phone", fullPhone)
       .maybeSingle();
-    if (error || !data) {
+    if (error) {
       setRecoveryLoading(false);
-      setRecoveryError("Aucun compte trouvé avec ce numéro de téléphone.");
+      setRecoveryError("Connexion impossible — vérifie ta connexion internet et réessaie.");
+      return;
+    }
+    if (!data) {
+      setRecoveryLoading(false);
+      setRecoveryError("Vérifie ton numéro de téléphone — nous ne retrouvons pas de compte associé.");
       return;
     }
     if ((data.email || "").trim().toLowerCase() !== recoveryEmail.trim().toLowerCase()) {
@@ -1779,9 +1784,14 @@ export default function GuichetApp() {
     setAuthError("");
     const fullLoginPhone = `${loginCountryCode} ${loginPhone}`.trim();
     const { data: emailResult, error: lookupErr } = await supabase.rpc("get_email_by_phone", { phone_input: fullLoginPhone });
-    if (lookupErr || !emailResult) {
+    if (lookupErr) {
       setAuthLoading(false);
-      setAuthError("Aucun compte trouvé avec ce numéro de téléphone.");
+      setAuthError("Connexion impossible — vérifie ta connexion internet et réessaie.");
+      return;
+    }
+    if (!emailResult) {
+      setAuthLoading(false);
+      setAuthError("Vérifie ton numéro de téléphone — nous ne retrouvons pas de compte associé.");
       return;
     }
     const { data, error } = await supabase.auth.signInWithPassword({
