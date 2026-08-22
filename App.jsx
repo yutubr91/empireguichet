@@ -982,7 +982,7 @@ export default function GuichetApp() {
   }
 
   useEffect(() => {
-    if (tab === "discussion" && agent) {
+    if (discussionOpen && agent) {
       loadChatMessages();
       const channel = supabase
         .channel("chat-messages")
@@ -994,7 +994,7 @@ export default function GuichetApp() {
         .subscribe();
       return () => supabase.removeChannel(channel);
     }
-  }, [tab, agent?.id]);
+  }, [discussionOpen, agent?.id]);
 
   useEffect(() => {
     if (agentChatEndRef.current) agentChatEndRef.current.scrollIntoView({ behavior: "smooth" });
@@ -2189,6 +2189,7 @@ export default function GuichetApp() {
 
   // Support widget state
   const [supportOpen, setSupportOpen] = useState(false);
+  const [discussionOpen, setDiscussionOpen] = useState(false);
   const [supportTab, setSupportTab] = useState("chat");
   const [openFaq, setOpenFaq] = useState(null);
   const [chatMessages, setChatMessages] = useState([
@@ -3576,7 +3577,6 @@ export default function GuichetApp() {
         {/* Tabs */}
         <div className="flex gap-2 mb-6 flex-wrap">
           {[
-            { id: "discussion", label: "Discussion", icon: MessageSquare },
             { id: "dashboard", label: "Tableau de bord", icon: BarChart3 },
             { id: "kyc", label: kycVerified ? "Vérification KYC" : "Vérification KYC ⚠", icon: kycVerified ? FileCheck : AlertTriangle },
             { id: "transaction", label: "Nouvelle transaction", icon: ArrowRightLeft },
@@ -3604,9 +3604,7 @@ export default function GuichetApp() {
               onClick={() => setTab(t.id)}
               className="gc-btn flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium"
               style={
-                t.id === "discussion"
-                  ? { background: COLORS.teal, color: "#08221A", border: "none" }
-                  : tab === t.id
+                tab === t.id
                   ? { background: COLORS.gold, color: "#052E36" }
                   : { background: COLORS.surface, color: COLORS.textMuted, border: `1px solid ${COLORS.surfaceLine}` }
               }
@@ -5148,56 +5146,7 @@ export default function GuichetApp() {
           </div>
         )}
 
-        {/* Onglet Discussion entre agents */}
-        {tab === "discussion" && (
-          <div className="gc-fade-in p-4 rounded-xl flex flex-col" style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}`, height: 520 }}>
-            <div className="flex items-center gap-2 mb-3 pb-3" style={{ borderBottom: `1px solid ${COLORS.surfaceLine}` }}>
-              <MessageSquare size={16} style={{ color: COLORS.goldSoft }} />
-              <span className="text-sm font-medium">Discussion entre agents</span>
-              <span className="text-xs ml-auto" style={{ color: COLORS.textMuted }}>Idées, questions, entraide</span>
-            </div>
-            <div className="flex-1 overflow-y-auto space-y-3 pr-1">
-              {agentChatLoading && agentChatMessages.length === 0 && (
-                <div className="text-xs text-center py-6" style={{ color: COLORS.textMuted }}>Chargement…</div>
-              )}
-              {agentChatMessages.map((m) => (
-                <div key={m.id} className={`flex ${m.agent_id === agent?.id ? "justify-end" : "justify-start"}`}>
-                  <div
-                    className="max-w-[75%] p-3 rounded-xl text-sm"
-                    style={{
-                      background: m.agent_id === agent?.id ? COLORS.gold : COLORS.bgSoft,
-                      color: m.agent_id === agent?.id ? "#052E36" : COLORS.text,
-                      border: m.agent_id === agent?.id ? "none" : `1px solid ${COLORS.surfaceLine}`,
-                    }}
-                  >
-                    <div className="text-[10px] font-medium mb-1 flex items-center gap-1" style={{ opacity: 0.75 }}>
-                      {m.agent_name} {m.agent_role === "manager" && <Crown size={10} />}
-                    </div>
-                    {m.content}
-                  </div>
-                </div>
-              ))}
-              <div ref={agentChatEndRef} />
-            </div>
-            <div className="flex gap-2 pt-3 mt-2" style={{ borderTop: `1px solid ${COLORS.surfaceLine}` }}>
-              <input
-                value={agentChatInput}
-                onChange={(e) => setAgentChatInput(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleSendChatMessage()}
-                placeholder="Écris ton message…"
-                className="flex-1 px-3.5 py-2.5 rounded-lg text-sm outline-none"
-                style={{ background: COLORS.bgSoft, border: `1px solid ${COLORS.surfaceLine}`, color: COLORS.text }}
-              />
-              <button
-                onClick={handleSendChatMessage}
-                className="gc-btn px-4 py-2.5 rounded-lg"
-                style={{ background: COLORS.gold, color: "#052E36" }}
-              >
-                <Send size={15} />
-              </button>
-            </div>
-          </div>
-        )}
+        {/* Discussion entre agents déplacée en bulle flottante (voir plus bas) */}
 
         {/* Backoffice abonnements (propriétaire) */}
         {tab === "backoffice-abonnements" && agent?.isPlatformOwner && (
@@ -6088,8 +6037,74 @@ export default function GuichetApp() {
       {/* ===== Bulle flottante — Discussion entre agents (au-dessus de la bulle service client) ===== */}
       {isAuthenticated && (
         <div style={{ position: "fixed", bottom: 92, right: 20, zIndex: 30 }}>
+          {discussionOpen && (
+            <div
+              className="gc-fade-in mb-3 rounded-xl overflow-hidden flex flex-col"
+              style={{
+                width: 340,
+                maxWidth: "88vw",
+                height: 460,
+                background: COLORS.surface,
+                border: `1px solid ${COLORS.surfaceLine}`,
+                boxShadow: "0 20px 50px -20px rgba(0,0,0,0.7)",
+              }}
+            >
+              {/* Header */}
+              <div className="flex items-center justify-between px-4 py-3" style={{ borderBottom: `1px solid ${COLORS.surfaceLine}` }}>
+                <span className="text-sm font-medium">Discussion entre agents</span>
+                <button onClick={() => setDiscussionOpen(false)} aria-label="Fermer la discussion entre agents">
+                  <X size={18} style={{ color: COLORS.textMuted }} />
+                </button>
+              </div>
+
+              {/* Messages */}
+              <div className="flex-1 overflow-y-auto p-3 space-y-3">
+                {agentChatLoading && agentChatMessages.length === 0 && (
+                  <div className="text-xs text-center py-6" style={{ color: COLORS.textMuted }}>Chargement…</div>
+                )}
+                {agentChatMessages.map((m) => (
+                  <div key={m.id} className={`flex ${m.agent_id === agent?.id ? "justify-end" : "justify-start"}`}>
+                    <div
+                      className="max-w-[85%] p-3 rounded-xl text-sm"
+                      style={{
+                        background: m.agent_id === agent?.id ? COLORS.gold : COLORS.bgSoft,
+                        color: m.agent_id === agent?.id ? "#052E36" : COLORS.text,
+                        border: m.agent_id === agent?.id ? "none" : `1px solid ${COLORS.surfaceLine}`,
+                      }}
+                    >
+                      <div className="text-[10px] font-medium mb-1 flex items-center gap-1" style={{ opacity: 0.75 }}>
+                        {m.agent_name} {m.agent_role === "manager" && <Crown size={10} />}
+                      </div>
+                      {m.content}
+                    </div>
+                  </div>
+                ))}
+                <div ref={agentChatEndRef} />
+              </div>
+
+              {/* Input */}
+              <div className="flex gap-2 p-3" style={{ borderTop: `1px solid ${COLORS.surfaceLine}` }}>
+                <input
+                  value={agentChatInput}
+                  onChange={(e) => setAgentChatInput(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleSendChatMessage()}
+                  placeholder="Écris ton message…"
+                  className="flex-1 px-3.5 py-2.5 rounded-lg text-sm outline-none"
+                  style={{ background: COLORS.bgSoft, border: `1px solid ${COLORS.surfaceLine}`, color: COLORS.text }}
+                />
+                <button
+                  onClick={handleSendChatMessage}
+                  className="gc-btn w-9 h-9 rounded-lg flex items-center justify-center"
+                  style={{ background: COLORS.gold, color: "#052E36" }}
+                >
+                  <Send size={14} />
+                </button>
+              </div>
+            </div>
+          )}
+
           <button
-            onClick={() => setTab("discussion")}
+            onClick={() => setDiscussionOpen((v) => !v)}
             aria-label="Discussion entre agents"
             className="gc-btn w-14 h-14 rounded-full flex items-center justify-center"
             style={{
@@ -6098,7 +6113,7 @@ export default function GuichetApp() {
               color: "#08221A",
             }}
           >
-            <Users size={22} />
+            {discussionOpen ? <X size={22} /> : <Users size={22} />}
           </button>
         </div>
       )}
