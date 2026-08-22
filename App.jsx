@@ -968,6 +968,17 @@ export default function GuichetApp() {
   }
 
   // ===== Discussion entre agents (chat) =====
+  function formatChatTime(iso) {
+    if (!iso) return "";
+    const d = new Date(iso);
+    const now = new Date();
+    const sameDay = d.toDateString() === now.toDateString();
+    const heure = d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+    if (sameDay) return heure;
+    const jour = d.toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit" });
+    return `${jour} · ${heure}`;
+  }
+
   // Nom affiché : pseudonyme stable par défaut, vrai nom seulement si l'agent
   // a activé "chatShowRealName".
   function chatDisplayName() {
@@ -6249,6 +6260,12 @@ export default function GuichetApp() {
                         </span>
                       </div>
                       {m.content}
+                      <div
+                        className="text-[9px] mt-1 text-right"
+                        style={{ opacity: 0.65, color: m.agent_id === agent?.id ? "#052E36" : COLORS.textMuted }}
+                      >
+                        {formatChatTime(m.created_at)}
+                      </div>
                     </div>
                   </div>
                 ))}
