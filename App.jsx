@@ -968,6 +968,34 @@ export default function GuichetApp() {
   }
 
   // ===== Discussion entre agents (chat) =====
+  // Petit son de notification (généré directement, pas de fichier audio à
+  // héberger) — joué uniquement pour un nouveau message privé non lu.
+  function playChatNotificationSound() {
+    try {
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      if (!Ctx) return;
+      const ctx = new Ctx();
+      const now = ctx.currentTime;
+      [880, 1175].forEach((freq, i) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = "sine";
+        osc.frequency.value = freq;
+        const start = now + i * 0.11;
+        gain.gain.setValueAtTime(0, start);
+        gain.gain.linearRampToValueAtTime(0.18, start + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.001, start + 0.18);
+        osc.connect(gain).connect(ctx.destination);
+        osc.start(start);
+        osc.stop(start + 0.2);
+      });
+      setTimeout(() => ctx.close(), 500);
+    } catch (e) {
+      // Silencieux : certains navigateurs bloquent l'audio avant une
+      // interaction utilisateur — ce n'est pas une erreur bloquante.
+    }
+  }
+
   function formatChatTime(iso) {
     if (!iso) return "";
     const d = new Date(iso);
@@ -1059,7 +1087,11 @@ export default function GuichetApp() {
         if (m.recipient_id !== agent.id) return; // pas un message privé pour moi
         const alreadyViewing = discussionOpenRef.current && chatRecipientRef.current?.id === m.agent_id;
         if (alreadyViewing) return;
-        setUnreadPrivateSenders((prev) => new Set(prev).add(m.agent_id));
+        setUnreadPrivateSenders((prev) => {
+          if (prev.has(m.agent_id)) return prev; // déjà signalé, pas de son en double
+          playChatNotificationSound();
+          return new Set(prev).add(m.agent_id);
+        });
       })
       .subscribe();
     return () => supabase.removeChannel(channel);
