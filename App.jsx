@@ -760,6 +760,28 @@ export default function GuichetApp() {
   const chatRecipientRef = useRef(chatRecipient);
   useEffect(() => { discussionOpenRef.current = discussionOpen; }, [discussionOpen]);
   useEffect(() => { chatRecipientRef.current = chatRecipient; }, [chatRecipient]);
+
+  // Pastilles "message privé non lu" persistées par agent, pour qu'elles
+  // survivent à une actualisation de la page tant que le message n'a pas
+  // été ouvert.
+  useEffect(() => {
+    if (!agent?.id) return;
+    try {
+      const saved = window.localStorage.getItem(`eg_unread_private_${agent.id}`);
+      if (saved) setUnreadPrivateSenders(new Set(JSON.parse(saved)));
+    } catch (e) {
+      /* localStorage indisponible ou données corrompues : on ignore */
+    }
+  }, [agent?.id]);
+
+  useEffect(() => {
+    if (!agent?.id) return;
+    try {
+      window.localStorage.setItem(`eg_unread_private_${agent.id}`, JSON.stringify([...unreadPrivateSenders]));
+    } catch (e) {
+      /* stockage plein ou indisponible : on ignore, l'app reste fonctionnelle */
+    }
+  }, [unreadPrivateSenders, agent?.id]);
   const [chatTeamList, setChatTeamList] = useState([]); // chef d'agence : ses agents
   const [chatMyManager, setChatMyManager] = useState(null); // agent simple : son chef
   const [agentChatInput, setAgentChatInput] = useState("");
@@ -1090,6 +1112,7 @@ export default function GuichetApp() {
         setUnreadPrivateSenders((prev) => {
           if (prev.has(m.agent_id)) return prev; // déjà signalé, pas de son en double
           playChatNotificationSound();
+          pushNotification(`💬 ${m.agent_name} t'a écrit un message privé`);
           return new Set(prev).add(m.agent_id);
         });
       })
@@ -2284,12 +2307,27 @@ export default function GuichetApp() {
     setPasswordChangeMsg({ type: "success", text: "Mot de passe mis à jour." });
   }
 
-  // Notifications
+  // Notifications — persistées dans le navigateur pour survivre à une actualisation
+  const NOTIF_STORAGE_KEY = "eg_notifications_v1";
   const [notifOpen, setNotifOpen] = useState(false);
-  const [notifications, setNotifications] = useState([
-    { id: 1, text: "Bienvenue sur EmpireGuichet 👋", time: "Aujourd'hui", read: true },
-  ]);
-  const notifCounter = useRef(2);
+  const [notifications, setNotifications] = useState(() => {
+    try {
+      const saved = typeof window !== "undefined" ? window.localStorage.getItem(NOTIF_STORAGE_KEY) : null;
+      if (saved) return JSON.parse(saved);
+    } catch (e) {
+      /* localStorage indisponible ou données corrompues : on repart de zéro */
+    }
+    return [{ id: 1, text: "Bienvenue sur EmpireGuichet 👋", time: "Aujourd'hui", read: true }];
+  });
+  const notifCounter = useRef(notifications.reduce((max, n) => Math.max(max, n.id), 0) + 1);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(NOTIF_STORAGE_KEY, JSON.stringify(notifications));
+    } catch (e) {
+      /* stockage plein ou indisponible : on ignore, l'app reste fonctionnelle */
+    }
+  }, [notifications]);
 
   function pushNotification(text) {
     setNotifications((list) => [
