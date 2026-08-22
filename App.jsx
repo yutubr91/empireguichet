@@ -752,6 +752,7 @@ export default function GuichetApp() {
 
   // ===== Discussion entre agents =====
   const [agentChatMessages, setAgentChatMessages] = useState([]);
+  const [discussionOpen, setDiscussionOpen] = useState(false);
   const [agentChatInput, setAgentChatInput] = useState("");
   const [agentChatLoading, setAgentChatLoading] = useState(false);
   const agentChatEndRef = useRef(null);
@@ -2189,7 +2190,6 @@ export default function GuichetApp() {
 
   // Support widget state
   const [supportOpen, setSupportOpen] = useState(false);
-  const [discussionOpen, setDiscussionOpen] = useState(false);
   const [supportTab, setSupportTab] = useState("chat");
   const [openFaq, setOpenFaq] = useState(null);
   const [chatMessages, setChatMessages] = useState([
