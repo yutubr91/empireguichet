@@ -755,6 +755,11 @@ export default function GuichetApp() {
   const [discussionOpen, setDiscussionOpen] = useState(false);
   const [chatShowRealName, setChatShowRealName] = useState(false);
   const [chatRecipient, setChatRecipient] = useState(null); // null = discussion générale
+  const [unreadPrivateSenders, setUnreadPrivateSenders] = useState(new Set()); // ids des chefs/agents qui ont un message privé non lu
+  const discussionOpenRef = useRef(discussionOpen);
+  const chatRecipientRef = useRef(chatRecipient);
+  useEffect(() => { discussionOpenRef.current = discussionOpen; }, [discussionOpen]);
+  useEffect(() => { chatRecipientRef.current = chatRecipient; }, [chatRecipient]);
   const [chatTeamList, setChatTeamList] = useState([]); // chef d'agence : ses agents
   const [chatMyManager, setChatMyManager] = useState(null); // agent simple : son chef
   const [agentChatInput, setAgentChatInput] = useState("");
@@ -1029,6 +1034,37 @@ export default function GuichetApp() {
     // être indisponible ou en retard côté Supabase.
     setAgentChatMessages((prev) => (prev.some((m) => m.id === data.id) ? prev : [...prev, data]));
   }
+
+  // Écoute globale (active tant que l'agent est connecté, même bulle fermée) :
+  // alimente la pastille de notification quand un message PRIVÉ arrive pour
+  // moi et que je ne suis pas déjà en train de regarder cette conversation.
+  // La discussion générale ne déclenche jamais de notification.
+  useEffect(() => {
+    if (!agent) return;
+    const channel = supabase
+      .channel("chat-messages-notify")
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "chat_messages" }, (payload) => {
+        const m = payload.new;
+        if (m.recipient_id !== agent.id) return; // pas un message privé pour moi
+        const alreadyViewing = discussionOpenRef.current && chatRecipientRef.current?.id === m.agent_id;
+        if (alreadyViewing) return;
+        setUnreadPrivateSenders((prev) => new Set(prev).add(m.agent_id));
+      })
+      .subscribe();
+    return () => supabase.removeChannel(channel);
+  }, [agent?.id]);
+
+  // Quand on ouvre une conversation privée, on efface sa pastille de non-lu.
+  useEffect(() => {
+    if (discussionOpen && chatRecipient) {
+      setUnreadPrivateSenders((prev) => {
+        if (!prev.has(chatRecipient.id)) return prev;
+        const next = new Set(prev);
+        next.delete(chatRecipient.id);
+        return next;
+      });
+    }
+  }, [discussionOpen, chatRecipient]);
 
   useEffect(() => {
     if (discussionOpen && agent) {
@@ -6131,12 +6167,15 @@ export default function GuichetApp() {
                       <button
                         key={t.id}
                         onClick={() => setChatRecipient({ id: t.id, full_name: t.full_name })}
-                        className="text-xs px-2.5 py-1 rounded-full whitespace-nowrap"
+                        className="text-xs px-2.5 py-1 rounded-full whitespace-nowrap flex items-center gap-1"
                         style={{
                           background: chatRecipient?.id === t.id ? COLORS.gold : COLORS.bgSoft,
                           color: chatRecipient?.id === t.id ? "#052E36" : COLORS.textMuted,
                         }}
                       >
+                        {unreadPrivateSenders.has(t.id) && (
+                          <span style={{ width: 6, height: 6, borderRadius: 3, background: "#E5484D", display: "inline-block" }} />
+                        )}
                         {t.full_name}
                       </button>
                     ))}
@@ -6149,6 +6188,9 @@ export default function GuichetApp() {
                         color: chatRecipient?.id === chatMyManager.id ? "#052E36" : COLORS.textMuted,
                       }}
                     >
+                      {unreadPrivateSenders.has(chatMyManager.id) && (
+                        <span style={{ width: 6, height: 6, borderRadius: 3, background: "#E5484D", display: "inline-block" }} />
+                      )}
                       <Crown size={10} /> {chatMyManager.full_name}
                     </button>
                   )}
@@ -6227,7 +6269,7 @@ export default function GuichetApp() {
           <button
             onClick={() => setDiscussionOpen((v) => !v)}
             aria-label="Discussion entre agents"
-            className="gc-btn w-14 h-14 rounded-full flex items-center justify-center"
+            className="gc-btn w-14 h-14 rounded-full flex items-center justify-center relative"
             style={{
               background: "radial-gradient(circle at 32% 28%, #5EEAB8 0%, #2BBF8A 55%, #17805C 100%)",
               boxShadow: "0 10px 30px -10px rgba(43,191,138,0.65), inset -3px -3px 6px rgba(0,0,0,0.25), inset 3px 3px 6px rgba(255,255,255,0.35)",
@@ -6235,6 +6277,23 @@ export default function GuichetApp() {
             }}
           >
             {discussionOpen ? <X size={22} /> : <Users size={22} />}
+            {!discussionOpen && unreadPrivateSenders.size > 0 && (
+              <span
+                className="absolute flex items-center justify-center text-[10px] font-bold text-white"
+                style={{
+                  top: -2,
+                  right: -2,
+                  minWidth: 18,
+                  height: 18,
+                  padding: "0 4px",
+                  borderRadius: 9,
+                  background: "#E5484D",
+                  border: "2px solid " + COLORS.bg,
+                }}
+              >
+                {unreadPrivateSenders.size}
+              </span>
+            )}
           </button>
         </div>
       )}
