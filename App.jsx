@@ -6092,9 +6092,13 @@ export default function GuichetApp() {
             onClick={() => setTab("discussion")}
             aria-label="Discussion entre agents"
             className="gc-btn w-14 h-14 rounded-full flex items-center justify-center"
-            style={{ background: COLORS.teal, color: "#08221A", boxShadow: "0 10px 30px -10px rgba(43,191,138,0.6)" }}
+            style={{
+              background: "radial-gradient(circle at 32% 28%, #5EEAB8 0%, #2BBF8A 55%, #17805C 100%)",
+              boxShadow: "0 10px 30px -10px rgba(43,191,138,0.65), inset -3px -3px 6px rgba(0,0,0,0.25), inset 3px 3px 6px rgba(255,255,255,0.35)",
+              color: "#08221A",
+            }}
           >
-            <MessageSquare size={22} />
+            <Users size={22} />
           </button>
         </div>
       )}
@@ -6253,7 +6257,11 @@ export default function GuichetApp() {
           onClick={() => setSupportOpen((v) => !v)}
           aria-label="Service client"
           className="gc-btn w-14 h-14 rounded-full flex items-center justify-center"
-          style={{ background: COLORS.gold, color: "#052E36", boxShadow: "0 10px 30px -10px rgba(232,169,59,0.6)" }}
+          style={{
+            background: "radial-gradient(circle at 32% 28%, #FCE7A6 0%, #E8A93B 55%, #B5791E 100%)",
+            boxShadow: "0 10px 30px -10px rgba(232,169,59,0.65), inset -3px -3px 6px rgba(0,0,0,0.25), inset 3px 3px 6px rgba(255,255,255,0.35)",
+            color: "#052E36",
+          }}
         >
           {supportOpen ? <X size={22} /> : <MessageCircle size={22} />}
         </button>
