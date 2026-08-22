@@ -753,15 +753,6 @@ export default function GuichetApp() {
   // ===== Discussion entre agents =====
   const [agentChatMessages, setAgentChatMessages] = useState([]);
   const [discussionOpen, setDiscussionOpen] = useState(false);
-  const [chatShowRealName, setChatShowRealName] = useState(false);
-  const [chatRecipient, setChatRecipient] = useState(null); // null = discussion générale
-  const [unreadPrivateSenders, setUnreadPrivateSenders] = useState(new Set()); // ids des chefs/agents qui ont un message privé non lu
-  const discussionOpenRef = useRef(discussionOpen);
-  const chatRecipientRef = useRef(chatRecipient);
-  useEffect(() => { discussionOpenRef.current = discussionOpen; }, [discussionOpen]);
-  useEffect(() => { chatRecipientRef.current = chatRecipient; }, [chatRecipient]);
-  const [chatTeamList, setChatTeamList] = useState([]); // chef d'agence : ses agents
-  const [chatMyManager, setChatMyManager] = useState(null); // agent simple : son chef
   const [agentChatInput, setAgentChatInput] = useState("");
   const [agentChatLoading, setAgentChatLoading] = useState(false);
   const agentChatEndRef = useRef(null);
@@ -968,99 +959,31 @@ export default function GuichetApp() {
   }
 
   // ===== Discussion entre agents (chat) =====
-  // Petit son de notification (généré directement, pas de fichier audio à
-  // héberger) — joué uniquement pour un nouveau message privé non lu.
-  function playChatNotificationSound() {
-    try {
-      const Ctx = window.AudioContext || window.webkitAudioContext;
-      if (!Ctx) return;
-      const ctx = new Ctx();
-      const now = ctx.currentTime;
-      [880, 1175].forEach((freq, i) => {
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.type = "sine";
-        osc.frequency.value = freq;
-        const start = now + i * 0.11;
-        gain.gain.setValueAtTime(0, start);
-        gain.gain.linearRampToValueAtTime(0.18, start + 0.02);
-        gain.gain.exponentialRampToValueAtTime(0.001, start + 0.18);
-        osc.connect(gain).connect(ctx.destination);
-        osc.start(start);
-        osc.stop(start + 0.2);
-      });
-      setTimeout(() => ctx.close(), 500);
-    } catch (e) {
-      // Silencieux : certains navigateurs bloquent l'audio avant une
-      // interaction utilisateur — ce n'est pas une erreur bloquante.
-    }
-  }
-
-  function formatChatTime(iso) {
-    if (!iso) return "";
-    const d = new Date(iso);
-    const now = new Date();
-    const sameDay = d.toDateString() === now.toDateString();
-    const heure = d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
-    if (sameDay) return heure;
-    const jour = d.toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit" });
-    return `${jour} · ${heure}`;
-  }
-
-  // Nom affiché : pseudonyme stable par défaut, vrai nom seulement si l'agent
-  // a activé "chatShowRealName".
-  function chatDisplayName() {
-    if (!agent) return "Agent";
-    if (chatShowRealName) return agent.name;
-    return "Agent #" + String(agent.id || "").replace(/-/g, "").slice(-4).toUpperCase();
-  }
-
-  async function loadChatPrefs() {
-    if (!agent) return;
-    const { data } = await supabase.from("agents").select("chat_show_real_name").eq("id", agent.id).maybeSingle();
-    if (data) setChatShowRealName(!!data.chat_show_real_name);
-    if (agent.role === "manager") {
-      const { data: team } = await supabase.rpc("get_team_members");
-      if (team) setChatTeamList(team);
-    } else {
-      const { data: mgr } = await supabase.rpc("get_my_manager");
-      if (mgr && mgr.length > 0) setChatMyManager(mgr[0]);
-    }
-  }
-
-  async function toggleChatShowRealName() {
-    const next = !chatShowRealName;
-    setChatShowRealName(next);
-    if (agent) await supabase.from("agents").update({ chat_show_real_name: next }).eq("id", agent.id);
-  }
-
   async function loadChatMessages() {
+    if (!agent?.agencyId) return;
     setAgentChatLoading(true);
-    let query = supabase.from("chat_messages").select("*").order("created_at", { ascending: true }).limit(100);
-    if (chatRecipient) {
-      query = query.or(
-        `and(agent_id.eq.${agent.id},recipient_id.eq.${chatRecipient.id}),and(agent_id.eq.${chatRecipient.id},recipient_id.eq.${agent.id})`
-      );
-    } else {
-      query = query.is("recipient_id", null);
-    }
-    const { data, error } = await query;
+    const { data, error } = await supabase
+      .from("chat_messages")
+      .select("*")
+      .eq("agency_id", agent.agencyId)
+      .order("created_at", { ascending: true })
+      .limit(100);
     setAgentChatLoading(false);
     if (!error && data) setAgentChatMessages(data);
   }
 
   async function handleSendChatMessage() {
-    if (!agent || !agentChatInput.trim()) return;
+    if (!agent || !agent.agencyId || !agentChatInput.trim()) return;
     const content = agentChatInput.trim();
     setAgentChatInput("");
     const { data, error } = await supabase
       .from("chat_messages")
       .insert({
         agent_id: agent.id,
-        agent_name: chatDisplayName(),
+        agent_name: agent.name,
         agent_role: agent.role,
+        agency_id: agent.agencyId,
         content,
-        recipient_id: chatRecipient ? chatRecipient.id : null,
       })
       .select()
       .single();
@@ -1074,62 +997,30 @@ export default function GuichetApp() {
     setAgentChatMessages((prev) => (prev.some((m) => m.id === data.id) ? prev : [...prev, data]));
   }
 
-  // Écoute globale (active tant que l'agent est connecté, même bulle fermée) :
-  // alimente la pastille de notification quand un message PRIVÉ arrive pour
-  // moi et que je ne suis pas déjà en train de regarder cette conversation.
-  // La discussion générale ne déclenche jamais de notification.
+  // Chargement de l'historique + écoute temps réel de la Discussion : active
+  // en permanence dès qu'on est connecté, pas seulement quand le panneau est
+  // ouvert, pour que la notification + le son marchent même Discussion fermée.
+  // Cantonné à sa propre agence (chef d'agence + ses agents), pas les autres.
   useEffect(() => {
-    if (!agent) return;
-    const channel = supabase
-      .channel("chat-messages-notify")
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "chat_messages" }, (payload) => {
-        const m = payload.new;
-        if (m.recipient_id !== agent.id) return; // pas un message privé pour moi
-        const alreadyViewing = discussionOpenRef.current && chatRecipientRef.current?.id === m.agent_id;
-        if (alreadyViewing) return;
-        setUnreadPrivateSenders((prev) => {
-          if (prev.has(m.agent_id)) return prev; // déjà signalé, pas de son en double
-          playChatNotificationSound();
-          return new Set(prev).add(m.agent_id);
-        });
-      })
-      .subscribe();
-    return () => supabase.removeChannel(channel);
-  }, [agent?.id]);
-
-  // Quand on ouvre une conversation privée, on efface sa pastille de non-lu.
-  useEffect(() => {
-    if (discussionOpen && chatRecipient) {
-      setUnreadPrivateSenders((prev) => {
-        if (!prev.has(chatRecipient.id)) return prev;
-        const next = new Set(prev);
-        next.delete(chatRecipient.id);
-        return next;
-      });
-    }
-  }, [discussionOpen, chatRecipient]);
-
-  useEffect(() => {
-    if (discussionOpen && agent) {
-      loadChatPrefs();
+    if (agent?.agencyId) {
       loadChatMessages();
       const channel = supabase
-        .channel("chat-messages")
-        .on("postgres_changes", { event: "INSERT", schema: "public", table: "chat_messages" }, (payload) => {
-          const m = payload.new;
-          // On ne garde que les messages qui appartiennent à la conversation
-          // actuellement ouverte (générale, ou privée avec la bonne personne).
-          const belongsHere = chatRecipient
-            ? (m.agent_id === agent.id && m.recipient_id === chatRecipient.id) ||
-              (m.agent_id === chatRecipient.id && m.recipient_id === agent.id)
-            : m.recipient_id === null;
-          if (!belongsHere) return;
-          setAgentChatMessages((prev) => (prev.some((x) => x.id === m.id) ? prev : [...prev, m]));
-        })
+        .channel(`chat-messages-${agent.agencyId}`)
+        .on(
+          "postgres_changes",
+          { event: "INSERT", schema: "public", table: "chat_messages", filter: `agency_id=eq.${agent.agencyId}` },
+          (payload) => {
+            setAgentChatMessages((prev) => (prev.some((m) => m.id === payload.new.id) ? prev : [...prev, payload.new]));
+            if (payload.new.agent_id !== agent.id) {
+              pushNotification(`💬 ${payload.new.agent_name} : ${payload.new.content}`);
+              playNotificationSound();
+            }
+          }
+        )
         .subscribe();
       return () => supabase.removeChannel(channel);
     }
-  }, [discussionOpen, agent?.id, chatRecipient?.id]);
+  }, [agent?.id, agent?.agencyId]);
 
   useEffect(() => {
     if (agentChatEndRef.current) agentChatEndRef.current.scrollIntoView({ behavior: "smooth" });
@@ -1239,14 +1130,9 @@ export default function GuichetApp() {
       .select("email")
       .eq("phone", fullPhone)
       .maybeSingle();
-    if (error) {
+    if (error || !data) {
       setRecoveryLoading(false);
-      setRecoveryError("Connexion impossible — vérifie ta connexion internet et réessaie.");
-      return;
-    }
-    if (!data) {
-      setRecoveryLoading(false);
-      setRecoveryError("Vérifie ton numéro de téléphone — nous ne retrouvons pas de compte associé.");
+      setRecoveryError("Aucun compte trouvé avec ce numéro de téléphone.");
       return;
     }
     if ((data.email || "").trim().toLowerCase() !== recoveryEmail.trim().toLowerCase()) {
@@ -1827,14 +1713,9 @@ export default function GuichetApp() {
     setAuthError("");
     const fullLoginPhone = `${loginCountryCode} ${loginPhone}`.trim();
     const { data: emailResult, error: lookupErr } = await supabase.rpc("get_email_by_phone", { phone_input: fullLoginPhone });
-    if (lookupErr) {
+    if (lookupErr || !emailResult) {
       setAuthLoading(false);
-      setAuthError("Connexion impossible — vérifie ta connexion internet et réessaie.");
-      return;
-    }
-    if (!emailResult) {
-      setAuthLoading(false);
-      setAuthError("Vérifie ton numéro de téléphone — nous ne retrouvons pas de compte associé.");
+      setAuthError("Aucun compte trouvé avec ce numéro de téléphone.");
       return;
     }
     const { data, error } = await supabase.auth.signInWithPassword({
@@ -2284,18 +2165,56 @@ export default function GuichetApp() {
     setPasswordChangeMsg({ type: "success", text: "Mot de passe mis à jour." });
   }
 
-  // Notifications
+  // Notifications — persistées dans le navigateur pour survivre à une actualisation
+  const NOTIF_STORAGE_KEY = "eg_notifications_v1";
   const [notifOpen, setNotifOpen] = useState(false);
-  const [notifications, setNotifications] = useState([
-    { id: 1, text: "Bienvenue sur EmpireGuichet 👋", time: "Aujourd'hui", read: true },
-  ]);
-  const notifCounter = useRef(2);
+  const [notifications, setNotifications] = useState(() => {
+    try {
+      const saved = typeof window !== "undefined" ? window.localStorage.getItem(NOTIF_STORAGE_KEY) : null;
+      if (saved) return JSON.parse(saved);
+    } catch (e) {
+      /* localStorage indisponible ou données corrompues : on repart de zéro */
+    }
+    return [{ id: 1, text: "Bienvenue sur EmpireGuichet 👋", time: "Aujourd'hui", read: true }];
+  });
+  const notifCounter = useRef(
+    notifications.reduce((max, n) => Math.max(max, n.id), 0) + 1
+  );
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(NOTIF_STORAGE_KEY, JSON.stringify(notifications));
+    } catch (e) {
+      /* stockage plein ou indisponible : on ignore, l'app reste fonctionnelle */
+    }
+  }, [notifications]);
 
   function pushNotification(text) {
     setNotifications((list) => [
       { id: notifCounter.current++, text, time: "À l'instant", read: false },
       ...list,
     ]);
+  }
+
+  // Petit bip de notification généré directement (pas besoin de fichier audio externe)
+  function playNotificationSound() {
+    try {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(880, ctx.currentTime);
+      gain.gain.setValueAtTime(0.15, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.35);
+    } catch (e) {
+      /* lecture audio bloquée par le navigateur : on ignore silencieusement */
+    }
   }
 
   function markAllNotificationsRead() {
@@ -6194,80 +6113,17 @@ export default function GuichetApp() {
               }}
             >
               {/* Header */}
-              <div className="flex flex-col" style={{ borderBottom: `1px solid ${COLORS.surfaceLine}` }}>
-                <div className="flex items-center justify-between px-4 py-3">
-                  <span className="text-sm font-medium">
-                    {chatRecipient ? `Privé — ${chatRecipient.full_name}` : "Discussion entre agents"}
-                  </span>
-                  <button onClick={() => setDiscussionOpen(false)} aria-label="Fermer la discussion entre agents">
-                    <X size={18} style={{ color: COLORS.textMuted }} />
-                  </button>
-                </div>
-                {/* Sélecteur de conversation */}
-                <div className="flex items-center gap-1.5 px-3 pb-2.5 overflow-x-auto">
-                  <button
-                    onClick={() => setChatRecipient(null)}
-                    className="text-xs px-2.5 py-1 rounded-full whitespace-nowrap"
-                    style={{
-                      background: !chatRecipient ? COLORS.gold : COLORS.bgSoft,
-                      color: !chatRecipient ? "#052E36" : COLORS.textMuted,
-                    }}
-                  >
-                    Générale
-                  </button>
-                  {agent?.role === "manager" &&
-                    chatTeamList.map((t) => (
-                      <button
-                        key={t.id}
-                        onClick={() => setChatRecipient({ id: t.id, full_name: t.full_name })}
-                        className="text-xs px-2.5 py-1 rounded-full whitespace-nowrap flex items-center gap-1"
-                        style={{
-                          background: chatRecipient?.id === t.id ? COLORS.gold : COLORS.bgSoft,
-                          color: chatRecipient?.id === t.id ? "#052E36" : COLORS.textMuted,
-                        }}
-                      >
-                        {unreadPrivateSenders.has(t.id) && (
-                          <span style={{ width: 6, height: 6, borderRadius: 3, background: "#E5484D", display: "inline-block" }} />
-                        )}
-                        {t.full_name}
-                      </button>
-                    ))}
-                  {agent?.role === "agent" && chatMyManager && (
-                    <button
-                      onClick={() => setChatRecipient({ id: chatMyManager.id, full_name: chatMyManager.full_name })}
-                      className="text-xs px-2.5 py-1 rounded-full whitespace-nowrap flex items-center gap-1"
-                      style={{
-                        background: chatRecipient?.id === chatMyManager.id ? COLORS.gold : COLORS.bgSoft,
-                        color: chatRecipient?.id === chatMyManager.id ? "#052E36" : COLORS.textMuted,
-                      }}
-                    >
-                      {unreadPrivateSenders.has(chatMyManager.id) && (
-                        <span style={{ width: 6, height: 6, borderRadius: 3, background: "#E5484D", display: "inline-block" }} />
-                      )}
-                      <Crown size={10} /> {chatMyManager.full_name}
-                    </button>
-                  )}
-                  <button
-                    onClick={toggleChatShowRealName}
-                    className="text-xs px-2.5 py-1 rounded-full whitespace-nowrap ml-auto flex items-center gap-1 shrink-0"
-                    style={{ background: COLORS.bgSoft, color: COLORS.textMuted }}
-                    title={chatShowRealName ? "Ton vrai nom est visible" : "Tu es anonyme"}
-                  >
-                    {chatShowRealName ? <Eye size={11} /> : <EyeOff size={11} />}
-                    {chatShowRealName ? "Nom visible" : "Anonyme"}
-                  </button>
-                </div>
+              <div className="flex items-center justify-between px-4 py-3" style={{ borderBottom: `1px solid ${COLORS.surfaceLine}` }}>
+                <span className="text-sm font-medium">Discussion entre agents</span>
+                <button onClick={() => setDiscussionOpen(false)} aria-label="Fermer la discussion entre agents">
+                  <X size={18} style={{ color: COLORS.textMuted }} />
+                </button>
               </div>
 
               {/* Messages */}
               <div className="flex-1 overflow-y-auto p-3 space-y-3">
                 {agentChatLoading && agentChatMessages.length === 0 && (
                   <div className="text-xs text-center py-6" style={{ color: COLORS.textMuted }}>Chargement…</div>
-                )}
-                {!agentChatLoading && agentChatMessages.length === 0 && (
-                  <div className="text-xs text-center py-6" style={{ color: COLORS.textMuted }}>
-                    {chatRecipient ? "Aucun message privé pour l'instant." : "Sois le premier à écrire !"}
-                  </div>
                 )}
                 {agentChatMessages.map((m) => (
                   <div key={m.id} className={`flex ${m.agent_id === agent?.id ? "justify-end" : "justify-start"}`}>
@@ -6280,24 +6136,9 @@ export default function GuichetApp() {
                       }}
                     >
                       <div className="text-[10px] font-medium mb-1 flex items-center gap-1" style={{ opacity: 0.75 }}>
-                        {m.agent_name}
-                        <span
-                          className="px-1.5 py-0.5 rounded-full text-[9px] font-semibold"
-                          style={{
-                            background: m.agent_role === "manager" ? "rgba(232,169,59,0.25)" : "rgba(43,191,138,0.2)",
-                            color: m.agent_id === agent?.id ? "#052E36" : m.agent_role === "manager" ? COLORS.goldSoft : COLORS.teal,
-                          }}
-                        >
-                          {m.agent_role === "manager" ? "Chef d'agence" : "Agent"}
-                        </span>
+                        {m.agent_name} {m.agent_role === "manager" && <Crown size={10} />}
                       </div>
                       {m.content}
-                      <div
-                        className="text-[9px] mt-1 text-right"
-                        style={{ opacity: 0.65, color: m.agent_id === agent?.id ? "#052E36" : COLORS.textMuted }}
-                      >
-                        {formatChatTime(m.created_at)}
-                      </div>
                     </div>
                   </div>
                 ))}
@@ -6310,7 +6151,7 @@ export default function GuichetApp() {
                   value={agentChatInput}
                   onChange={(e) => setAgentChatInput(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && handleSendChatMessage()}
-                  placeholder={chatRecipient ? `Message privé à ${chatRecipient.full_name}…` : "Écris ton message…"}
+                  placeholder="Écris ton message…"
                   className="flex-1 px-3.5 py-2.5 rounded-lg text-sm outline-none"
                   style={{ background: COLORS.bgSoft, border: `1px solid ${COLORS.surfaceLine}`, color: COLORS.text }}
                 />
@@ -6328,7 +6169,7 @@ export default function GuichetApp() {
           <button
             onClick={() => setDiscussionOpen((v) => !v)}
             aria-label="Discussion entre agents"
-            className="gc-btn w-14 h-14 rounded-full flex items-center justify-center relative"
+            className="gc-btn w-14 h-14 rounded-full flex items-center justify-center"
             style={{
               background: "radial-gradient(circle at 32% 28%, #5EEAB8 0%, #2BBF8A 55%, #17805C 100%)",
               boxShadow: "0 10px 30px -10px rgba(43,191,138,0.65), inset -3px -3px 6px rgba(0,0,0,0.25), inset 3px 3px 6px rgba(255,255,255,0.35)",
@@ -6336,23 +6177,6 @@ export default function GuichetApp() {
             }}
           >
             {discussionOpen ? <X size={22} /> : <Users size={22} />}
-            {!discussionOpen && unreadPrivateSenders.size > 0 && (
-              <span
-                className="absolute flex items-center justify-center text-[10px] font-bold text-white"
-                style={{
-                  top: -2,
-                  right: -2,
-                  minWidth: 18,
-                  height: 18,
-                  padding: "0 4px",
-                  borderRadius: 9,
-                  background: "#E5484D",
-                  border: "2px solid " + COLORS.bg,
-                }}
-              >
-                {unreadPrivateSenders.size}
-              </span>
-            )}
           </button>
         </div>
       )}
