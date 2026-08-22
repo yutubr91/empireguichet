@@ -1696,7 +1696,8 @@ export default function GuichetApp() {
     }
     setAgent(profile);
     setIsAuthenticated(true);
-    const sub = await fetchSubscription(profile.id);
+    let sub = await fetchSubscription(profile.id);
+    if (!sub) sub = await createPendingSubscription(profile.id, profile.role);
     setSubscription(sub);
   }
 
@@ -2510,7 +2511,8 @@ export default function GuichetApp() {
             }
             setAgent(profile);
             setIsAuthenticated(true);
-            const sub = await fetchSubscription(profile.id);
+            let sub = await fetchSubscription(profile.id);
+            if (!sub) sub = await createPendingSubscription(profile.id, profile.role);
             setSubscription(sub);
           }
         });

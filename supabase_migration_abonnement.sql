@@ -1,6 +1,7 @@
 -- ============================================================================
 -- EmpireGuichet — Migration : Abonnements, Parrainage, Historique payant, Chat
--- À exécuter dans Supabase → SQL Editor (une seule fois)
+-- À exécuter dans Supabase → SQL Editor
+-- Ce fichier est rejouable sans erreur (peut être exécuté plusieurs fois).
 -- ============================================================================
 
 -- 1) S'assurer que la date d'inscription existe sur les agents
@@ -24,31 +25,35 @@ create unique index if not exists subscriptions_agent_id_key on subscriptions(ag
 
 alter table subscriptions enable row level security;
 
+drop policy if exists "agent lit son propre abonnement" on subscriptions;
 create policy "agent lit son propre abonnement"
   on subscriptions for select
   using (auth.uid() = agent_id);
 
+drop policy if exists "agent cree son propre abonnement" on subscriptions;
 create policy "agent cree son propre abonnement"
   on subscriptions for insert
   with check (auth.uid() = agent_id);
 
+drop policy if exists "owner lit tous les abonnements" on subscriptions;
 create policy "owner lit tous les abonnements"
   on subscriptions for select
   using (exists (select 1 from agents a where a.id = auth.uid() and a.is_platform_owner = true));
 
+drop policy if exists "owner met a jour les abonnements" on subscriptions;
 create policy "owner met a jour les abonnements"
   on subscriptions for update
   using (exists (select 1 from agents a where a.id = auth.uid() and a.is_platform_owner = true));
 
 -- ============================================================================
--- 3) DÉCLARATIONS DE PAIEMENT (abonnement mensuel ou déblocage historique)
+-- 3) DÉCLARATIONS DE PAIEMENT (abonnement ou déblocage historique)
 -- ============================================================================
 create table if not exists subscription_payments (
   id uuid primary key default gen_random_uuid(),
   agent_id uuid not null references agents(id) on delete cascade,
   type text not null check (type in ('abonnement', 'historique')),
   amount int not null,
-  period_month date not null,        -- 1er jour du mois concerné, ex: 2026-08-01
+  period_month date not null,        -- 1er jour de la période concernée
   payment_reference text,            -- référence donnée par l'agent (transaction mobile money)
   status text not null default 'pending' check (status in ('pending', 'validated', 'rejected')),
   rejected_reason text,
@@ -58,24 +63,28 @@ create table if not exists subscription_payments (
 
 alter table subscription_payments enable row level security;
 
+drop policy if exists "agent lit ses paiements" on subscription_payments;
 create policy "agent lit ses paiements"
   on subscription_payments for select
   using (auth.uid() = agent_id);
 
+drop policy if exists "agent declare un paiement" on subscription_payments;
 create policy "agent declare un paiement"
   on subscription_payments for insert
   with check (auth.uid() = agent_id);
 
+drop policy if exists "owner lit tous les paiements" on subscription_payments;
 create policy "owner lit tous les paiements"
   on subscription_payments for select
   using (exists (select 1 from agents a where a.id = auth.uid() and a.is_platform_owner = true));
 
+drop policy if exists "owner valide les paiements" on subscription_payments;
 create policy "owner valide les paiements"
   on subscription_payments for update
   using (exists (select 1 from agents a where a.id = auth.uid() and a.is_platform_owner = true));
 
 -- ============================================================================
--- 4) COMMISSIONS DE PARRAINAGE (500F, une seule génération)
+-- 4) COMMISSIONS DE PARRAINAGE (300F, une seule génération)
 -- ============================================================================
 create table if not exists referral_commissions (
   id uuid primary key default gen_random_uuid(),
@@ -91,20 +100,23 @@ create unique index if not exists referral_commissions_referred_agent_id_key on 
 
 alter table referral_commissions enable row level security;
 
+drop policy if exists "parrain lit ses commissions" on referral_commissions;
 create policy "parrain lit ses commissions"
   on referral_commissions for select
   using (auth.uid() = referrer_agent_id);
 
+drop policy if exists "owner lit toutes les commissions" on referral_commissions;
 create policy "owner lit toutes les commissions"
   on referral_commissions for select
   using (exists (select 1 from agents a where a.id = auth.uid() and a.is_platform_owner = true));
 
+drop policy if exists "owner met a jour les commissions" on referral_commissions;
 create policy "owner met a jour les commissions"
   on referral_commissions for update
   using (exists (select 1 from agents a where a.id = auth.uid() and a.is_platform_owner = true));
 
 -- Déclenchement automatique : quand le PREMIER paiement d'abonnement d'un agent
--- est validé, on crée la commission de 500F pour son parrain (une seule fois,
+-- est validé, on crée la commission de 300F pour son parrain (une seule fois,
 -- grâce à l'index unique ci-dessus).
 create or replace function handle_first_subscription_validated()
 returns trigger as $$
@@ -156,16 +168,39 @@ create table if not exists chat_messages (
 
 alter table chat_messages enable row level security;
 
+drop policy if exists "tout agent connecte lit le chat" on chat_messages;
 create policy "tout agent connecte lit le chat"
   on chat_messages for select
   using (auth.uid() is not null);
 
+drop policy if exists "tout agent connecte ecrit dans le chat" on chat_messages;
 create policy "tout agent connecte ecrit dans le chat"
   on chat_messages for insert
   with check (auth.uid() = agent_id);
 
--- Active le temps réel sur la table du chat (si pas déjà fait globalement)
-alter publication supabase_realtime add table chat_messages;
+-- Active le temps réel sur la table du chat (ignore si déjà activé)
+do $$
+begin
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime' and tablename = 'chat_messages'
+  ) then
+    alter publication supabase_realtime add table chat_messages;
+  end if;
+end $$;
+
+-- ============================================================================
+-- RATTRAPAGE : créer l'abonnement (en attente de paiement) pour tous les
+-- comptes déjà existants avant la mise en place de ce système.
+-- ============================================================================
+insert into subscriptions (agent_id, plan, monthly_amount, status)
+select
+  a.id,
+  case when a.role = 'manager' then 'manager' else 'agent' end,
+  2500,
+  'pending_payment'
+from agents a
+where not exists (select 1 from subscriptions s where s.agent_id = a.id);
 
 -- ============================================================================
 -- Fin de la migration
