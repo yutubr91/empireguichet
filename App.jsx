@@ -5790,6 +5790,46 @@ export default function GuichetApp() {
 
         {tab === "parametres" && (
           <div className="gc-fade-in grid md:grid-cols-3 gap-4 max-w-5xl">
+            {/* Chef d'agence : valider ou refuser les demandes de départ */}
+            {agent?.role === "manager" && incomingTransferRequests.length > 0 && (
+              <div className="p-6 rounded-xl" style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}` }}>
+                <div className="flex items-center gap-2 mb-4">
+                  <Users size={16} style={{ color: COLORS.goldSoft }} />
+                  <span className="text-sm font-medium">Demandes de changement d'agence</span>
+                </div>
+                {transferMsg.text && (
+                  <p className="text-xs mb-3" style={{ color: transferMsg.type === "error" ? COLORS.danger : COLORS.teal }}>
+                    {transferMsg.text}
+                  </p>
+                )}
+                <div className="space-y-2">
+                  {incomingTransferRequests.map((r) => (
+                    <div key={r.id} className="p-3 rounded-lg" style={{ background: COLORS.bgSoft, border: `1px solid ${COLORS.surfaceLine}` }}>
+                      <div className="text-sm mb-2">
+                        <strong>{r.agents?.full_name}</strong> veut rejoindre <strong>{r.new_agencies?.name || "une autre agence"}</strong>
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => handleDecideTransfer(r.id, true)}
+                          className="gc-btn px-3 py-1.5 rounded-lg text-xs font-medium"
+                          style={{ background: COLORS.teal, color: "#052E36" }}
+                        >
+                          Valider le départ
+                        </button>
+                        <button
+                          onClick={() => handleDecideTransfer(r.id, false)}
+                          className="gc-btn px-3 py-1.5 rounded-lg text-xs font-medium border"
+                          style={{ borderColor: COLORS.surfaceLine, color: COLORS.textMuted }}
+                        >
+                          Refuser
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Agent simple : demander à rejoindre un nouveau chef */}
             {agent?.role === "agent" && (
               <div className="p-6 rounded-xl" style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}` }}>
@@ -5930,45 +5970,6 @@ export default function GuichetApp() {
 
 
 
-            {/* Chef d'agence : valider ou refuser les demandes de départ */}
-            {agent?.role === "manager" && incomingTransferRequests.length > 0 && (
-              <div className="p-6 rounded-xl" style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}` }}>
-                <div className="flex items-center gap-2 mb-4">
-                  <Users size={16} style={{ color: COLORS.goldSoft }} />
-                  <span className="text-sm font-medium">Demandes de changement d'agence</span>
-                </div>
-                {transferMsg.text && (
-                  <p className="text-xs mb-3" style={{ color: transferMsg.type === "error" ? COLORS.danger : COLORS.teal }}>
-                    {transferMsg.text}
-                  </p>
-                )}
-                <div className="space-y-2">
-                  {incomingTransferRequests.map((r) => (
-                    <div key={r.id} className="p-3 rounded-lg" style={{ background: COLORS.bgSoft, border: `1px solid ${COLORS.surfaceLine}` }}>
-                      <div className="text-sm mb-2">
-                        <strong>{r.agents?.full_name}</strong> veut rejoindre <strong>{r.new_agencies?.name || "une autre agence"}</strong>
-                      </div>
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => handleDecideTransfer(r.id, true)}
-                          className="gc-btn px-3 py-1.5 rounded-lg text-xs font-medium"
-                          style={{ background: COLORS.teal, color: "#052E36" }}
-                        >
-                          Valider le départ
-                        </button>
-                        <button
-                          onClick={() => handleDecideTransfer(r.id, false)}
-                          className="gc-btn px-3 py-1.5 rounded-lg text-xs font-medium border"
-                          style={{ borderColor: COLORS.surfaceLine, color: COLORS.textMuted }}
-                        >
-                          Refuser
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
           </div>
         )}
         </>
