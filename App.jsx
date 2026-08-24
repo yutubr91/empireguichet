@@ -5784,7 +5784,48 @@ export default function GuichetApp() {
         )}
 
         {tab === "parametres" && (
-          <div className="gc-fade-in grid md:grid-cols-2 gap-4 max-w-3xl">
+          <div className="gc-fade-in grid md:grid-cols-3 gap-4 max-w-5xl">
+            {/* Agent simple : demander à rejoindre un nouveau chef */}
+            {agent?.role === "agent" && (
+              <div className="p-6 rounded-xl" style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}` }}>
+                <div className="flex items-center gap-2 mb-4">
+                  <Users size={16} style={{ color: COLORS.goldSoft }} />
+                  <span className="text-sm font-medium">Changer de chef d'agence</span>
+                </div>
+                {myPendingTransfer ? (
+                  <div className="p-4 rounded-lg text-sm" style={{ background: "rgba(217,164,65,0.1)", border: `1px solid ${COLORS.surfaceLine}` }}>
+                    Demande envoyée pour rejoindre <strong>{myPendingTransfer.agencies?.name || "la nouvelle agence"}</strong> — en attente de validation de ton chef actuel.
+                  </div>
+                ) : (
+                  <>
+                    <p className="text-xs mb-3" style={{ color: COLORS.textMuted }}>
+                      Entre le code du nouveau chef d'agence. Ton chef actuel devra valider ce changement avant qu'il prenne effet.
+                    </p>
+                    <input
+                      value={transferCodeInput}
+                      onChange={(e) => setTransferCodeInput(e.target.value.toUpperCase())}
+                      placeholder="Code de la nouvelle agence"
+                      className="w-full px-3.5 py-2.5 rounded-lg text-sm outline-none mb-2 gc-mono"
+                      style={{ background: COLORS.bgSoft, border: `1px solid ${COLORS.surfaceLine}`, color: COLORS.text }}
+                    />
+                    <button
+                      onClick={handleRequestAgencyTransfer}
+                      disabled={transferSubmitting}
+                      className="gc-btn w-full flex items-center justify-center gap-1.5 py-2.5 rounded-lg text-sm font-medium"
+                      style={{ background: COLORS.gold, color: "#052E36", opacity: transferSubmitting ? 0.6 : 1 }}
+                    >
+                      <Send size={14} /> {transferSubmitting ? "Envoi…" : "Envoyer la demande"}
+                    </button>
+                    {transferMsg.text && (
+                      <p className="text-xs mt-2" style={{ color: transferMsg.type === "error" ? COLORS.danger : COLORS.teal }}>
+                        {transferMsg.text}
+                      </p>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+
             <form
               onSubmit={handleChangePin}
               className="p-6 rounded-xl"
@@ -5882,46 +5923,7 @@ export default function GuichetApp() {
               </p>
             </form>
 
-            {/* Agent simple : demander à rejoindre un nouveau chef */}
-            {agent?.role === "agent" && (
-              <div className="p-6 rounded-xl" style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}` }}>
-                <div className="flex items-center gap-2 mb-4">
-                  <Users size={16} style={{ color: COLORS.goldSoft }} />
-                  <span className="text-sm font-medium">Changer de chef d'agence</span>
-                </div>
-                {myPendingTransfer ? (
-                  <div className="p-4 rounded-lg text-sm" style={{ background: "rgba(217,164,65,0.1)", border: `1px solid ${COLORS.surfaceLine}` }}>
-                    Demande envoyée pour rejoindre <strong>{myPendingTransfer.agencies?.name || "la nouvelle agence"}</strong> — en attente de validation de ton chef actuel.
-                  </div>
-                ) : (
-                  <>
-                    <p className="text-xs mb-3" style={{ color: COLORS.textMuted }}>
-                      Entre le code du nouveau chef d'agence. Ton chef actuel devra valider ce changement avant qu'il prenne effet.
-                    </p>
-                    <input
-                      value={transferCodeInput}
-                      onChange={(e) => setTransferCodeInput(e.target.value.toUpperCase())}
-                      placeholder="Code de la nouvelle agence"
-                      className="w-full px-3.5 py-2.5 rounded-lg text-sm outline-none mb-2 gc-mono"
-                      style={{ background: COLORS.bgSoft, border: `1px solid ${COLORS.surfaceLine}`, color: COLORS.text }}
-                    />
-                    <button
-                      onClick={handleRequestAgencyTransfer}
-                      disabled={transferSubmitting}
-                      className="gc-btn w-full flex items-center justify-center gap-1.5 py-2.5 rounded-lg text-sm font-medium"
-                      style={{ background: COLORS.gold, color: "#052E36", opacity: transferSubmitting ? 0.6 : 1 }}
-                    >
-                      <Send size={14} /> {transferSubmitting ? "Envoi…" : "Envoyer la demande"}
-                    </button>
-                    {transferMsg.text && (
-                      <p className="text-xs mt-2" style={{ color: transferMsg.type === "error" ? COLORS.danger : COLORS.teal }}>
-                        {transferMsg.text}
-                      </p>
-                    )}
-                  </>
-                )}
-              </div>
-            )}
+
 
             {/* Chef d'agence : valider ou refuser les demandes de départ */}
             {agent?.role === "manager" && incomingTransferRequests.length > 0 && (
