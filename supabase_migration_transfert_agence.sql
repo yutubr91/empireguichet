@@ -51,6 +51,12 @@ create policy "ancien chef valide ou refuse"
       select 1 from agents a
       where a.id = auth.uid() and a.role = 'manager' and a.agency_id = agency_transfer_requests.old_agency_id
     )
+  )
+  with check (
+    exists (
+      select 1 from agents a
+      where a.id = auth.uid() and a.role = 'manager' and a.agency_id = agency_transfer_requests.old_agency_id
+    )
   );
 
 grant select, insert, update on agency_transfer_requests to authenticated;

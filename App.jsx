@@ -899,7 +899,12 @@ export default function GuichetApp() {
       .from("agency_transfer_requests")
       .update({ status: approve ? "approved" : "rejected" })
       .eq("id", requestId);
-    if (!error) loadIncomingTransferRequests();
+    if (error) {
+      console.error("Échec de la décision de transfert :", error.message);
+      setTransferMsg({ type: "error", text: "Erreur : " + error.message });
+      return;
+    }
+    loadIncomingTransferRequests();
   }
 
   useEffect(() => {
@@ -5932,6 +5937,11 @@ export default function GuichetApp() {
                   <Users size={16} style={{ color: COLORS.goldSoft }} />
                   <span className="text-sm font-medium">Demandes de changement d'agence</span>
                 </div>
+                {transferMsg.text && (
+                  <p className="text-xs mb-3" style={{ color: transferMsg.type === "error" ? COLORS.danger : COLORS.teal }}>
+                    {transferMsg.text}
+                  </p>
+                )}
                 <div className="space-y-2">
                   {incomingTransferRequests.map((r) => (
                     <div key={r.id} className="p-3 rounded-lg" style={{ background: COLORS.bgSoft, border: `1px solid ${COLORS.surfaceLine}` }}>
