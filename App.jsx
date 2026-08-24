@@ -756,32 +756,11 @@ export default function GuichetApp() {
   const [chatShowRealName, setChatShowRealName] = useState(false);
   const [chatRecipient, setChatRecipient] = useState(null); // null = discussion générale
   const [unreadPrivateSenders, setUnreadPrivateSenders] = useState(new Set()); // ids des chefs/agents qui ont un message privé non lu
+  const audioCtxRef = useRef(null); // contexte audio partagé, préparé dès le premier clic
   const discussionOpenRef = useRef(discussionOpen);
   const chatRecipientRef = useRef(chatRecipient);
   useEffect(() => { discussionOpenRef.current = discussionOpen; }, [discussionOpen]);
   useEffect(() => { chatRecipientRef.current = chatRecipient; }, [chatRecipient]);
-
-  // Pastilles "message privé non lu" persistées par agent, pour qu'elles
-  // survivent à une actualisation de la page tant que le message n'a pas
-  // été ouvert.
-  useEffect(() => {
-    if (!agent?.id) return;
-    try {
-      const saved = window.localStorage.getItem(`eg_unread_private_${agent.id}`);
-      if (saved) setUnreadPrivateSenders(new Set(JSON.parse(saved)));
-    } catch (e) {
-      /* localStorage indisponible ou données corrompues : on ignore */
-    }
-  }, [agent?.id]);
-
-  useEffect(() => {
-    if (!agent?.id) return;
-    try {
-      window.localStorage.setItem(`eg_unread_private_${agent.id}`, JSON.stringify([...unreadPrivateSenders]));
-    } catch (e) {
-      /* stockage plein ou indisponible : on ignore, l'app reste fonctionnelle */
-    }
-  }, [unreadPrivateSenders, agent?.id]);
   const [chatTeamList, setChatTeamList] = useState([]); // chef d'agence : ses agents
   const [chatMyManager, setChatMyManager] = useState(null); // agent simple : son chef
   const [agentChatInput, setAgentChatInput] = useState("");
@@ -804,6 +783,13 @@ export default function GuichetApp() {
   }, [signupCooldown]);
   const [newAgencyCode, setNewAgencyCode] = useState("");
   const [agencyCodeCopied, setAgencyCodeCopied] = useState(false);
+
+  // ===== Changement de chef d'agence (avec validation de l'ancien chef) =====
+  const [transferCodeInput, setTransferCodeInput] = useState("");
+  const [transferSubmitting, setTransferSubmitting] = useState(false);
+  const [transferMsg, setTransferMsg] = useState({ type: "", text: "" });
+  const [myPendingTransfer, setMyPendingTransfer] = useState(null); // pour l'agent
+  const [incomingTransferRequests, setIncomingTransferRequests] = useState([]); // pour le chef
 
   function generateAgencyCode(name) {
     const base = (name || "AG").replace(/[^A-Za-z]/g, "").toUpperCase().slice(0, 3) || "AGC";
@@ -852,6 +838,74 @@ export default function GuichetApp() {
     if (error || !data) return null;
     return data.code;
   }
+
+  // ===== Changement de chef d'agence =====
+  async function loadMyPendingTransfer() {
+    if (!agent || agent.role !== "agent") return;
+    const { data } = await supabase
+      .from("agency_transfer_requests")
+      .select("*, agencies:new_agency_id(name)")
+      .eq("agent_id", agent.id)
+      .eq("status", "pending")
+      .maybeSingle();
+    setMyPendingTransfer(data || null);
+  }
+
+  async function loadIncomingTransferRequests() {
+    if (!agent || agent.role !== "manager" || !agent.agencyId) return;
+    const { data } = await supabase
+      .from("agency_transfer_requests")
+      .select("*, agents:agent_id(full_name, phone), new_agencies:new_agency_id(name)")
+      .eq("old_agency_id", agent.agencyId)
+      .eq("status", "pending")
+      .order("created_at", { ascending: true });
+    setIncomingTransferRequests(data || []);
+  }
+
+  async function handleRequestAgencyTransfer() {
+    if (!agent || !transferCodeInput.trim()) return;
+    setTransferSubmitting(true);
+    setTransferMsg({ type: "", text: "" });
+    const code = transferCodeInput.trim().toUpperCase();
+    const { data: foundAgency, error: findErr } = await supabase.from("agencies").select("*").eq("code", code).single();
+    if (findErr || !foundAgency) {
+      setTransferSubmitting(false);
+      setTransferMsg({ type: "error", text: "Code d'agence introuvable. Vérifie-le auprès du nouveau chef." });
+      return;
+    }
+    if (foundAgency.id === agent.agencyId) {
+      setTransferSubmitting(false);
+      setTransferMsg({ type: "error", text: "Tu fais déjà partie de cette agence." });
+      return;
+    }
+    const { error } = await supabase.from("agency_transfer_requests").insert({
+      agent_id: agent.id,
+      old_agency_id: agent.agencyId,
+      new_agency_id: foundAgency.id,
+      status: "pending",
+    });
+    setTransferSubmitting(false);
+    if (error) {
+      setTransferMsg({ type: "error", text: "Erreur : " + error.message });
+      return;
+    }
+    setTransferCodeInput("");
+    setTransferMsg({ type: "success", text: "Demande envoyée à ton chef actuel. Il doit la valider avant le transfert." });
+    loadMyPendingTransfer();
+  }
+
+  async function handleDecideTransfer(requestId, approve) {
+    const { error } = await supabase
+      .from("agency_transfer_requests")
+      .update({ status: approve ? "approved" : "rejected" })
+      .eq("id", requestId);
+    if (!error) loadIncomingTransferRequests();
+  }
+
+  useEffect(() => {
+    if (tab === "parametres" && agent?.role === "agent") loadMyPendingTransfer();
+    if (tab === "parametres" && agent?.role === "manager") loadIncomingTransferRequests();
+  }, [tab, agent?.id]);
 
   // ===== Abonnement =====
   // Période de 2 mois pour l'historique payant : Jan-Fév, Mar-Avr, Mai-Juin, Juil-Août, Sep-Oct, Nov-Déc
@@ -992,11 +1046,15 @@ export default function GuichetApp() {
   // ===== Discussion entre agents (chat) =====
   // Petit son de notification (généré directement, pas de fichier audio à
   // héberger) — joué uniquement pour un nouveau message privé non lu.
+  // On réutilise un AudioContext préparé dès le premier clic de la personne,
+  // car les navigateurs bloquent la création/lecture audio tant qu'aucune
+  // interaction n'a eu lieu sur la page (sinon le son ne joue jamais après
+  // un simple rechargement).
   function playChatNotificationSound() {
     try {
-      const Ctx = window.AudioContext || window.webkitAudioContext;
-      if (!Ctx) return;
-      const ctx = new Ctx();
+      const ctx = audioCtxRef.current;
+      if (!ctx) return; // pas encore débloqué par une interaction utilisateur
+      if (ctx.state === "suspended") ctx.resume();
       const now = ctx.currentTime;
       [880, 1175].forEach((freq, i) => {
         const osc = ctx.createOscillator();
@@ -1011,12 +1069,51 @@ export default function GuichetApp() {
         osc.start(start);
         osc.stop(start + 0.2);
       });
-      setTimeout(() => ctx.close(), 500);
     } catch (e) {
-      // Silencieux : certains navigateurs bloquent l'audio avant une
-      // interaction utilisateur — ce n'est pas une erreur bloquante.
+      // Silencieux : ce n'est pas une erreur bloquante.
     }
   }
+
+  // Prépare le contexte audio dès le tout premier clic/touche de la
+  // personne sur la page, pour que le son de notification soit prêt bien
+  // avant qu'un message n'arrive (y compris juste après un rechargement).
+  useEffect(() => {
+    function unlockAudio() {
+      if (!audioCtxRef.current) {
+        try {
+          const Ctx = window.AudioContext || window.webkitAudioContext;
+          if (Ctx) audioCtxRef.current = new Ctx();
+        } catch (e) {}
+      }
+      window.removeEventListener("click", unlockAudio);
+      window.removeEventListener("keydown", unlockAudio);
+      window.removeEventListener("touchstart", unlockAudio);
+    }
+    window.addEventListener("click", unlockAudio);
+    window.addEventListener("keydown", unlockAudio);
+    window.addEventListener("touchstart", unlockAudio);
+    return () => {
+      window.removeEventListener("click", unlockAudio);
+      window.removeEventListener("keydown", unlockAudio);
+      window.removeEventListener("touchstart", unlockAudio);
+    };
+  }, []);
+
+  // Au login, on récupère les VRAIS messages privés non lus depuis la base
+  // (sinon la pastille de notification se remet à zéro à chaque
+  // rechargement de la page, même s'il reste des messages non lus).
+  async function loadUnreadPrivateFromDb() {
+    if (!agent) return;
+    const { data } = await supabase
+      .from("chat_messages")
+      .select("agent_id")
+      .eq("recipient_id", agent.id)
+      .is("read_at", null);
+    if (data) setUnreadPrivateSenders(new Set(data.map((r) => r.agent_id)));
+  }
+  useEffect(() => {
+    if (agent) loadUnreadPrivateFromDb();
+  }, [agent?.id]);
 
   function formatChatTime(iso) {
     if (!iso) return "";
@@ -1112,7 +1209,6 @@ export default function GuichetApp() {
         setUnreadPrivateSenders((prev) => {
           if (prev.has(m.agent_id)) return prev; // déjà signalé, pas de son en double
           playChatNotificationSound();
-          pushNotification(`💬 ${m.agent_name} t'a écrit un message privé`);
           return new Set(prev).add(m.agent_id);
         });
       })
@@ -1120,27 +1216,26 @@ export default function GuichetApp() {
     return () => supabase.removeChannel(channel);
   }, [agent?.id]);
 
-  // La pastille de non-lu ne s'efface QUE quand on QUITTE la conversation
-  // (fermeture de la bulle, ou changement de destinataire) — pas au moment
-  // où on l'ouvre, pour laisser le temps de vraiment lire le message avant
-  // qu'elle ne disparaisse.
-  const viewedConversationRef = useRef({ discussionOpen: false, chatRecipientId: null });
+  // Quand on ouvre une conversation privée, on efface sa pastille de non-lu
+  // ET on marque les messages comme lus en base (sinon ça revient au
+  // prochain rechargement de la page).
   useEffect(() => {
-    const was = viewedConversationRef.current;
-    const wasViewing = was.discussionOpen && was.chatRecipientId;
-    const stillViewingSame = discussionOpen && chatRecipient?.id === was.chatRecipientId;
-    if (wasViewing && !stillViewingSame) {
-      // On quitte (ou on change de) la conversation qu'on regardait : on la marque lue.
-      const leftId = was.chatRecipientId;
+    if (discussionOpen && chatRecipient && agent) {
       setUnreadPrivateSenders((prev) => {
-        if (!prev.has(leftId)) return prev;
+        if (!prev.has(chatRecipient.id)) return prev;
         const next = new Set(prev);
-        next.delete(leftId);
+        next.delete(chatRecipient.id);
         return next;
       });
+      supabase
+        .from("chat_messages")
+        .update({ read_at: new Date().toISOString() })
+        .eq("recipient_id", agent.id)
+        .eq("agent_id", chatRecipient.id)
+        .is("read_at", null)
+        .then(() => {});
     }
-    viewedConversationRef.current = { discussionOpen, chatRecipientId: chatRecipient?.id || null };
-  }, [discussionOpen, chatRecipient]);
+  }, [discussionOpen, chatRecipient, agent?.id]);
 
   useEffect(() => {
     if (discussionOpen && agent) {
@@ -2317,27 +2412,12 @@ export default function GuichetApp() {
     setPasswordChangeMsg({ type: "success", text: "Mot de passe mis à jour." });
   }
 
-  // Notifications — persistées dans le navigateur pour survivre à une actualisation
-  const NOTIF_STORAGE_KEY = "eg_notifications_v1";
+  // Notifications
   const [notifOpen, setNotifOpen] = useState(false);
-  const [notifications, setNotifications] = useState(() => {
-    try {
-      const saved = typeof window !== "undefined" ? window.localStorage.getItem(NOTIF_STORAGE_KEY) : null;
-      if (saved) return JSON.parse(saved);
-    } catch (e) {
-      /* localStorage indisponible ou données corrompues : on repart de zéro */
-    }
-    return [{ id: 1, text: "Bienvenue sur EmpireGuichet 👋", time: "Aujourd'hui", read: true }];
-  });
-  const notifCounter = useRef(notifications.reduce((max, n) => Math.max(max, n.id), 0) + 1);
-
-  useEffect(() => {
-    try {
-      window.localStorage.setItem(NOTIF_STORAGE_KEY, JSON.stringify(notifications));
-    } catch (e) {
-      /* stockage plein ou indisponible : on ignore, l'app reste fonctionnelle */
-    }
-  }, [notifications]);
+  const [notifications, setNotifications] = useState([
+    { id: 1, text: "Bienvenue sur EmpireGuichet 👋", time: "Aujourd'hui", read: true },
+  ]);
+  const notifCounter = useRef(2);
 
   function pushNotification(text) {
     setNotifications((list) => [
@@ -5801,6 +5881,82 @@ export default function GuichetApp() {
                 Simulation — rien n'est stocké de façon permanente ni transmis à un serveur.
               </p>
             </form>
+
+            {/* Agent simple : demander à rejoindre un nouveau chef */}
+            {agent?.role === "agent" && (
+              <div className="p-6 rounded-xl" style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}` }}>
+                <div className="flex items-center gap-2 mb-4">
+                  <Users size={16} style={{ color: COLORS.goldSoft }} />
+                  <span className="text-sm font-medium">Changer de chef d'agence</span>
+                </div>
+                {myPendingTransfer ? (
+                  <div className="p-4 rounded-lg text-sm" style={{ background: "rgba(217,164,65,0.1)", border: `1px solid ${COLORS.surfaceLine}` }}>
+                    Demande envoyée pour rejoindre <strong>{myPendingTransfer.agencies?.name || "la nouvelle agence"}</strong> — en attente de validation de ton chef actuel.
+                  </div>
+                ) : (
+                  <>
+                    <p className="text-xs mb-3" style={{ color: COLORS.textMuted }}>
+                      Entre le code du nouveau chef d'agence. Ton chef actuel devra valider ce changement avant qu'il prenne effet.
+                    </p>
+                    <input
+                      value={transferCodeInput}
+                      onChange={(e) => setTransferCodeInput(e.target.value.toUpperCase())}
+                      placeholder="Code de la nouvelle agence"
+                      className="w-full px-3.5 py-2.5 rounded-lg text-sm outline-none mb-2 gc-mono"
+                      style={{ background: COLORS.bgSoft, border: `1px solid ${COLORS.surfaceLine}`, color: COLORS.text }}
+                    />
+                    <button
+                      onClick={handleRequestAgencyTransfer}
+                      disabled={transferSubmitting}
+                      className="gc-btn w-full flex items-center justify-center gap-1.5 py-2.5 rounded-lg text-sm font-medium"
+                      style={{ background: COLORS.gold, color: "#052E36", opacity: transferSubmitting ? 0.6 : 1 }}
+                    >
+                      <Send size={14} /> {transferSubmitting ? "Envoi…" : "Envoyer la demande"}
+                    </button>
+                    {transferMsg.text && (
+                      <p className="text-xs mt-2" style={{ color: transferMsg.type === "error" ? COLORS.danger : COLORS.teal }}>
+                        {transferMsg.text}
+                      </p>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* Chef d'agence : valider ou refuser les demandes de départ */}
+            {agent?.role === "manager" && incomingTransferRequests.length > 0 && (
+              <div className="p-6 rounded-xl" style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}` }}>
+                <div className="flex items-center gap-2 mb-4">
+                  <Users size={16} style={{ color: COLORS.goldSoft }} />
+                  <span className="text-sm font-medium">Demandes de changement d'agence</span>
+                </div>
+                <div className="space-y-2">
+                  {incomingTransferRequests.map((r) => (
+                    <div key={r.id} className="p-3 rounded-lg" style={{ background: COLORS.bgSoft, border: `1px solid ${COLORS.surfaceLine}` }}>
+                      <div className="text-sm mb-2">
+                        <strong>{r.agents?.full_name}</strong> veut rejoindre <strong>{r.new_agencies?.name || "une autre agence"}</strong>
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => handleDecideTransfer(r.id, true)}
+                          className="gc-btn px-3 py-1.5 rounded-lg text-xs font-medium"
+                          style={{ background: COLORS.teal, color: "#052E36" }}
+                        >
+                          Valider le départ
+                        </button>
+                        <button
+                          onClick={() => handleDecideTransfer(r.id, false)}
+                          className="gc-btn px-3 py-1.5 rounded-lg text-xs font-medium border"
+                          style={{ borderColor: COLORS.surfaceLine, color: COLORS.textMuted }}
+                        >
+                          Refuser
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
         </>
