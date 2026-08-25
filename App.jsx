@@ -828,6 +828,7 @@ export default function GuichetApp() {
       documentType: data.document_type,
       kycRejectedReason: data.kyc_rejected_reason,
       isPlatformOwner: data.is_platform_owner || false,
+      avatarUrl: data.avatar_url || null,
       agencyCode: null,
     };
   }
@@ -1807,6 +1808,42 @@ export default function GuichetApp() {
     if (error) throw error;
     const { data } = supabase.storage.from("ad-images").getPublicUrl(path);
     return data.publicUrl;
+  }
+
+  // ===== Photo de profil =====
+  const [avatarUploading, setAvatarUploading] = useState(false);
+  const [avatarMsg, setAvatarMsg] = useState({ type: "", text: "" });
+
+  async function handleUploadAvatar(file) {
+    if (!agent || !file) return;
+    if (!file.type.startsWith("image/")) {
+      setAvatarMsg({ type: "error", text: "Choisis une image (JPG, PNG…)." });
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setAvatarMsg({ type: "error", text: "Image trop lourde (max 5 Mo)." });
+      return;
+    }
+    setAvatarUploading(true);
+    setAvatarMsg({ type: "", text: "" });
+    try {
+      const ext = file.name.split(".").pop();
+      const path = `${agent.id}/avatar-${Date.now()}.${ext}`;
+      const { error: uploadErr } = await supabase.storage.from("avatars").upload(path, file, { upsert: true });
+      if (uploadErr) throw uploadErr;
+      const { data: publicUrlData } = supabase.storage.from("avatars").getPublicUrl(path);
+      const { error: updateErr } = await supabase
+        .from("agents")
+        .update({ avatar_url: publicUrlData.publicUrl })
+        .eq("id", agent.id);
+      if (updateErr) throw updateErr;
+      setAgent((prev) => (prev ? { ...prev, avatarUrl: publicUrlData.publicUrl } : prev));
+      setAvatarMsg({ type: "success", text: "Photo de profil mise à jour." });
+    } catch (e) {
+      setAvatarMsg({ type: "error", text: "Erreur : " + e.message });
+    } finally {
+      setAvatarUploading(false);
+    }
   }
 
   // Supprime définitivement les annonces/publicités expirées, pour éviter
@@ -3887,11 +3924,37 @@ export default function GuichetApp() {
           style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}` }}
         >
           <div className="flex items-center gap-3">
-            <div
-              style={{ background: COLORS.gold, color: "#052E36" }}
-              className="w-9 h-9 rounded-full flex items-center justify-center font-semibold gc-display"
-            >
-              {agent?.name?.charAt(0)}
+            <div className="relative">
+              {agent?.avatarUrl ? (
+                <img
+                  src={agent.avatarUrl}
+                  alt={agent.name}
+                  className="w-9 h-9 rounded-full object-cover"
+                  style={{ border: `1px solid ${COLORS.surfaceLine}` }}
+                />
+              ) : (
+                <div
+                  style={{ background: COLORS.gold, color: "#052E36" }}
+                  className="w-9 h-9 rounded-full flex items-center justify-center font-semibold gc-display"
+                >
+                  {agent?.name?.charAt(0)}
+                </div>
+              )}
+              <label
+                htmlFor="avatar-upload-input"
+                aria-label="Changer la photo de profil"
+                className="gc-btn absolute -bottom-1 -right-1 w-4 h-4 rounded-full flex items-center justify-center cursor-pointer"
+                style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}` }}
+              >
+                <Camera size={9} style={{ color: COLORS.textMuted }} />
+              </label>
+              <input
+                id="avatar-upload-input"
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => e.target.files?.[0] && handleUploadAvatar(e.target.files[0])}
+              />
             </div>
             <div>
               <div className="text-sm font-medium flex items-center gap-2">
@@ -3918,6 +3981,14 @@ export default function GuichetApp() {
             <LogOut size={13} /> Déconnexion
           </button>
         </div>
+        {(avatarUploading || avatarMsg.text) && (
+          <div
+            className="text-xs mb-4 -mt-4"
+            style={{ color: avatarMsg.type === "error" ? COLORS.danger : COLORS.teal }}
+          >
+            {avatarUploading ? "Envoi de la photo…" : avatarMsg.text}
+          </div>
+        )}
 
         {/* Tabs */}
         <div className="flex gap-2 mb-6 flex-wrap">
