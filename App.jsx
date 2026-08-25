@@ -912,6 +912,74 @@ export default function GuichetApp() {
     if (tab === "parametres" && agent?.role === "manager") loadIncomingTransferRequests();
   }, [tab, agent?.id]);
 
+  // ===== Promotion agent simple → chef d'agence =====
+  const PROMOTION_MANAGER_PRICE = 3500;
+  const [promotionAgencyNameInput, setPromotionAgencyNameInput] = useState("");
+  const [promotionSubmitting, setPromotionSubmitting] = useState(false);
+  const [promotionMsg, setPromotionMsg] = useState({ type: "", text: "" });
+  const [myPendingPromotion, setMyPendingPromotion] = useState(null); // pour l'agent
+  const [incomingPromotionRequests, setIncomingPromotionRequests] = useState([]); // pour le chef
+
+  async function loadMyPendingPromotion() {
+    if (!agent || agent.role !== "agent") return;
+    const { data } = await supabase
+      .from("promotion_requests")
+      .select("*")
+      .eq("agent_id", agent.id)
+      .eq("status", "pending")
+      .maybeSingle();
+    setMyPendingPromotion(data || null);
+  }
+
+  async function loadIncomingPromotionRequests() {
+    if (!agent || agent.role !== "manager" || !agent.agencyId) return;
+    const { data } = await supabase
+      .from("promotion_requests")
+      .select("*, agents:agent_id(full_name, phone)")
+      .eq("old_agency_id", agent.agencyId)
+      .eq("status", "pending")
+      .order("created_at", { ascending: true });
+    setIncomingPromotionRequests(data || []);
+  }
+
+  async function handleRequestPromotion() {
+    if (!agent || !promotionAgencyNameInput.trim()) return;
+    setPromotionSubmitting(true);
+    setPromotionMsg({ type: "", text: "" });
+    const { error } = await supabase.from("promotion_requests").insert({
+      agent_id: agent.id,
+      old_agency_id: agent.agencyId,
+      new_agency_name: promotionAgencyNameInput.trim(),
+      status: "pending",
+    });
+    setPromotionSubmitting(false);
+    if (error) {
+      setPromotionMsg({ type: "error", text: "Erreur : " + error.message });
+      return;
+    }
+    setPromotionAgencyNameInput("");
+    setPromotionMsg({ type: "success", text: "Demande envoyée à ton chef actuel. Il doit la valider avant que tu deviennes chef d'agence." });
+    loadMyPendingPromotion();
+  }
+
+  async function handleDecidePromotion(requestId, approve) {
+    const { error } = await supabase
+      .from("promotion_requests")
+      .update({ status: approve ? "approved" : "rejected" })
+      .eq("id", requestId);
+    if (error) {
+      console.error("Échec de la décision de promotion :", error.message);
+      setPromotionMsg({ type: "error", text: "Erreur : " + error.message });
+      return;
+    }
+    loadIncomingPromotionRequests();
+  }
+
+  useEffect(() => {
+    if (tab === "parametres" && agent?.role === "agent") loadMyPendingPromotion();
+    if (tab === "parametres" && agent?.role === "manager") loadIncomingPromotionRequests();
+  }, [tab, agent?.id]);
+
   // ===== Abonnement =====
   // Période de 2 mois pour l'historique payant : Jan-Fév, Mar-Avr, Mai-Juin, Juil-Août, Sep-Oct, Nov-Déc
   function bimonthStart(d = new Date()) {
@@ -5864,6 +5932,90 @@ export default function GuichetApp() {
                     {transferMsg.text && (
                       <p className="text-xs mt-2" style={{ color: transferMsg.type === "error" ? COLORS.danger : COLORS.teal }}>
                         {transferMsg.text}
+                      </p>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* Chef d'agence : valider ou refuser les demandes de promotion */}
+            {agent?.role === "manager" && incomingPromotionRequests.length > 0 && (
+              <div className="p-6 rounded-xl" style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}` }}>
+                <div className="flex items-center gap-2 mb-4">
+                  <Crown size={16} style={{ color: COLORS.goldSoft }} />
+                  <span className="text-sm font-medium">Demandes de promotion en chef d'agence</span>
+                </div>
+                {promotionMsg.text && (
+                  <p className="text-xs mb-3" style={{ color: promotionMsg.type === "error" ? COLORS.danger : COLORS.teal }}>
+                    {promotionMsg.text}
+                  </p>
+                )}
+                <div className="space-y-2">
+                  {incomingPromotionRequests.map((r) => (
+                    <div key={r.id} className="p-3 rounded-lg" style={{ background: COLORS.bgSoft, border: `1px solid ${COLORS.surfaceLine}` }}>
+                      <div className="text-sm mb-2">
+                        <strong>{r.agents?.full_name}</strong> souhaite devenir chef d'agence et créer <strong>{r.new_agency_name}</strong>
+                      </div>
+                      <p className="text-xs mb-2" style={{ color: COLORS.textMuted }}>
+                        Une fois validé, il devra payer son abonnement chef d'agence ({PROMOTION_MANAGER_PRICE.toLocaleString("fr-FR")} FCFA / 6 mois) pour avoir un accès complet.
+                      </p>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => handleDecidePromotion(r.id, true)}
+                          className="gc-btn px-3 py-1.5 rounded-lg text-xs font-medium"
+                          style={{ background: COLORS.teal, color: "#052E36" }}
+                        >
+                          Valider la promotion
+                        </button>
+                        <button
+                          onClick={() => handleDecidePromotion(r.id, false)}
+                          className="gc-btn px-3 py-1.5 rounded-lg text-xs font-medium border"
+                          style={{ borderColor: COLORS.surfaceLine, color: COLORS.textMuted }}
+                        >
+                          Refuser
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Agent simple : demander à devenir chef d'agence */}
+            {agent?.role === "agent" && (
+              <div className="p-6 rounded-xl" style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}` }}>
+                <div className="flex items-center gap-2 mb-4">
+                  <Crown size={16} style={{ color: COLORS.goldSoft }} />
+                  <span className="text-sm font-medium">Devenir chef d'agence</span>
+                </div>
+                {myPendingPromotion ? (
+                  <div className="p-4 rounded-lg text-sm" style={{ background: "rgba(217,164,65,0.1)", border: `1px solid ${COLORS.surfaceLine}` }}>
+                    Demande envoyée pour créer <strong>{myPendingPromotion.new_agency_name}</strong> — en attente de validation de ton chef actuel.
+                  </div>
+                ) : (
+                  <>
+                    <p className="text-xs mb-3" style={{ color: COLORS.textMuted }}>
+                      Choisis le nom de ta future agence. Ton chef d'agence actuel doit valider cette demande. Une fois validée, un abonnement chef d'agence de {PROMOTION_MANAGER_PRICE.toLocaleString("fr-FR")} FCFA (6 mois) sera à payer pour activer ton accès complet.
+                    </p>
+                    <input
+                      value={promotionAgencyNameInput}
+                      onChange={(e) => setPromotionAgencyNameInput(e.target.value)}
+                      placeholder="Nom de ta future agence"
+                      className="w-full px-3.5 py-2.5 rounded-lg text-sm outline-none mb-2"
+                      style={{ background: COLORS.bgSoft, border: `1px solid ${COLORS.surfaceLine}`, color: COLORS.text }}
+                    />
+                    <button
+                      onClick={handleRequestPromotion}
+                      disabled={promotionSubmitting}
+                      className="gc-btn w-full flex items-center justify-center gap-1.5 py-2.5 rounded-lg text-sm font-medium"
+                      style={{ background: COLORS.gold, color: "#052E36", opacity: promotionSubmitting ? 0.6 : 1 }}
+                    >
+                      <Send size={14} /> {promotionSubmitting ? "Envoi…" : "Envoyer la demande"}
+                    </button>
+                    {promotionMsg.text && (
+                      <p className="text-xs mt-2" style={{ color: promotionMsg.type === "error" ? COLORS.danger : COLORS.teal }}>
+                        {promotionMsg.text}
                       </p>
                     )}
                   </>
