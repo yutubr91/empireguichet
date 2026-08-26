@@ -1812,6 +1812,7 @@ export default function GuichetApp() {
   }
 
   // ===== Photo de profil =====
+  const [chatAvatarPreview, setChatAvatarPreview] = useState(null); // url de la photo de chat à afficher en grand
   const [avatarUploading, setAvatarUploading] = useState(false);
   const [avatarPreviewOpen, setAvatarPreviewOpen] = useState(false);
   const [avatarMsg, setAvatarMsg] = useState({ type: "", text: "" });
@@ -6745,12 +6746,18 @@ export default function GuichetApp() {
                   >
                     {m.agent_id !== agent?.id &&
                       (m.agent_avatar_url ? (
-                        <img
-                          src={m.agent_avatar_url}
-                          alt=""
-                          className="w-6 h-6 rounded-full object-cover shrink-0 mb-0.5"
-                          style={{ border: `1px solid ${COLORS.surfaceLine}` }}
-                        />
+                        <button
+                          onClick={() => setChatAvatarPreview(m.agent_avatar_url)}
+                          aria-label="Agrandir la photo"
+                          className="w-6 h-6 rounded-full shrink-0 mb-0.5"
+                        >
+                          <img
+                            src={m.agent_avatar_url}
+                            alt=""
+                            className="w-6 h-6 rounded-full object-cover"
+                            style={{ border: `1px solid ${COLORS.surfaceLine}` }}
+                          />
+                        </button>
                       ) : (
                         <div
                           className="w-6 h-6 rounded-full flex items-center justify-center shrink-0 mb-0.5"
@@ -6810,6 +6817,32 @@ export default function GuichetApp() {
                   <Send size={14} />
                 </button>
               </div>
+
+              {/* Aperçu en grand d'une photo cliquée dans le chat */}
+              {chatAvatarPreview && (
+                <div
+                  onClick={() => setChatAvatarPreview(null)}
+                  className="gc-fade-in fixed inset-0 flex items-center justify-center p-6"
+                  style={{ background: "rgba(0,0,0,0.75)", zIndex: 100 }}
+                >
+                  <div className="relative max-w-sm w-full">
+                    <img
+                      src={chatAvatarPreview}
+                      alt=""
+                      className="w-full rounded-2xl object-cover"
+                      style={{ aspectRatio: "1 / 1", border: `2px solid ${COLORS.surfaceLine}` }}
+                    />
+                    <button
+                      onClick={() => setChatAvatarPreview(null)}
+                      aria-label="Fermer l'aperçu"
+                      className="gc-btn absolute -top-3 -right-3 w-8 h-8 rounded-full flex items-center justify-center"
+                      style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}` }}
+                    >
+                      <X size={16} style={{ color: COLORS.text }} />
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
