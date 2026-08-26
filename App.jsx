@@ -1251,6 +1251,7 @@ export default function GuichetApp() {
       .insert({
         agent_id: agent.id,
         agent_name: chatDisplayName(),
+        agent_avatar_url: chatShowRealName ? agent.avatarUrl || null : null,
         agent_role: agent.role,
         content,
         recipient_id: chatRecipient ? chatRecipient.id : null,
@@ -6738,7 +6739,26 @@ export default function GuichetApp() {
                   </div>
                 )}
                 {agentChatMessages.map((m) => (
-                  <div key={m.id} className={`flex ${m.agent_id === agent?.id ? "justify-end" : "justify-start"}`}>
+                  <div
+                    key={m.id}
+                    className={`flex items-end gap-1.5 ${m.agent_id === agent?.id ? "justify-end" : "justify-start"}`}
+                  >
+                    {m.agent_id !== agent?.id &&
+                      (m.agent_avatar_url ? (
+                        <img
+                          src={m.agent_avatar_url}
+                          alt=""
+                          className="w-6 h-6 rounded-full object-cover shrink-0 mb-0.5"
+                          style={{ border: `1px solid ${COLORS.surfaceLine}` }}
+                        />
+                      ) : (
+                        <div
+                          className="w-6 h-6 rounded-full flex items-center justify-center shrink-0 mb-0.5"
+                          style={{ background: COLORS.bgSoft, border: `1px solid ${COLORS.surfaceLine}` }}
+                        >
+                          <User size={12} style={{ color: COLORS.textMuted }} />
+                        </div>
+                      ))}
                     <div
                       className="max-w-[85%] p-3 rounded-xl text-sm"
                       style={{
