@@ -13,7 +13,7 @@ import {
   ChevronRight,
   ChevronLeft,
   Menu,
-  Grid,
+  LayoutGrid,
   X,
   Coins,
   ShieldCheck,
@@ -4122,7 +4122,7 @@ export default function GuichetApp() {
                   className="gc-btn flex items-center justify-center w-10 h-10 rounded-lg"
                   style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}`, color: COLORS.text }}
                 >
-                  {extraNavOpen ? <X size={20} /> : <Grid size={20} />}
+                  {extraNavOpen ? <X size={20} /> : <LayoutGrid size={20} />}
                 </button>
 
                 {extraNavOpen && (
