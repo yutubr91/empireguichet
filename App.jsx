@@ -13,7 +13,6 @@ import {
   ChevronRight,
   ChevronLeft,
   Menu,
-  LayoutGrid,
   X,
   Coins,
   ShieldCheck,
@@ -678,9 +677,6 @@ export default function GuichetApp() {
   }, [introStep]);
   const [tab, setTab] = useState("dashboard");
   const [menuOpen, setMenuOpen] = useState(false);
-  const [appNavOpen, setAppNavOpen] = useState(false); // menu 3 traits de navigation une fois connecté
-  const [extraNavOpen, setExtraNavOpen] = useState(false); // 2e icône : fonctions absentes du menu principal (Équipe, Parrainage, etc.)
-  const [paramAdminSection, setParamAdminSection] = useState("chefs"); // sous-onglet de "Paramètres 2" (propriétaire) : "chefs" ou "abonnements"
   const [selectedNetwork, setSelectedNetwork] = useState(NETWORKS[0].id);
   const [txDirection, setTxDirection] = useState("depot"); // "depot" (envoi) ou "retrait" (réception)
   const [amount, setAmount] = useState("");
@@ -1345,8 +1341,8 @@ export default function GuichetApp() {
   useEffect(() => {
     if (tab === "abonnement" && agent) loadMyPayments();
     if (tab === "parrainage" && agent) loadMyReferralCommissions();
-    if ((tab === "backoffice-abonnements" || (tab === "parametres-admin" && paramAdminSection === "abonnements")) && agent?.isPlatformOwner) loadPendingSubPayments();
-  }, [tab, agent?.id, paramAdminSection]);
+    if (tab === "backoffice-abonnements" && agent?.isPlatformOwner) loadPendingSubPayments();
+  }, [tab, agent?.id]);
 
   // ===== Équipe réelle (chef d'agence) et filleuls réels (parrainage) =====
   const [realTeam, setRealTeam] = useState([]);
@@ -1770,11 +1766,11 @@ export default function GuichetApp() {
     if (tab === "kyc-review" && agent?.role === "manager") {
       loadPendingKycAgents();
     }
-    if ((tab === "kyc-review-managers" || (tab === "parametres-admin" && paramAdminSection === "chefs")) && agent?.isPlatformOwner) {
+    if (tab === "kyc-review-managers" && agent?.isPlatformOwner) {
       loadPendingManagers();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab, paramAdminSection]);
+  }, [tab]);
 
   // ===== Publicités (annonceurs) =====
   const AD_PRICING = [
@@ -1816,7 +1812,6 @@ export default function GuichetApp() {
   }
 
   // ===== Photo de profil =====
-  const [chatAvatarPreview, setChatAvatarPreview] = useState(null); // url de la photo de chat à afficher en grand
   const [avatarUploading, setAvatarUploading] = useState(false);
   const [avatarPreviewOpen, setAvatarPreviewOpen] = useState(false);
   const [avatarMsg, setAvatarMsg] = useState({ type: "", text: "" });
@@ -4024,138 +4019,45 @@ export default function GuichetApp() {
           </div>
         )}
 
-        {/* Menu de navigation (3 traits) — liste selon le rôle : agent simple / chef d'agence / propriétaire */}
-        {(() => {
-          const navItems = agent?.isPlatformOwner
-            ? [
-                { id: "dashboard", label: "Tableau de bord", icon: BarChart3 },
-                { id: "kyc", label: kycVerified ? "Vérification KYC" : "Vérification KYC ⚠", icon: kycVerified ? FileCheck : AlertTriangle },
-                { id: "historique", label: "Historique", icon: Clock },
-                { id: "abonnement", label: hasFullAccess ? "Abonnement" : "Abonnement ⚠", icon: hasFullAccess ? CreditCard : Lock },
-                { id: "publicites", label: "Publicités", icon: Megaphone },
-                { id: "annonceur", label: "Annonceur", icon: Megaphone },
-                { id: "backoffice-pub", label: "Backoffice publicitaires", icon: BarChart3 },
-                { id: "parametres-admin", label: "Paramètres 2", icon: ShieldCheck },
-                { id: "parametres", label: "Paramètres", icon: Settings },
-              ]
-            : agent?.role === "manager"
-            ? [
-                { id: "dashboard", label: "Tableau de bord", icon: BarChart3 },
-                { id: "kyc", label: kycVerified ? "Vérification KYC" : "Vérification KYC ⚠", icon: kycVerified ? FileCheck : AlertTriangle },
-                { id: "historique", label: "Historique", icon: Clock },
-                { id: "abonnement", label: hasFullAccess ? "Abonnement" : "Abonnement ⚠", icon: hasFullAccess ? CreditCard : Lock },
-                { id: "publicites", label: "Publicités", icon: Megaphone },
-                { id: "parametres", label: "Paramètres", icon: Settings },
-              ]
-            : [
-                { id: "dashboard", label: "Tableau de bord", icon: BarChart3 },
-                { id: "kyc", label: kycVerified ? "Vérification KYC" : "Vérification KYC ⚠", icon: kycVerified ? FileCheck : AlertTriangle },
-                { id: "abonnement", label: hasFullAccess ? "Abonnement" : "Abonnement ⚠", icon: hasFullAccess ? CreditCard : Lock },
-                { id: "publicites", label: "Publicités", icon: Megaphone },
-                { id: "parametres", label: "Paramètres", icon: Settings },
-              ];
-
-          // Fonctions qui existent dans l'app mais ne sont pas listées dans le menu ci-dessus,
-          // regroupées derrière une 2e icône à côté des 3 traits, selon le rôle.
-          const extraItems = agent?.isPlatformOwner
-            ? [{ id: "parrainage", label: "Parrainage", icon: Users }]
-            : agent?.role === "manager"
-            ? [
-                { id: "equipe", label: "Équipe", icon: Crown },
-                { id: "kyc-review", label: "Vérifications KYC équipe", icon: Fingerprint },
-                { id: "parrainage", label: "Parrainage", icon: Users },
-              ]
-            : [{ id: "parrainage", label: "Parrainage", icon: Users }];
-
-          return (
-            <div className="flex items-center gap-2 mb-6" style={{ zIndex: 40 }}>
-              <div className="relative">
-                <button
-                  onClick={() => {
-                    setAppNavOpen((v) => !v);
-                    setExtraNavOpen(false);
-                  }}
-                  aria-label={appNavOpen ? "Fermer le menu" : "Ouvrir le menu"}
-                  className="gc-btn flex items-center justify-center w-10 h-10 rounded-lg"
-                  style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}`, color: COLORS.text }}
-                >
-                  {appNavOpen ? <X size={20} /> : <Menu size={20} />}
-                </button>
-
-                {appNavOpen && (
-                  <>
-                    <div className="fixed inset-0" style={{ zIndex: 39 }} onClick={() => setAppNavOpen(false)} />
-                    <div
-                      className="gc-fade-in absolute left-0 top-12 w-64 rounded-xl overflow-hidden py-1.5"
-                      style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}`, zIndex: 40, boxShadow: "0 12px 32px rgba(0,0,0,0.35)" }}
-                    >
-                      {navItems.map((t) => (
-                        <button
-                          key={t.id}
-                          onClick={() => {
-                            setTab(t.id);
-                            setAppNavOpen(false);
-                          }}
-                          className="gc-btn w-full flex items-center gap-2.5 px-4 py-2.5 text-sm font-medium text-left"
-                          style={
-                            tab === t.id
-                              ? { background: COLORS.gold, color: "#052E36" }
-                              : { background: "transparent", color: COLORS.textMuted }
-                          }
-                        >
-                          <t.icon size={15} /> {t.label}
-                        </button>
-                      ))}
-                    </div>
-                  </>
-                )}
-              </div>
-
-              {/* 2e icône : fonctions absentes du menu ci-dessus (Équipe, Vérif. KYC équipe, Parrainage selon le rôle) */}
-              <div className="relative">
-                <button
-                  onClick={() => {
-                    setExtraNavOpen((v) => !v);
-                    setAppNavOpen(false);
-                  }}
-                  aria-label={extraNavOpen ? "Fermer" : "Autres fonctions"}
-                  className="gc-btn flex items-center justify-center w-10 h-10 rounded-lg"
-                  style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}`, color: COLORS.text }}
-                >
-                  {extraNavOpen ? <X size={20} /> : <LayoutGrid size={20} />}
-                </button>
-
-                {extraNavOpen && (
-                  <>
-                    <div className="fixed inset-0" style={{ zIndex: 39 }} onClick={() => setExtraNavOpen(false)} />
-                    <div
-                      className="gc-fade-in absolute left-0 top-12 w-64 rounded-xl overflow-hidden py-1.5"
-                      style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}`, zIndex: 40, boxShadow: "0 12px 32px rgba(0,0,0,0.35)" }}
-                    >
-                      {extraItems.map((t) => (
-                        <button
-                          key={t.id}
-                          onClick={() => {
-                            setTab(t.id);
-                            setExtraNavOpen(false);
-                          }}
-                          className="gc-btn w-full flex items-center gap-2.5 px-4 py-2.5 text-sm font-medium text-left"
-                          style={
-                            tab === t.id
-                              ? { background: COLORS.gold, color: "#052E36" }
-                              : { background: "transparent", color: COLORS.textMuted }
-                          }
-                        >
-                          <t.icon size={15} /> {t.label}
-                        </button>
-                      ))}
-                    </div>
-                  </>
-                )}
-              </div>
-            </div>
-          );
-        })()}
+        {/* Tabs */}
+        <div className="flex gap-2 mb-6 flex-wrap">
+          {[
+            { id: "dashboard", label: "Tableau de bord", icon: BarChart3 },
+            { id: "kyc", label: kycVerified ? "Vérification KYC" : "Vérification KYC ⚠", icon: kycVerified ? FileCheck : AlertTriangle },
+            { id: "transaction", label: "Nouvelle transaction", icon: ArrowRightLeft },
+            { id: "historique", label: "Historique", icon: Clock },
+            ...(agent?.isPlatformOwner ? [{ id: "annonceur", label: "Annonceur", icon: Megaphone }] : []),
+            { id: "publicites", label: "Publicités", icon: Megaphone },
+            { id: "parrainage", label: "Parrainage", icon: Users },
+            {
+              id: "abonnement",
+              label: hasFullAccess ? "Abonnement" : "Abonnement ⚠",
+              icon: hasFullAccess ? CreditCard : Lock,
+            },
+            ...(agent?.role === "manager" ? [{ id: "equipe", label: "Équipe", icon: Crown }, { id: "kyc-review", label: "Vérifications KYC", icon: Fingerprint }] : []),
+            ...(agent?.isPlatformOwner
+              ? [
+                  { id: "kyc-review-managers", label: "Vérif. chefs d'agence", icon: ShieldCheck },
+                  { id: "backoffice-pub", label: "Backoffice publicité", icon: BarChart3 },
+                  { id: "backoffice-abonnements", label: "Backoffice abonnements", icon: CreditCard },
+                ]
+              : []),
+            { id: "parametres", label: "Paramètres", icon: Settings },
+          ].map((t) => (
+            <button
+              key={t.id}
+              onClick={() => setTab(t.id)}
+              className="gc-btn flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium"
+              style={
+                tab === t.id
+                  ? { background: COLORS.gold, color: "#052E36" }
+                  : { background: COLORS.surface, color: COLORS.textMuted, border: `1px solid ${COLORS.surfaceLine}` }
+              }
+            >
+              <t.icon size={15} /> {t.label}
+            </button>
+          ))}
+        </div>
 
         {/* Bandeau abonnement à activer */}
         {!hasFullAccess && !agent?.isPlatformOwner && (
@@ -4197,14 +4099,6 @@ export default function GuichetApp() {
           </div>
         ) : tab === "dashboard" && (
           <div className="gc-fade-in">
-            <button
-              onClick={() => setTab("transaction")}
-              className="gc-btn w-full flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-semibold mb-5"
-              style={{ background: COLORS.gold, color: "#052E36" }}
-            >
-              <ArrowRightLeft size={16} /> Nouvelle transaction
-            </button>
-
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
               {[
                 { label: "Transactions aujourd'hui", value: history.length },
@@ -5699,31 +5593,8 @@ export default function GuichetApp() {
 
         {/* Discussion entre agents déplacée en bulle flottante (voir plus bas) */}
 
-        {/* Paramètres 2 (propriétaire) : regroupe Vérif. chefs d'agence + Backoffice abonnements, avec sous-onglets */}
-        {tab === "parametres-admin" && agent?.isPlatformOwner && (
-          <div className="flex gap-2 mb-4">
-            {[
-              { id: "chefs", label: "Vérif. chefs d'agence" },
-              { id: "abonnements", label: "Backoffice abonnements" },
-            ].map((s) => (
-              <button
-                key={s.id}
-                onClick={() => setParamAdminSection(s.id)}
-                className="gc-btn px-3.5 py-2 rounded-lg text-xs font-medium"
-                style={
-                  paramAdminSection === s.id
-                    ? { background: COLORS.gold, color: "#052E36" }
-                    : { background: COLORS.surface, color: COLORS.textMuted, border: `1px solid ${COLORS.surfaceLine}` }
-                }
-              >
-                {s.label}
-              </button>
-            ))}
-          </div>
-        )}
-
         {/* Backoffice abonnements (propriétaire) */}
-        {(tab === "backoffice-abonnements" || (tab === "parametres-admin" && paramAdminSection === "abonnements")) && agent?.isPlatformOwner && (
+        {tab === "backoffice-abonnements" && agent?.isPlatformOwner && (
           <div className="gc-fade-in">
             <div className="text-sm font-medium mb-3">Paiements en attente de validation</div>
             {pendingSubPaymentsLoading ? (
@@ -5976,7 +5847,7 @@ export default function GuichetApp() {
           </div>
         )}
 
-        {(tab === "kyc-review-managers" || (tab === "parametres-admin" && paramAdminSection === "chefs")) && agent?.isPlatformOwner && (
+        {tab === "kyc-review-managers" && agent?.isPlatformOwner && (
           <div className="gc-fade-in">
             <p className="text-xs mb-4" style={{ color: COLORS.textMuted }}>
               Chefs d'agence ayant envoyé leurs documents et en attente de ta validation, en tant que propriétaire de la plateforme.
@@ -6868,32 +6739,19 @@ export default function GuichetApp() {
                   </div>
                 )}
                 {agentChatMessages.map((m) => (
-                  <div
-                    key={m.id}
-                    className={`flex items-end gap-1.5 ${m.agent_id === agent?.id ? "justify-end" : "justify-start"}`}
-                  >
-                    {m.agent_id !== agent?.id &&
-                      (m.agent_avatar_url ? (
-                        <button
-                          onClick={() => setChatAvatarPreview(m.agent_avatar_url)}
-                          aria-label="Agrandir la photo"
-                          className="w-6 h-6 rounded-full shrink-0 mb-0.5"
-                        >
-                          <img
-                            src={m.agent_avatar_url}
-                            alt=""
-                            className="w-6 h-6 rounded-full object-cover"
-                            style={{ border: `1px solid ${COLORS.surfaceLine}` }}
-                          />
-                        </button>
+                  <div key={m.id} className={`flex items-end gap-1.5 ${m.agent_id === agent?.id ? "justify-end" : "justify-start"}`}>
+                    {m.agent_id !== agent?.id && (
+                      m.agent_avatar_url ? (
+                        <img src={m.agent_avatar_url} alt={m.agent_name} className="w-5 h-5 rounded-full object-cover flex-shrink-0" />
                       ) : (
                         <div
-                          className="w-6 h-6 rounded-full flex items-center justify-center shrink-0 mb-0.5"
-                          style={{ background: COLORS.bgSoft, border: `1px solid ${COLORS.surfaceLine}` }}
+                          className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-semibold flex-shrink-0"
+                          style={{ background: COLORS.surfaceLine, color: COLORS.textMuted }}
                         >
-                          <User size={12} style={{ color: COLORS.textMuted }} />
+                          {m.agent_name?.charAt(0)}
                         </div>
-                      ))}
+                      )
+                    )}
                     <div
                       className="max-w-[85%] p-3 rounded-xl text-sm"
                       style={{
@@ -6945,32 +6803,6 @@ export default function GuichetApp() {
                   <Send size={14} />
                 </button>
               </div>
-
-              {/* Aperçu en grand d'une photo cliquée dans le chat */}
-              {chatAvatarPreview && (
-                <div
-                  onClick={() => setChatAvatarPreview(null)}
-                  className="gc-fade-in fixed inset-0 flex items-center justify-center p-6"
-                  style={{ background: "rgba(0,0,0,0.75)", zIndex: 100 }}
-                >
-                  <div className="relative max-w-sm w-full">
-                    <img
-                      src={chatAvatarPreview}
-                      alt=""
-                      className="w-full rounded-2xl object-cover"
-                      style={{ aspectRatio: "1 / 1", border: `2px solid ${COLORS.surfaceLine}` }}
-                    />
-                    <button
-                      onClick={() => setChatAvatarPreview(null)}
-                      aria-label="Fermer l'aperçu"
-                      className="gc-btn absolute -top-3 -right-3 w-8 h-8 rounded-full flex items-center justify-center"
-                      style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}` }}
-                    >
-                      <X size={16} style={{ color: COLORS.text }} />
-                    </button>
-                  </div>
-                </div>
-              )}
             </div>
           )}
 
