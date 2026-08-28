@@ -3161,28 +3161,40 @@ export default function GuichetApp() {
       >
         <div style={{ background: COLORS.headerBg }}>
           <div className="max-w-6xl mx-auto flex items-center justify-between px-5 py-4">
-            <button
-              type="button"
-              onClick={() => {
-                if (isAuthenticated) {
-                  setTab("dashboard");
-                }
-                window.scrollTo({ top: 0, behavior: "smooth" });
-              }}
-              className="flex items-center gap-2.5 gc-btn"
-              style={{ background: "none", border: "none", padding: 0, cursor: "pointer", textAlign: "left" }}
-              aria-label={isAuthenticated ? "Retour au tableau de bord" : "Retour à l'accueil"}
-            >
-              <img
-                src={LOGO_DATA_URI}
-                alt="EmpireGuichet"
-                style={{ height: 40, width: "auto", flexShrink: 0, objectFit: "contain" }}
-              />
+            <div className="flex items-center gap-3">
+              {isAuthenticated && (
+                <button
+                  onClick={() => setMenuOpen((v) => !v)}
+                  aria-label={menuOpen ? "Fermer le menu" : "Ouvrir le menu"}
+                  className="gc-btn w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0"
+                  style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}`, color: COLORS.goldSoft }}
+                >
+                  {menuOpen ? <X size={16} /> : <Menu size={16} />}
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => {
+                  if (isAuthenticated) {
+                    setTab("dashboard");
+                  }
+                  window.scrollTo({ top: 0, behavior: "smooth" });
+                }}
+                className="flex items-center gap-2.5 gc-btn"
+                style={{ background: "none", border: "none", padding: 0, cursor: "pointer", textAlign: "left" }}
+                aria-label={isAuthenticated ? "Retour au tableau de bord" : "Retour à l'accueil"}
+              >
+                <img
+                  src={LOGO_DATA_URI}
+                  alt="EmpireGuichet"
+                  style={{ height: 40, width: "auto", flexShrink: 0, objectFit: "contain" }}
+                />
               <div className="leading-tight">
                 <div className="gc-display text-lg font-semibold tracking-tight">EmpireGuichet</div>
                 <div className="text-[10px]" style={{ color: COLORS.textMuted }}>par Empire Digital CI</div>
               </div>
-            </button>
+              </button>
+            </div>
             <nav className="hidden md:flex items-center gap-7 text-sm" style={{ color: COLORS.textMuted }}>
               <a href="#reseaux" className="hover:text-white">Réseaux</a>
               <a href="#demo" className="hover:text-white" onClick={scrollToDemo}>Démo</a>
@@ -3325,16 +3337,7 @@ export default function GuichetApp() {
           />
         ))}
         <div style={{ position: "relative", zIndex: 1 }}>
-          {isAuthenticated ? (
-            <button
-              onClick={() => setMenuOpen((v) => !v)}
-              aria-label={menuOpen ? "Fermer le menu" : "Ouvrir le menu"}
-              className="gc-btn w-9 h-9 rounded-lg flex items-center justify-center mb-5"
-              style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}`, color: COLORS.goldSoft }}
-            >
-              {menuOpen ? <X size={16} /> : <Menu size={16} />}
-            </button>
-          ) : (
+          {!isAuthenticated && (
             <div
               className="inline-flex items-center gap-1.5 text-xs px-3 py-1 rounded-full mb-5"
               style={{ background: COLORS.surface, color: COLORS.goldSoft, border: `1px solid ${COLORS.surfaceLine}` }}
