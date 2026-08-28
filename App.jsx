@@ -3328,12 +3328,23 @@ export default function GuichetApp() {
           />
         ))}
         <div style={{ position: "relative", zIndex: 1 }}>
-          <div
-            className="inline-flex items-center gap-1.5 text-xs px-3 py-1 rounded-full mb-5"
-            style={{ background: COLORS.surface, color: COLORS.goldSoft, border: `1px solid ${COLORS.surfaceLine}` }}
-          >
-            <ShieldCheck size={13} /> Prototype — données simulées
-          </div>
+          {isAuthenticated ? (
+            <button
+              onClick={() => setMenuOpen((v) => !v)}
+              aria-label={menuOpen ? "Fermer le menu" : "Ouvrir le menu"}
+              className="gc-btn inline-flex items-center gap-1.5 text-xs px-3 py-1 rounded-full mb-5"
+              style={{ background: COLORS.surface, color: COLORS.goldSoft, border: `1px solid ${COLORS.surfaceLine}` }}
+            >
+              {menuOpen ? <X size={13} /> : <Menu size={13} />} Menu
+            </button>
+          ) : (
+            <div
+              className="inline-flex items-center gap-1.5 text-xs px-3 py-1 rounded-full mb-5"
+              style={{ background: COLORS.surface, color: COLORS.goldSoft, border: `1px solid ${COLORS.surfaceLine}` }}
+            >
+              <ShieldCheck size={13} /> Prototype — données simulées
+            </div>
+          )}
           <h1 className="gc-display text-4xl md:text-5xl font-semibold leading-tight mb-5">
             Un seul guichet.
             <br />
