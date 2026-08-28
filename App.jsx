@@ -3272,9 +3272,6 @@ export default function GuichetApp() {
             >
               {theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
             </button>
-            <button className="md:hidden" onClick={() => setMenuOpen((v) => !v)} aria-label={menuOpen ? "Fermer le menu" : "Ouvrir le menu"}>
-              {menuOpen ? <X size={22} /> : <Menu size={22} />}
-            </button>
           </div>
           {menuOpen && (
             <div className="md:hidden px-5 pb-4 flex flex-col gap-3 text-sm" style={{ color: COLORS.textMuted }}>
@@ -3332,10 +3329,10 @@ export default function GuichetApp() {
             <button
               onClick={() => setMenuOpen((v) => !v)}
               aria-label={menuOpen ? "Fermer le menu" : "Ouvrir le menu"}
-              className="gc-btn inline-flex items-center gap-1.5 text-xs px-3 py-1 rounded-full mb-5"
-              style={{ background: COLORS.surface, color: COLORS.goldSoft, border: `1px solid ${COLORS.surfaceLine}` }}
+              className="gc-btn w-9 h-9 rounded-lg flex items-center justify-center mb-5"
+              style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}`, color: COLORS.goldSoft }}
             >
-              {menuOpen ? <X size={13} /> : <Menu size={13} />} Menu
+              {menuOpen ? <X size={16} /> : <Menu size={16} />}
             </button>
           ) : (
             <div
