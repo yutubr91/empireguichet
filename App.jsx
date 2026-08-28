@@ -1813,7 +1813,7 @@ export default function GuichetApp() {
 
   // ===== Photo de profil =====
   const [avatarUploading, setAvatarUploading] = useState(false);
-  const [avatarPreviewOpen, setAvatarPreviewOpen] = useState(false);
+  const [avatarPreview, setAvatarPreview] = useState(null); // { url, name } | null
   const [avatarMsg, setAvatarMsg] = useState({ type: "", text: "" });
 
   async function handleUploadAvatar(file) {
@@ -3931,7 +3931,7 @@ export default function GuichetApp() {
                 <img
                   src={agent.avatarUrl}
                   alt={agent.name}
-                  onClick={() => setAvatarPreviewOpen(true)}
+                  onClick={() => setAvatarPreview({ url: agent.avatarUrl, name: agent.name })}
                   className="w-9 h-9 rounded-full object-cover cursor-pointer"
                   style={{ border: `1px solid ${COLORS.surfaceLine}` }}
                 />
@@ -3993,22 +3993,22 @@ export default function GuichetApp() {
           </div>
         )}
 
-        {/* Aperçu en grand de la photo de profil */}
-        {avatarPreviewOpen && agent?.avatarUrl && (
+        {/* Aperçu en grand d'une photo de profil (la sienne ou celle d'un autre agent) */}
+        {avatarPreview?.url && (
           <div
-            onClick={() => setAvatarPreviewOpen(false)}
+            onClick={() => setAvatarPreview(null)}
             className="gc-fade-in fixed inset-0 flex items-center justify-center p-6"
             style={{ background: "rgba(0,0,0,0.75)", zIndex: 100 }}
           >
             <div className="relative max-w-sm w-full">
               <img
-                src={agent.avatarUrl}
-                alt={agent.name}
+                src={avatarPreview.url}
+                alt={avatarPreview.name || ""}
                 className="w-full rounded-2xl object-cover"
                 style={{ aspectRatio: "1 / 1", border: `2px solid ${COLORS.surfaceLine}` }}
               />
               <button
-                onClick={() => setAvatarPreviewOpen(false)}
+                onClick={() => setAvatarPreview(null)}
                 aria-label="Fermer l'aperçu"
                 className="gc-btn absolute -top-3 -right-3 w-8 h-8 rounded-full flex items-center justify-center"
                 style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}` }}
@@ -6742,7 +6742,12 @@ export default function GuichetApp() {
                   <div key={m.id} className={`flex items-end gap-1.5 ${m.agent_id === agent?.id ? "justify-end" : "justify-start"}`}>
                     {m.agent_id !== agent?.id && (
                       m.agent_avatar_url ? (
-                        <img src={m.agent_avatar_url} alt={m.agent_name} className="w-5 h-5 rounded-full object-cover flex-shrink-0" />
+                        <img
+                          src={m.agent_avatar_url}
+                          alt={m.agent_name}
+                          onClick={() => setAvatarPreview({ url: m.agent_avatar_url, name: m.agent_name })}
+                          className="w-5 h-5 rounded-full object-cover flex-shrink-0 cursor-pointer"
+                        />
                       ) : (
                         <div
                           className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-semibold flex-shrink-0"
