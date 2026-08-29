@@ -4100,7 +4100,19 @@ export default function GuichetApp() {
                 ]
               : []),
             { id: "parametres", label: "Paramètres", icon: Settings },
-          ].map((t) => (
+          ]
+            // Pour un agent simple, ces 5 onglets sont déjà accessibles depuis
+            // le menu ☰ — on évite de les dupliquer ici dans la barre.
+            .filter((t) => {
+              if (agent?.isPlatformOwner) {
+                return !["dashboard", "kyc", "historique", "annonceur", "publicites", "abonnement", "parametres"].includes(t.id);
+              }
+              if (["agent", "manager"].includes(agent?.role)) {
+                return !["dashboard", "kyc", "publicites", "abonnement", "parametres"].includes(t.id);
+              }
+              return true;
+            })
+            .map((t) => (
             <button
               key={t.id}
               onClick={() => setTab(t.id)}
