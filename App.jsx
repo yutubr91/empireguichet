@@ -5908,7 +5908,8 @@ export default function GuichetApp() {
             </div>
 
             <div className="rounded-xl overflow-hidden" style={{ border: `1px solid ${COLORS.surfaceLine}` }}>
-              <table className="w-full text-sm">
+              <div className="overflow-x-auto">
+              <table className="w-full text-sm" style={{ minWidth: 640 }}>
                 <thead>
                   <tr style={{ background: COLORS.surface, color: COLORS.textMuted }}>
                     <th className="text-left font-normal px-4 py-3">Agent</th>
@@ -5954,6 +5955,7 @@ export default function GuichetApp() {
                   })}
                 </tbody>
               </table>
+              </div>
             </div>
             <p className="text-xs mt-3" style={{ color: COLORS.textMuted }}>
               Les transactions apparaissent ici en temps réel, dès qu'un agent de ton équipe en effectue une.
