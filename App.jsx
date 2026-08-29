@@ -3299,11 +3299,12 @@ export default function GuichetApp() {
               />
               {/* Menu latéral fixe, façon barre latérale — reste à l'écran, ne pousse rien */}
               <div
-                className="gc-fade-in fixed top-0 left-0 h-full flex flex-col text-sm"
+                className="gc-fade-in fixed top-0 left-0 flex flex-col text-sm"
                 style={{
                   "--gc-menu-hover": COLORS.surface,
                   width: 280,
                   maxWidth: "82vw",
+                  height: "100vh",
                   color: COLORS.textMuted,
                   background: COLORS.bg,
                   borderRight: `1px solid ${COLORS.surfaceLine}`,
