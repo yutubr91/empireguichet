@@ -3132,8 +3132,6 @@ export default function GuichetApp() {
         .gc-card:hover { transform: translateY(-2px); }
         .gc-fade-in { animation: gcFadeIn .35s ease; }
         @keyframes gcFadeIn { from { opacity:0; transform: translateY(6px);} to { opacity:1; transform:none; } }
-        .gc-menu-item { transition: background .12s ease, color .12s ease; border: 1px solid transparent; }
-        .gc-menu-item:hover:not(.gc-menu-item--active) { background: var(--gc-menu-hover); }
         @media (prefers-reduced-motion: reduce) {
           .gc-btn, .gc-card, .gc-fade-in { animation: none !important; transition: none !important; }
         }
@@ -3297,163 +3295,74 @@ export default function GuichetApp() {
               />
               {/* Menu latéral fixe, façon barre latérale — reste à l'écran, ne pousse rien */}
               <div
-                className="gc-fade-in fixed top-0 left-0 h-full flex flex-col text-sm overflow-y-auto"
-                style={{
-                  "--gc-menu-hover": COLORS.surface,
-                  width: 280,
-                  maxWidth: "82vw",
-                  color: COLORS.textMuted,
-                  background: COLORS.bg,
-                  borderRight: `1px solid ${COLORS.surfaceLine}`,
-                  boxShadow: "20px 0 40px -20px rgba(0,0,0,0.4)",
-                  zIndex: 91,
-                }}
+                className="fixed top-0 left-0 h-full flex flex-col gap-1 text-sm py-4 overflow-y-auto"
+                style={{ width: 260, maxWidth: "80vw", color: COLORS.textMuted, background: COLORS.bg, borderRight: `1px solid ${COLORS.surfaceLine}`, boxShadow: "20px 0 40px -20px rgba(0,0,0,0.4)", zIndex: 91 }}
               >
-                {/* En-tête : logo + nom, façon en-tête de sidebar */}
-                <div className="flex items-center justify-between gap-2 px-4 py-4" style={{ borderBottom: `1px solid ${COLORS.surfaceLine}` }}>
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <img src={LOGO_DATA_URI} alt="" style={{ height: 26, width: "auto", flexShrink: 0 }} />
-                    <span className="gc-display text-sm font-semibold truncate" style={{ color: COLORS.text }}>
-                      EmpireGuichet
-                    </span>
-                  </div>
-                  <button
-                    onClick={() => setMenuOpen(false)}
-                    aria-label="Fermer le menu"
-                    className="gc-btn w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0"
-                    style={{ color: COLORS.textMuted }}
-                  >
+                <div className="flex items-center justify-between px-4 pb-3 mb-1" style={{ borderBottom: `1px solid ${COLORS.surfaceLine}` }}>
+                  <span className="text-xs font-semibold" style={{ color: COLORS.text }}>Menu</span>
+                  <button onClick={() => setMenuOpen(false)} aria-label="Fermer le menu">
                     <X size={16} />
                   </button>
                 </div>
-
-                {/* Corps du menu, avec un peu d'air et des sections groupées */}
-                <div className="flex-1 flex flex-col gap-4 px-3 py-4">
-                  {isAuthenticated && !agent?.isPlatformOwner && (agent?.role === "agent" || agent?.role === "manager") && (
-                    <div className="flex flex-col gap-0.5">
-                      {[
-                        { id: "dashboard", label: "Tableau de bord", icon: BarChart3 },
-                        { id: "kyc", label: "Vérification KYC", icon: FileCheck },
-                        { id: "publicites", label: "Publicités", icon: Megaphone },
-                        { id: "abonnement", label: "Abonnement", icon: CreditCard },
-                        { id: "parametres", label: "Paramètres", icon: Settings },
-                      ].map((item) => {
-                        const active = tab === item.id;
-                        return (
-                          <button
-                            key={item.id}
-                            onClick={() => { setTab(item.id); setMenuOpen(false); window.scrollTo({ top: 0, behavior: "smooth" }); }}
-                            className={`gc-menu-item flex items-center gap-2.5 text-left px-3 py-2 rounded-lg font-medium${active ? " gc-menu-item--active" : ""}`}
-                            style={{
-                              background: active ? COLORS.surface : "transparent",
-                              color: active ? COLORS.text : COLORS.textMuted,
-                              borderColor: active ? COLORS.surfaceLine : "transparent",
-                            }}
-                          >
-                            <item.icon size={16} style={{ color: active ? COLORS.goldSoft : "currentColor", flexShrink: 0 }} />
-                            <span className="truncate">{item.label}</span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  )}
-
-                  {isAuthenticated && agent?.isPlatformOwner && (
-                    <div className="flex flex-col gap-0.5">
-                      {[
-                        { id: "dashboard", label: "Tableau de bord", icon: BarChart3 },
-                        { id: "kyc", label: "Vérification KYC", icon: FileCheck },
-                        { id: "historique", label: "Historique", icon: Clock },
-                        { id: "annonceur", label: "Annonceur", icon: Megaphone },
-                        { id: "publicites", label: "Publicités", icon: Megaphone },
-                        { id: "abonnement", label: "Abonnement", icon: CreditCard },
-                        { id: "parametres", label: "Paramètres", icon: Settings },
-                      ].map((item) => {
-                        const active = tab === item.id;
-                        return (
-                          <button
-                            key={item.id}
-                            onClick={() => { setTab(item.id); setMenuOpen(false); window.scrollTo({ top: 0, behavior: "smooth" }); }}
-                            className={`gc-menu-item flex items-center gap-2.5 text-left px-3 py-2 rounded-lg font-medium${active ? " gc-menu-item--active" : ""}`}
-                            style={{
-                              background: active ? COLORS.surface : "transparent",
-                              color: active ? COLORS.text : COLORS.textMuted,
-                              borderColor: active ? COLORS.surfaceLine : "transparent",
-                            }}
-                          >
-                            <item.icon size={16} style={{ color: active ? COLORS.goldSoft : "currentColor", flexShrink: 0 }} />
-                            <span className="truncate">{item.label}</span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  )}
-
-                  {/* Liens publics, séparés visuellement des onglets internes */}
-                  <div
-                    className="flex flex-col gap-0.5 pt-3"
-                    style={{ borderTop: isAuthenticated ? `1px solid ${COLORS.surfaceLine}` : "none" }}
-                  >
-                    <a
-                      href="#reseaux"
-                      onClick={() => setMenuOpen(false)}
-                      className="gc-menu-item px-3 py-2 rounded-lg"
-                    >
-                      Réseaux
-                    </a>
-                    <a
-                      href="#demo"
-                      onClick={() => { setMenuOpen(false); scrollToDemo(); }}
-                      className="gc-menu-item px-3 py-2 rounded-lg"
-                    >
-                      Démo
-                    </a>
-                    <a
-                      href="#annonceurs"
-                      onClick={(e) => { e.preventDefault(); setMenuOpen(false); scrollToAnnonceurs(); }}
-                      className="gc-menu-item px-3 py-2 rounded-lg"
-                    >
-                      Annonceurs
-                    </a>
-                  </div>
-                </div>
-
-                {/* Pied de page : profil connecté, façon compte utilisateur en bas de sidebar */}
-                <div className="px-3 py-3" style={{ borderTop: `1px solid ${COLORS.surfaceLine}` }}>
-                  {isAuthenticated ? (
-                    <div
-                      className="flex items-center justify-between gap-2 px-2 py-2 rounded-lg"
-                      style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}` }}
-                    >
-                      <div className="flex items-center gap-2 min-w-0">
-                        <div
-                          className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0"
-                          style={{ background: "rgba(232,169,59,0.15)", color: COLORS.goldSoft }}
-                        >
-                          <User size={14} />
-                        </div>
-                        <span className="text-sm font-medium truncate" style={{ color: COLORS.text }}>
-                          {agent?.name}
-                        </span>
-                      </div>
-                      <button
-                        onClick={() => { handleLogout(); setMenuOpen(false); }}
-                        aria-label="Déconnexion"
-                        className="gc-btn w-7 h-7 rounded-md flex items-center justify-center flex-shrink-0"
-                        style={{ color: COLORS.textMuted }}
-                      >
-                        <LogOut size={14} />
-                      </button>
-                    </div>
-                  ) : (
-                    <button
-                      onClick={() => { setMenuOpen(false); scrollToDemo(); }}
-                      className="gc-btn w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium"
-                      style={{ background: COLORS.gold, color: "#052E36" }}
-                    >
-                      <LogIn size={14} /> Se connecter
-                    </button>
-                  )}
+                <div className="flex flex-col gap-1 px-4">
+              {isAuthenticated && !agent?.isPlatformOwner && (agent?.role === "agent" || agent?.role === "manager") && (
+                <>
+                  <button onClick={() => { setTab("dashboard"); setMenuOpen(false); window.scrollTo({ top: 0, behavior: "smooth" }); }} className="flex items-center gap-1.5 text-left py-1.5">
+                    <BarChart3 size={14} /> Tableau de bord
+                  </button>
+                  <button onClick={() => { setTab("kyc"); setMenuOpen(false); window.scrollTo({ top: 0, behavior: "smooth" }); }} className="flex items-center gap-1.5 text-left py-1.5">
+                    <FileCheck size={14} /> Vérification KYC
+                  </button>
+                  <button onClick={() => { setTab("publicites"); setMenuOpen(false); window.scrollTo({ top: 0, behavior: "smooth" }); }} className="flex items-center gap-1.5 text-left py-1.5">
+                    <Megaphone size={14} /> Publicités
+                  </button>
+                  <button onClick={() => { setTab("abonnement"); setMenuOpen(false); window.scrollTo({ top: 0, behavior: "smooth" }); }} className="flex items-center gap-1.5 text-left py-1.5">
+                    <CreditCard size={14} /> Abonnement
+                  </button>
+                  <button onClick={() => { setTab("parametres"); setMenuOpen(false); window.scrollTo({ top: 0, behavior: "smooth" }); }} className="flex items-center gap-1.5 text-left py-1.5">
+                    <Settings size={14} /> Paramètres
+                  </button>
+                  <div style={{ borderTop: `1px solid ${COLORS.surfaceLine}`, margin: "4px 0" }} />
+                </>
+              )}
+              {isAuthenticated && agent?.isPlatformOwner && (
+                <>
+                  <button onClick={() => { setTab("dashboard"); setMenuOpen(false); window.scrollTo({ top: 0, behavior: "smooth" }); }} className="flex items-center gap-1.5 text-left py-1.5">
+                    <BarChart3 size={14} /> Tableau de bord
+                  </button>
+                  <button onClick={() => { setTab("kyc"); setMenuOpen(false); window.scrollTo({ top: 0, behavior: "smooth" }); }} className="flex items-center gap-1.5 text-left py-1.5">
+                    <FileCheck size={14} /> Vérification KYC
+                  </button>
+                  <button onClick={() => { setTab("historique"); setMenuOpen(false); window.scrollTo({ top: 0, behavior: "smooth" }); }} className="flex items-center gap-1.5 text-left py-1.5">
+                    <Clock size={14} /> Historique
+                  </button>
+                  <button onClick={() => { setTab("annonceur"); setMenuOpen(false); window.scrollTo({ top: 0, behavior: "smooth" }); }} className="flex items-center gap-1.5 text-left py-1.5">
+                    <Megaphone size={14} /> Annonceur
+                  </button>
+                  <button onClick={() => { setTab("publicites"); setMenuOpen(false); window.scrollTo({ top: 0, behavior: "smooth" }); }} className="flex items-center gap-1.5 text-left py-1.5">
+                    <Megaphone size={14} /> Publicités
+                  </button>
+                  <button onClick={() => { setTab("abonnement"); setMenuOpen(false); window.scrollTo({ top: 0, behavior: "smooth" }); }} className="flex items-center gap-1.5 text-left py-1.5">
+                    <CreditCard size={14} /> Abonnement
+                  </button>
+                  <button onClick={() => { setTab("parametres"); setMenuOpen(false); window.scrollTo({ top: 0, behavior: "smooth" }); }} className="flex items-center gap-1.5 text-left py-1.5">
+                    <Settings size={14} /> Paramètres
+                  </button>
+                  <div style={{ borderTop: `1px solid ${COLORS.surfaceLine}`, margin: "4px 0" }} />
+                </>
+              )}
+              <a href="#reseaux" onClick={() => setMenuOpen(false)} className="py-1.5">Réseaux</a>
+              <a href="#demo" onClick={() => { setMenuOpen(false); scrollToDemo(); }} className="py-1.5">Démo</a>
+              <a href="#annonceurs" onClick={(e) => { e.preventDefault(); setMenuOpen(false); scrollToAnnonceurs(); }} className="py-1.5">Annonceurs</a>
+              {isAuthenticated ? (
+                <button onClick={() => { handleLogout(); setMenuOpen(false); }} className="flex items-center gap-1.5 text-left py-1.5">
+                  <LogOut size={14} /> Déconnexion ({agent?.name})
+                </button>
+              ) : (
+                <button onClick={() => { setMenuOpen(false); scrollToDemo(); }} className="flex items-center gap-1.5 text-left py-1.5" style={{ color: COLORS.goldSoft }}>
+                  <LogIn size={14} /> Se connecter
+                </button>
+              )}
                 </div>
               </div>
             </>
