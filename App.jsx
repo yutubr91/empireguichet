@@ -3295,13 +3295,9 @@ export default function GuichetApp() {
       {/* ===== Menu latéral (rendu hors du header pour ne pas être piégé par son backdrop-blur) ===== */}
           {menuOpen && (
             <>
-              {/* Fond derrière le menu : un clic dessus referme le menu */}
-              <div
-                onClick={() => setMenuOpen(false)}
-                className="gc-fade-in fixed inset-0"
-                style={{ background: "rgba(0,0,0,0.5)", zIndex: 90 }}
-              />
-              {/* Menu latéral fixe, façon barre latérale — reste à l'écran, ne pousse rien */}
+              {/* Menu latéral fixe, façon barre latérale — reste à l'écran, ne pousse rien.
+                  Pas de fond bloquant derrière : comme la sidebar de Claude, le reste de la
+                  page reste cliquable/utilisable pendant que le menu est ouvert. */}
               <div
                 className="gc-fade-in fixed top-0 left-0 flex flex-col text-sm"
                 style={{
