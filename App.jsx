@@ -3286,8 +3286,11 @@ export default function GuichetApp() {
             </button>
           </div>
           {menuOpen && (
-            <div className="px-5 pb-4 flex flex-col gap-3 text-sm" style={{ color: COLORS.textMuted }}>
-              {isAuthenticated && (agent?.role === "agent" || agent?.role === "manager") && (
+            <div
+              className="px-5 py-4 flex flex-col gap-3 text-sm rounded-b-xl"
+              style={{ color: COLORS.textMuted, background: COLORS.bg, borderTop: `1px solid ${COLORS.surfaceLine}`, boxShadow: "0 20px 40px -20px rgba(0,0,0,0.4)" }}
+            >
+              {isAuthenticated && !agent?.isPlatformOwner && (agent?.role === "agent" || agent?.role === "manager") && (
                 <>
                   <button onClick={() => { setTab("dashboard"); setMenuOpen(false); window.scrollTo({ top: 0, behavior: "smooth" }); }} className="flex items-center gap-1.5 text-left">
                     <BarChart3 size={14} /> Tableau de bord
