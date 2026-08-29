@@ -3286,25 +3286,40 @@ export default function GuichetApp() {
             </button>
           </div>
           {menuOpen && (
-            <div
-              className="px-5 py-4 flex flex-col gap-3 text-sm rounded-b-xl"
-              style={{ color: COLORS.textMuted, background: COLORS.bg, borderTop: `1px solid ${COLORS.surfaceLine}`, boxShadow: "0 20px 40px -20px rgba(0,0,0,0.4)" }}
-            >
+            <>
+              {/* Fond derrière le menu : un clic dessus referme le menu */}
+              <div
+                onClick={() => setMenuOpen(false)}
+                className="gc-fade-in fixed inset-0"
+                style={{ background: "rgba(0,0,0,0.5)", zIndex: 90 }}
+              />
+              {/* Menu latéral fixe, façon barre latérale — reste à l'écran, ne pousse rien */}
+              <div
+                className="fixed top-0 left-0 h-full flex flex-col gap-1 text-sm py-4 overflow-y-auto"
+                style={{ width: 260, maxWidth: "80vw", color: COLORS.textMuted, background: COLORS.bg, borderRight: `1px solid ${COLORS.surfaceLine}`, boxShadow: "20px 0 40px -20px rgba(0,0,0,0.4)", zIndex: 91 }}
+              >
+                <div className="flex items-center justify-between px-4 pb-3 mb-1" style={{ borderBottom: `1px solid ${COLORS.surfaceLine}` }}>
+                  <span className="text-xs font-semibold" style={{ color: COLORS.text }}>Menu</span>
+                  <button onClick={() => setMenuOpen(false)} aria-label="Fermer le menu">
+                    <X size={16} />
+                  </button>
+                </div>
+                <div className="flex flex-col gap-1 px-4">
               {isAuthenticated && !agent?.isPlatformOwner && (agent?.role === "agent" || agent?.role === "manager") && (
                 <>
-                  <button onClick={() => { setTab("dashboard"); setMenuOpen(false); window.scrollTo({ top: 0, behavior: "smooth" }); }} className="flex items-center gap-1.5 text-left">
+                  <button onClick={() => { setTab("dashboard"); setMenuOpen(false); window.scrollTo({ top: 0, behavior: "smooth" }); }} className="flex items-center gap-1.5 text-left py-1.5">
                     <BarChart3 size={14} /> Tableau de bord
                   </button>
-                  <button onClick={() => { setTab("kyc"); setMenuOpen(false); window.scrollTo({ top: 0, behavior: "smooth" }); }} className="flex items-center gap-1.5 text-left">
+                  <button onClick={() => { setTab("kyc"); setMenuOpen(false); window.scrollTo({ top: 0, behavior: "smooth" }); }} className="flex items-center gap-1.5 text-left py-1.5">
                     <FileCheck size={14} /> Vérification KYC
                   </button>
-                  <button onClick={() => { setTab("publicites"); setMenuOpen(false); window.scrollTo({ top: 0, behavior: "smooth" }); }} className="flex items-center gap-1.5 text-left">
+                  <button onClick={() => { setTab("publicites"); setMenuOpen(false); window.scrollTo({ top: 0, behavior: "smooth" }); }} className="flex items-center gap-1.5 text-left py-1.5">
                     <Megaphone size={14} /> Publicités
                   </button>
-                  <button onClick={() => { setTab("abonnement"); setMenuOpen(false); window.scrollTo({ top: 0, behavior: "smooth" }); }} className="flex items-center gap-1.5 text-left">
+                  <button onClick={() => { setTab("abonnement"); setMenuOpen(false); window.scrollTo({ top: 0, behavior: "smooth" }); }} className="flex items-center gap-1.5 text-left py-1.5">
                     <CreditCard size={14} /> Abonnement
                   </button>
-                  <button onClick={() => { setTab("parametres"); setMenuOpen(false); window.scrollTo({ top: 0, behavior: "smooth" }); }} className="flex items-center gap-1.5 text-left">
+                  <button onClick={() => { setTab("parametres"); setMenuOpen(false); window.scrollTo({ top: 0, behavior: "smooth" }); }} className="flex items-center gap-1.5 text-left py-1.5">
                     <Settings size={14} /> Paramètres
                   </button>
                   <div style={{ borderTop: `1px solid ${COLORS.surfaceLine}`, margin: "4px 0" }} />
@@ -3312,43 +3327,45 @@ export default function GuichetApp() {
               )}
               {isAuthenticated && agent?.isPlatformOwner && (
                 <>
-                  <button onClick={() => { setTab("dashboard"); setMenuOpen(false); window.scrollTo({ top: 0, behavior: "smooth" }); }} className="flex items-center gap-1.5 text-left">
+                  <button onClick={() => { setTab("dashboard"); setMenuOpen(false); window.scrollTo({ top: 0, behavior: "smooth" }); }} className="flex items-center gap-1.5 text-left py-1.5">
                     <BarChart3 size={14} /> Tableau de bord
                   </button>
-                  <button onClick={() => { setTab("kyc"); setMenuOpen(false); window.scrollTo({ top: 0, behavior: "smooth" }); }} className="flex items-center gap-1.5 text-left">
+                  <button onClick={() => { setTab("kyc"); setMenuOpen(false); window.scrollTo({ top: 0, behavior: "smooth" }); }} className="flex items-center gap-1.5 text-left py-1.5">
                     <FileCheck size={14} /> Vérification KYC
                   </button>
-                  <button onClick={() => { setTab("historique"); setMenuOpen(false); window.scrollTo({ top: 0, behavior: "smooth" }); }} className="flex items-center gap-1.5 text-left">
+                  <button onClick={() => { setTab("historique"); setMenuOpen(false); window.scrollTo({ top: 0, behavior: "smooth" }); }} className="flex items-center gap-1.5 text-left py-1.5">
                     <Clock size={14} /> Historique
                   </button>
-                  <button onClick={() => { setTab("annonceur"); setMenuOpen(false); window.scrollTo({ top: 0, behavior: "smooth" }); }} className="flex items-center gap-1.5 text-left">
+                  <button onClick={() => { setTab("annonceur"); setMenuOpen(false); window.scrollTo({ top: 0, behavior: "smooth" }); }} className="flex items-center gap-1.5 text-left py-1.5">
                     <Megaphone size={14} /> Annonceur
                   </button>
-                  <button onClick={() => { setTab("publicites"); setMenuOpen(false); window.scrollTo({ top: 0, behavior: "smooth" }); }} className="flex items-center gap-1.5 text-left">
+                  <button onClick={() => { setTab("publicites"); setMenuOpen(false); window.scrollTo({ top: 0, behavior: "smooth" }); }} className="flex items-center gap-1.5 text-left py-1.5">
                     <Megaphone size={14} /> Publicités
                   </button>
-                  <button onClick={() => { setTab("abonnement"); setMenuOpen(false); window.scrollTo({ top: 0, behavior: "smooth" }); }} className="flex items-center gap-1.5 text-left">
+                  <button onClick={() => { setTab("abonnement"); setMenuOpen(false); window.scrollTo({ top: 0, behavior: "smooth" }); }} className="flex items-center gap-1.5 text-left py-1.5">
                     <CreditCard size={14} /> Abonnement
                   </button>
-                  <button onClick={() => { setTab("parametres"); setMenuOpen(false); window.scrollTo({ top: 0, behavior: "smooth" }); }} className="flex items-center gap-1.5 text-left">
+                  <button onClick={() => { setTab("parametres"); setMenuOpen(false); window.scrollTo({ top: 0, behavior: "smooth" }); }} className="flex items-center gap-1.5 text-left py-1.5">
                     <Settings size={14} /> Paramètres
                   </button>
                   <div style={{ borderTop: `1px solid ${COLORS.surfaceLine}`, margin: "4px 0" }} />
                 </>
               )}
-              <a href="#reseaux" onClick={() => setMenuOpen(false)}>Réseaux</a>
-              <a href="#demo" onClick={() => { setMenuOpen(false); scrollToDemo(); }}>Démo</a>
-              <a href="#annonceurs" onClick={(e) => { e.preventDefault(); setMenuOpen(false); scrollToAnnonceurs(); }}>Annonceurs</a>
+              <a href="#reseaux" onClick={() => setMenuOpen(false)} className="py-1.5">Réseaux</a>
+              <a href="#demo" onClick={() => { setMenuOpen(false); scrollToDemo(); }} className="py-1.5">Démo</a>
+              <a href="#annonceurs" onClick={(e) => { e.preventDefault(); setMenuOpen(false); scrollToAnnonceurs(); }} className="py-1.5">Annonceurs</a>
               {isAuthenticated ? (
-                <button onClick={() => { handleLogout(); setMenuOpen(false); }} className="flex items-center gap-1.5 text-left">
+                <button onClick={() => { handleLogout(); setMenuOpen(false); }} className="flex items-center gap-1.5 text-left py-1.5">
                   <LogOut size={14} /> Déconnexion ({agent?.name})
                 </button>
               ) : (
-                <button onClick={() => { setMenuOpen(false); scrollToDemo(); }} className="flex items-center gap-1.5 text-left" style={{ color: COLORS.goldSoft }}>
+                <button onClick={() => { setMenuOpen(false); scrollToDemo(); }} className="flex items-center gap-1.5 text-left py-1.5" style={{ color: COLORS.goldSoft }}>
                   <LogIn size={14} /> Se connecter
                 </button>
               )}
-            </div>
+                </div>
+              </div>
+            </>
           )}
         </div>
       </header>
