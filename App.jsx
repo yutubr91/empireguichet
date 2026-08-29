@@ -3353,7 +3353,7 @@ export default function GuichetApp() {
                         return (
                           <button
                             key={item.id}
-                            onClick={() => { setTab(item.id); setMenuOpen(false); window.scrollTo({ top: 0, behavior: "smooth" }); }}
+                            onClick={() => { setTab(item.id); setMenuOpen(false); demoRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }); }}
                             className={`gc-menu-item flex items-center gap-2.5 text-left px-3 py-2 rounded-lg font-medium${active ? " gc-menu-item--active" : ""}`}
                             style={{
                               background: active ? COLORS.surface : "transparent",
@@ -3385,7 +3385,7 @@ export default function GuichetApp() {
                         return (
                           <button
                             key={item.id}
-                            onClick={() => { setTab(item.id); setMenuOpen(false); window.scrollTo({ top: 0, behavior: "smooth" }); }}
+                            onClick={() => { setTab(item.id); setMenuOpen(false); demoRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }); }}
                             className={`gc-menu-item flex items-center gap-2.5 text-left px-3 py-2 rounded-lg font-medium${active ? " gc-menu-item--active" : ""}`}
                             style={{
                               background: active ? COLORS.surface : "transparent",
@@ -3412,7 +3412,7 @@ export default function GuichetApp() {
                         return (
                           <button
                             key={item.id}
-                            onClick={() => { setTab(item.id); setMenuOpen(false); window.scrollTo({ top: 0, behavior: "smooth" }); }}
+                            onClick={() => { setTab(item.id); setMenuOpen(false); demoRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }); }}
                             className={`gc-menu-item flex items-center gap-2.5 text-left px-3 py-2 rounded-lg font-medium${active ? " gc-menu-item--active" : ""}`}
                             style={{
                               background: active ? COLORS.surface : "transparent",
