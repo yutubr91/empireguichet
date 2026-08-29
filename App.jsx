@@ -3286,7 +3286,7 @@ export default function GuichetApp() {
             </button>
           </div>
           {menuOpen && (
-            <div className="md:hidden px-5 pb-4 flex flex-col gap-3 text-sm" style={{ color: COLORS.textMuted }}>
+            <div className="px-5 pb-4 flex flex-col gap-3 text-sm" style={{ color: COLORS.textMuted }}>
               {isAuthenticated && (agent?.role === "agent" || agent?.role === "manager") && (
                 <>
                   <button onClick={() => { setTab("dashboard"); setMenuOpen(false); window.scrollTo({ top: 0, behavior: "smooth" }); }} className="flex items-center gap-1.5 text-left">
