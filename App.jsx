@@ -3287,6 +3287,52 @@ export default function GuichetApp() {
           </div>
           {menuOpen && (
             <div className="md:hidden px-5 pb-4 flex flex-col gap-3 text-sm" style={{ color: COLORS.textMuted }}>
+              {isAuthenticated && (agent?.role === "agent" || agent?.role === "manager") && (
+                <>
+                  <button onClick={() => { setTab("dashboard"); setMenuOpen(false); window.scrollTo({ top: 0, behavior: "smooth" }); }} className="flex items-center gap-1.5 text-left">
+                    <BarChart3 size={14} /> Tableau de bord
+                  </button>
+                  <button onClick={() => { setTab("kyc"); setMenuOpen(false); window.scrollTo({ top: 0, behavior: "smooth" }); }} className="flex items-center gap-1.5 text-left">
+                    <FileCheck size={14} /> Vérification KYC
+                  </button>
+                  <button onClick={() => { setTab("publicites"); setMenuOpen(false); window.scrollTo({ top: 0, behavior: "smooth" }); }} className="flex items-center gap-1.5 text-left">
+                    <Megaphone size={14} /> Publicités
+                  </button>
+                  <button onClick={() => { setTab("abonnement"); setMenuOpen(false); window.scrollTo({ top: 0, behavior: "smooth" }); }} className="flex items-center gap-1.5 text-left">
+                    <CreditCard size={14} /> Abonnement
+                  </button>
+                  <button onClick={() => { setTab("parametres"); setMenuOpen(false); window.scrollTo({ top: 0, behavior: "smooth" }); }} className="flex items-center gap-1.5 text-left">
+                    <Settings size={14} /> Paramètres
+                  </button>
+                  <div style={{ borderTop: `1px solid ${COLORS.surfaceLine}`, margin: "4px 0" }} />
+                </>
+              )}
+              {isAuthenticated && agent?.isPlatformOwner && (
+                <>
+                  <button onClick={() => { setTab("dashboard"); setMenuOpen(false); window.scrollTo({ top: 0, behavior: "smooth" }); }} className="flex items-center gap-1.5 text-left">
+                    <BarChart3 size={14} /> Tableau de bord
+                  </button>
+                  <button onClick={() => { setTab("kyc"); setMenuOpen(false); window.scrollTo({ top: 0, behavior: "smooth" }); }} className="flex items-center gap-1.5 text-left">
+                    <FileCheck size={14} /> Vérification KYC
+                  </button>
+                  <button onClick={() => { setTab("historique"); setMenuOpen(false); window.scrollTo({ top: 0, behavior: "smooth" }); }} className="flex items-center gap-1.5 text-left">
+                    <Clock size={14} /> Historique
+                  </button>
+                  <button onClick={() => { setTab("annonceur"); setMenuOpen(false); window.scrollTo({ top: 0, behavior: "smooth" }); }} className="flex items-center gap-1.5 text-left">
+                    <Megaphone size={14} /> Annonceur
+                  </button>
+                  <button onClick={() => { setTab("publicites"); setMenuOpen(false); window.scrollTo({ top: 0, behavior: "smooth" }); }} className="flex items-center gap-1.5 text-left">
+                    <Megaphone size={14} /> Publicités
+                  </button>
+                  <button onClick={() => { setTab("abonnement"); setMenuOpen(false); window.scrollTo({ top: 0, behavior: "smooth" }); }} className="flex items-center gap-1.5 text-left">
+                    <CreditCard size={14} /> Abonnement
+                  </button>
+                  <button onClick={() => { setTab("parametres"); setMenuOpen(false); window.scrollTo({ top: 0, behavior: "smooth" }); }} className="flex items-center gap-1.5 text-left">
+                    <Settings size={14} /> Paramètres
+                  </button>
+                  <div style={{ borderTop: `1px solid ${COLORS.surfaceLine}`, margin: "4px 0" }} />
+                </>
+              )}
               <a href="#reseaux" onClick={() => setMenuOpen(false)}>Réseaux</a>
               <a href="#demo" onClick={() => { setMenuOpen(false); scrollToDemo(); }}>Démo</a>
               <a href="#annonceurs" onClick={(e) => { e.preventDefault(); setMenuOpen(false); scrollToAnnonceurs(); }}>Annonceurs</a>
