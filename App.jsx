@@ -667,7 +667,21 @@ function NetworkBadge({ net, size = 40, colors = DARK_COLORS }) {
 }
 
 export default function GuichetApp() {
-  const [theme, setTheme] = useState("light");
+  const [theme, setTheme] = useState(() => {
+    try {
+      const saved = localStorage.getItem("eg_theme");
+      return saved === "dark" || saved === "light" ? saved : "light";
+    } catch {
+      return "light";
+    }
+  });
+  useEffect(() => {
+    try {
+      localStorage.setItem("eg_theme", theme);
+    } catch {
+      // stockage indisponible (mode privé, quota…) — on ignore silencieusement
+    }
+  }, [theme]);
   const COLORS = theme === "light" ? LIGHT_COLORS : DARK_COLORS;
   const [introStep, setIntroStep] = useState(0); // 0 = splash logo, 1-3 = carousel, 4 = done
   useEffect(() => {
