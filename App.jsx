@@ -3224,7 +3224,7 @@ export default function GuichetApp() {
             ) : (
               <button
                 onClick={scrollToDemo}
-                className="gc-btn hidden md:inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium"
+                className="gc-btn inline-flex items-center gap-1.5 px-3 md:px-4 py-2 rounded-lg text-sm font-medium"
                 style={{ background: COLORS.gold, color: "#052E36" }}
               >
                 Se connecter <ChevronRight size={15} />
