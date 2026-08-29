@@ -3134,8 +3134,6 @@ export default function GuichetApp() {
         @keyframes gcFadeIn { from { opacity:0; transform: translateY(6px);} to { opacity:1; transform:none; } }
         .gc-menu-item { transition: background .12s ease, color .12s ease; border: 1px solid transparent; }
         .gc-menu-item:hover:not(.gc-menu-item--active) { background: var(--gc-menu-hover); }
-        .gc-menu-scroll { scrollbar-width: none; -ms-overflow-style: none; }
-        .gc-menu-scroll::-webkit-scrollbar { display: none; width: 0; height: 0; }
         @media (prefers-reduced-motion: reduce) {
           .gc-btn, .gc-card, .gc-fade-in { animation: none !important; transition: none !important; }
         }
@@ -3299,18 +3297,16 @@ export default function GuichetApp() {
               />
               {/* Menu latéral fixe, façon barre latérale — reste à l'écran, ne pousse rien */}
               <div
-                className="gc-fade-in fixed top-0 left-0 flex flex-col text-sm"
+                className="gc-fade-in fixed top-0 left-0 h-full flex flex-col text-sm overflow-y-auto"
                 style={{
                   "--gc-menu-hover": COLORS.surface,
                   width: 280,
                   maxWidth: "82vw",
-                  height: "100vh",
                   color: COLORS.textMuted,
                   background: COLORS.bg,
                   borderRight: `1px solid ${COLORS.surfaceLine}`,
                   boxShadow: "20px 0 40px -20px rgba(0,0,0,0.4)",
                   zIndex: 91,
-                  overflow: "hidden",
                 }}
               >
                 {/* En-tête : logo + nom, façon en-tête de sidebar */}
@@ -3331,8 +3327,8 @@ export default function GuichetApp() {
                   </button>
                 </div>
 
-                {/* Corps du menu, avec un peu d'air et des sections groupées — seule cette zone défile, sans scrollbar visible */}
-                <div className="gc-menu-scroll flex-1 flex flex-col gap-4 px-3 py-4 overflow-y-auto">
+                {/* Corps du menu, avec un peu d'air et des sections groupées */}
+                <div className="flex-1 flex flex-col gap-4 px-3 py-4">
                   {isAuthenticated && !agent?.isPlatformOwner && (agent?.role === "agent" || agent?.role === "manager") && (
                     <div className="flex flex-col gap-0.5">
                       {[
