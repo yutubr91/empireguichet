@@ -3343,7 +3343,14 @@ export default function GuichetApp() {
                         { id: "dashboard", label: "Tableau de bord", icon: BarChart3 },
                         { id: "kyc", label: "Vérification KYC", icon: FileCheck },
                         { id: "publicites", label: "Publicités", icon: Megaphone },
+                        { id: "parrainage", label: "Parrainage", icon: Users },
                         { id: "abonnement", label: "Abonnement", icon: CreditCard },
+                        ...(agent?.role === "manager"
+                          ? [
+                              { id: "equipe", label: "Équipe", icon: Crown },
+                              { id: "kyc-review", label: "Vérifications KYC équipe", icon: Fingerprint },
+                            ]
+                          : []),
                         { id: "parametres", label: "Paramètres", icon: Settings },
                       ].map((item) => {
                         const active = tab === item.id;
@@ -3374,8 +3381,36 @@ export default function GuichetApp() {
                         { id: "historique", label: "Historique", icon: Clock },
                         { id: "annonceur", label: "Annonceur", icon: Megaphone },
                         { id: "publicites", label: "Publicités", icon: Megaphone },
+                        { id: "parrainage", label: "Parrainage", icon: Users },
                         { id: "abonnement", label: "Abonnement", icon: CreditCard },
                         { id: "parametres", label: "Paramètres", icon: Settings },
+                      ].map((item) => {
+                        const active = tab === item.id;
+                        return (
+                          <button
+                            key={item.id}
+                            onClick={() => { setTab(item.id); setMenuOpen(false); window.scrollTo({ top: 0, behavior: "smooth" }); }}
+                            className={`gc-menu-item flex items-center gap-2.5 text-left px-3 py-2 rounded-lg font-medium${active ? " gc-menu-item--active" : ""}`}
+                            style={{
+                              background: active ? COLORS.surface : "transparent",
+                              color: active ? COLORS.text : COLORS.textMuted,
+                              borderColor: active ? COLORS.surfaceLine : "transparent",
+                            }}
+                          >
+                            <item.icon size={16} style={{ color: active ? COLORS.goldSoft : "currentColor", flexShrink: 0 }} />
+                            <span className="truncate">{item.label}</span>
+                          </button>
+                        );
+                      })}
+
+                      {/* Backoffice : section distincte, réservée au propriétaire de la plateforme */}
+                      <div className="text-[10px] font-semibold uppercase tracking-wide px-3 pt-3 pb-1" style={{ color: COLORS.textMuted }}>
+                        Backoffice
+                      </div>
+                      {[
+                        { id: "kyc-review-managers", label: "Vérif. chefs d'agence", icon: ShieldCheck },
+                        { id: "backoffice-pub", label: "Backoffice publicité", icon: BarChart3 },
+                        { id: "backoffice-abonnements", label: "Backoffice abonnements", icon: CreditCard },
                       ].map((item) => {
                         const active = tab === item.id;
                         return (
@@ -4222,10 +4257,10 @@ export default function GuichetApp() {
             // le menu ☰ — on évite de les dupliquer ici dans la barre.
             .filter((t) => {
               if (agent?.isPlatformOwner) {
-                return !["dashboard", "kyc", "historique", "annonceur", "publicites", "abonnement", "parametres"].includes(t.id);
+                return !["dashboard", "kyc", "historique", "annonceur", "publicites", "parrainage", "abonnement", "parametres", "kyc-review-managers", "backoffice-pub", "backoffice-abonnements"].includes(t.id);
               }
               if (["agent", "manager"].includes(agent?.role)) {
-                return !["dashboard", "kyc", "publicites", "abonnement", "parametres"].includes(t.id);
+                return !["dashboard", "kyc", "publicites", "parrainage", "abonnement", "parametres", "equipe", "kyc-review"].includes(t.id);
               }
               return true;
             })
