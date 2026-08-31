@@ -95,6 +95,33 @@ const REFERRAL_COMMISSION_AMOUNT = 300;
 // Numéro à composer pour envoyer le paiement (à remplacer par le vrai numéro marchand)
 const PAYMENT_RECEIVING_NUMBER = "+225 XX XX XX XX XX";
 
+// ===== Moyens de paiement : Wave et USDT (réseau BNB / BEP20) =====
+const WAVE_PAY_BASE_URL = "https://pay.wave.com/m/M_ci_xRIFogVkwu2P/c/ci/";
+// Le montant envoyé sur Wave inclut les frais Wave, donc il diffère du prix
+// affiché à l'agent (qui reste le montant "propre" à recevoir).
+function getWaveAmount(baseFcfa) {
+  if (baseFcfa === HISTORY_UNLOCK_PRICE) return 205;
+  if (baseFcfa === 3500) return 3535;
+  if (baseFcfa === 2500) return 2525;
+  return baseFcfa;
+}
+function getWaveLink(amountFcfa) {
+  return `${WAVE_PAY_BASE_URL}?amount=${getWaveAmount(amountFcfa)}`;
+}
+const USDT_BEP20_ADDRESS = "0x38b6527df24a91b00acad48dfb303ad257d9125d";
+// Équivalents USD fixés manuellement (Wave reste en FCFA, l'USDT est côté BNB/BEP20)
+const USDT_PRICE_SUBSCRIPTION = 4.21; // ≈ 2 500 FCFA
+const USDT_PRICE_HISTORY = 0.34;      // ≈ 200 FCFA
+const USDT_PRICE_PROMOTION = 5.89;    // ≈ 3 500 FCFA
+
+function getUsdtAmount(fcfaAmount) {
+  if (fcfaAmount === HISTORY_UNLOCK_PRICE) return USDT_PRICE_HISTORY;
+  if (fcfaAmount === 3500) return USDT_PRICE_PROMOTION;
+  if (fcfaAmount === 2500) return USDT_PRICE_SUBSCRIPTION;
+  // Taux de repli approximatif si jamais un montant différent apparaît un jour
+  return +(fcfaAmount / 594).toFixed(2);
+}
+
 const DARK_COLORS = {
   bg: "#1B2A41",
   bgSoft: "#22354F",
@@ -683,6 +710,47 @@ export default function GuichetApp() {
     }
   }, [theme]);
   const COLORS = theme === "light" ? LIGHT_COLORS : DARK_COLORS;
+
+  // ===== Moyen de paiement : choix Wave ou USDT (BNB/BEP20) =====
+  const [usdtCopiedFor, setUsdtCopiedFor] = useState(null); // clé unique du bloc où la copie vient d'avoir lieu
+  function copyUsdtAddress(key) {
+    navigator.clipboard?.writeText(USDT_BEP20_ADDRESS).then(() => {
+      setUsdtCopiedFor(key);
+      setTimeout(() => setUsdtCopiedFor((k) => (k === key ? null : k)), 2000);
+    });
+  }
+  function renderPaymentOptions(fcfaAmount, blockKey) {
+    return (
+      <div className="mt-3 p-3 rounded-lg" style={{ background: COLORS.bgSoft, border: `1px solid ${COLORS.surfaceLine}` }}>
+        <div className="text-xs font-medium mb-2" style={{ color: COLORS.textMuted }}>Choisis ton moyen de paiement :</div>
+        <a
+          href={getWaveLink(fcfaAmount)}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="gc-btn w-full flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-medium mb-2"
+          style={{ background: "#1DC8E0", color: "#052E36" }}
+        >
+          <Send size={14} /> Payer {formatFCFA(getWaveAmount(fcfaAmount))} avec Wave
+        </a>
+        <div className="p-3 rounded-lg" style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}` }}>
+          <div className="text-xs font-medium mb-1.5" style={{ color: COLORS.textMuted }}>
+            Ou en USDT (réseau BNB — BEP20) — {getUsdtAmount(fcfaAmount)} USD
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="gc-mono text-xs flex-1 break-all" style={{ color: COLORS.text }}>{USDT_BEP20_ADDRESS}</span>
+            <button
+              onClick={() => copyUsdtAddress(blockKey)}
+              className="gc-btn px-2.5 py-1.5 rounded-lg text-xs flex items-center gap-1 flex-shrink-0"
+              style={{ background: COLORS.gold, color: "#052E36" }}
+            >
+              <Copy size={12} /> {usdtCopiedFor === blockKey ? "Copié !" : "Copier"}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   const [introStep, setIntroStep] = useState(0); // 0 = splash logo, 1-3 = carousel, 4 = done
   useEffect(() => {
     if (introStep !== 0) return;
@@ -5741,6 +5809,7 @@ export default function GuichetApp() {
               <p className="text-xs mb-2" style={{ color: COLORS.textMuted }}>
                 Envoie {formatFCFA(getSubscriptionAmount(subscription, agent?.role))} au numéro <span className="gc-mono">{PAYMENT_RECEIVING_NUMBER}</span> (Orange Money, MTN, Moov ou Wave), puis indique la référence de la transaction ci-dessous.
               </p>
+              {renderPaymentOptions(getSubscriptionAmount(subscription, agent?.role), "abonnement")}
               <input
                 value={paymentRefInput}
                 onChange={(e) => setPaymentRefInput(e.target.value)}
@@ -5792,6 +5861,7 @@ export default function GuichetApp() {
               <p className="text-xs mb-4" style={{ color: COLORS.textMuted }}>
                 L'accès à l'historique détaillé (recherche, filtres, export PDF/Excel) coûte {formatFCFA(HISTORY_UNLOCK_PRICE)} tous les 2 mois, séparément de l'abonnement.
               </p>
+              {!historyUnlockedThisPeriod && renderPaymentOptions(HISTORY_UNLOCK_PRICE, "historique")}
               {historyUnlockedThisPeriod ? (
                 <div className="p-4 rounded-lg text-sm" style={{ background: "rgba(43,191,138,0.1)", border: `1px solid ${COLORS.surfaceLine}` }}>
                   Historique débloqué pour cette période ✔
