@@ -1132,6 +1132,38 @@ export default function GuichetApp() {
     if (!error && data) setMyReferralCommissions(data);
   }
 
+  // ===== Retrait des gains de parrainage (Wave ou USDT BEP20, frais 20%) =====
+  const REFERRAL_WITHDRAWAL_FEE_RATE = 0.2;
+  const [myReferralWithdrawals, setMyReferralWithdrawals] = useState([]);
+  const [referralWithdrawMethod, setReferralWithdrawMethod] = useState("wave");
+  const [referralWithdrawSubmitting, setReferralWithdrawSubmitting] = useState(false);
+  const [referralWithdrawMsg, setReferralWithdrawMsg] = useState({ type: "", text: "" });
+
+  async function loadMyReferralWithdrawals() {
+    if (!agent) return;
+    const { data, error } = await supabase
+      .from("referral_withdrawals")
+      .select("*")
+      .eq("agent_id", agent.id)
+      .order("created_at", { ascending: false });
+    if (!error && data) setMyReferralWithdrawals(data);
+  }
+
+  async function handleRequestReferralWithdrawal() {
+    if (!agent) return;
+    setReferralWithdrawSubmitting(true);
+    setReferralWithdrawMsg({ type: "", text: "" });
+    const { error } = await supabase.rpc("request_referral_withdrawal", { p_method: referralWithdrawMethod });
+    setReferralWithdrawSubmitting(false);
+    if (error) {
+      setReferralWithdrawMsg({ type: "error", text: error.message });
+      return;
+    }
+    setReferralWithdrawMsg({ type: "success", text: "Demande de retrait envoyée. Elle sera traitée sous peu." });
+    loadMyReferralCommissions();
+    loadMyReferralWithdrawals();
+  }
+
   // Statuts dérivés de l'abonnement (pas d'essai gratuit : accès uniquement si abonnement actif)
   const isSubscriptionActive =
     subscription?.status === "active" &&
@@ -1207,6 +1239,29 @@ export default function GuichetApp() {
       await supabase.from("subscription_payments").update({ status: "rejected" }).eq("id", payment.id);
     }
     loadPendingSubPayments();
+  }
+
+  // ===== Backoffice : retraits de gains de parrainage à valider =====
+  const [pendingReferralWithdrawals, setPendingReferralWithdrawals] = useState([]);
+  const [pendingReferralWithdrawalsLoading, setPendingReferralWithdrawalsLoading] = useState(false);
+
+  async function loadPendingReferralWithdrawals() {
+    setPendingReferralWithdrawalsLoading(true);
+    const { data, error } = await supabase
+      .from("referral_withdrawals")
+      .select("*, agents:agent_id(full_name, phone)")
+      .eq("status", "pending")
+      .order("created_at", { ascending: true });
+    setPendingReferralWithdrawalsLoading(false);
+    if (!error && data) setPendingReferralWithdrawals(data);
+  }
+
+  async function decideReferralWithdrawal(withdrawalId, approve) {
+    await supabase
+      .from("referral_withdrawals")
+      .update({ status: approve ? "paid" : "rejected" })
+      .eq("id", withdrawalId);
+    loadPendingReferralWithdrawals();
   }
 
   // ===== Discussion entre agents (chat) =====
@@ -1433,7 +1488,9 @@ export default function GuichetApp() {
   useEffect(() => {
     if (tab === "abonnement" && agent) loadMyPayments();
     if (tab === "parrainage" && agent) loadMyReferralCommissions();
+    if (tab === "parrainage" && agent) loadMyReferralWithdrawals();
     if (tab === "backoffice-abonnements" && agent?.isPlatformOwner) loadPendingSubPayments();
+    if (tab === "backoffice-parrainage" && agent?.isPlatformOwner) loadPendingReferralWithdrawals();
   }, [tab, agent?.id]);
 
   // ===== Équipe réelle (chef d'agence) et filleuls réels (parrainage) =====
@@ -3499,6 +3556,7 @@ export default function GuichetApp() {
                         { id: "kyc-review-managers", label: "Vérif. chefs d'agence", icon: ShieldCheck },
                         { id: "backoffice-pub", label: "Backoffice publicité", icon: BarChart3 },
                         { id: "backoffice-abonnements", label: "Backoffice abonnements", icon: CreditCard },
+                        { id: "backoffice-parrainage", label: "Backoffice parrainage", icon: Gift },
                       ].map((item) => {
                         const active = tab === item.id;
                         return (
@@ -4337,6 +4395,7 @@ export default function GuichetApp() {
                   { id: "kyc-review-managers", label: "Vérif. chefs d'agence", icon: ShieldCheck },
                   { id: "backoffice-pub", label: "Backoffice publicité", icon: BarChart3 },
                   { id: "backoffice-abonnements", label: "Backoffice abonnements", icon: CreditCard },
+                  { id: "backoffice-parrainage", label: "Backoffice parrainage", icon: Gift },
                 ]
               : []),
             { id: "parametres", label: "Paramètres", icon: Settings },
@@ -4345,7 +4404,7 @@ export default function GuichetApp() {
             // le menu ☰ — on évite de les dupliquer ici dans la barre.
             .filter((t) => {
               if (agent?.isPlatformOwner) {
-                return !["dashboard", "kyc", "historique", "annonceur", "publicites", "parrainage", "abonnement", "parametres", "kyc-review-managers", "backoffice-pub", "backoffice-abonnements"].includes(t.id);
+                return !["dashboard", "kyc", "historique", "annonceur", "publicites", "parrainage", "abonnement", "parametres", "kyc-review-managers", "backoffice-pub", "backoffice-abonnements", "backoffice-parrainage"].includes(t.id);
               }
               if (["agent", "manager"].includes(agent?.role)) {
                 return !["dashboard", "kyc", "publicites", "parrainage", "abonnement", "parametres", "equipe", "kyc-review"].includes(t.id);
@@ -5778,10 +5837,102 @@ export default function GuichetApp() {
                           color: c.status === "paid" ? COLORS.teal : COLORS.goldSoft,
                         }}
                       >
-                        {c.status === "paid" ? "Payée" : "En attente"}
+                        {c.status === "paid" ? "Payée" : c.status === "withdrawal_requested" ? "Retrait en cours" : "Disponible"}
                       </span>
                     </div>
                   ))}
+                </div>
+              )}
+
+              {/* Retrait des gains disponibles */}
+              {(() => {
+                const availableAmount = myReferralCommissions
+                  .filter((c) => c.status === "pending")
+                  .reduce((sum, c) => sum + c.amount, 0);
+                const feeAmount = Math.round(availableAmount * REFERRAL_WITHDRAWAL_FEE_RATE);
+                const netAmount = availableAmount - feeAmount;
+                return (
+                  <div className="mt-5 pt-5" style={{ borderTop: `1px solid ${COLORS.surfaceLine}` }}>
+                    <div className="text-sm font-medium mb-2">Retirer mes gains</div>
+                    {!hasFullAccess ? (
+                      <p className="text-xs" style={{ color: COLORS.danger }}>
+                        Ton abonnement doit être actif pour pouvoir retirer tes gains de parrainage.
+                      </p>
+                    ) : availableAmount === 0 ? (
+                      <p className="text-xs" style={{ color: COLORS.textMuted }}>Aucun gain disponible à retirer pour le moment.</p>
+                    ) : (
+                      <>
+                        <p className="text-xs mb-3" style={{ color: COLORS.textMuted }}>
+                          Disponible : {formatFCFA(availableAmount)} — frais de retrait 20% ({formatFCFA(feeAmount)}) — tu recevras <strong>{formatFCFA(netAmount)}</strong>.
+                        </p>
+                        <div className="flex gap-2 mb-3">
+                          <button
+                            onClick={() => setReferralWithdrawMethod("wave")}
+                            className="gc-btn flex-1 py-2 rounded-lg text-xs font-medium"
+                            style={
+                              referralWithdrawMethod === "wave"
+                                ? { background: "#1DC8E0", color: "#052E36" }
+                                : { background: COLORS.bgSoft, color: COLORS.textMuted, border: `1px solid ${COLORS.surfaceLine}` }
+                            }
+                          >
+                            Wave
+                          </button>
+                          <button
+                            onClick={() => setReferralWithdrawMethod("usdt_bep20")}
+                            className="gc-btn flex-1 py-2 rounded-lg text-xs font-medium"
+                            style={
+                              referralWithdrawMethod === "usdt_bep20"
+                                ? { background: COLORS.gold, color: "#052E36" }
+                                : { background: COLORS.bgSoft, color: COLORS.textMuted, border: `1px solid ${COLORS.surfaceLine}` }
+                            }
+                          >
+                            USDT (BNB — BEP20)
+                          </button>
+                        </div>
+                        <button
+                          onClick={handleRequestReferralWithdrawal}
+                          disabled={referralWithdrawSubmitting}
+                          className="gc-btn w-full flex items-center justify-center gap-1.5 py-2.5 rounded-lg text-sm font-medium"
+                          style={{ background: COLORS.teal, color: "#052E36", opacity: referralWithdrawSubmitting ? 0.6 : 1 }}
+                        >
+                          <Send size={14} /> {referralWithdrawSubmitting ? "Envoi…" : "Demander le retrait"}
+                        </button>
+                      </>
+                    )}
+                    {referralWithdrawMsg.text && (
+                      <p className="text-xs mt-2" style={{ color: referralWithdrawMsg.type === "error" ? COLORS.danger : COLORS.teal }}>
+                        {referralWithdrawMsg.text}
+                      </p>
+                    )}
+                  </div>
+                );
+              })()}
+
+              {/* Historique des retraits */}
+              {myReferralWithdrawals.length > 0 && (
+                <div className="mt-5 pt-5" style={{ borderTop: `1px solid ${COLORS.surfaceLine}` }}>
+                  <div className="text-sm font-medium mb-2">Historique des retraits</div>
+                  <div className="space-y-2">
+                    {myReferralWithdrawals.map((w) => (
+                      <div key={w.id} className="p-3 rounded-lg flex items-center justify-between" style={{ background: COLORS.bgSoft, border: `1px solid ${COLORS.surfaceLine}` }}>
+                        <div>
+                          <div className="text-sm gc-mono">{formatFCFA(w.net_amount)}</div>
+                          <div className="text-[10px]" style={{ color: COLORS.textMuted }}>
+                            {w.method === "wave" ? "Wave" : "USDT BEP20"} · frais {formatFCFA(w.fee_amount)}
+                          </div>
+                        </div>
+                        <span
+                          className="text-xs px-2 py-1 rounded-full"
+                          style={{
+                            background: w.status === "paid" ? "rgba(43,191,138,0.15)" : w.status === "rejected" ? "rgba(226,104,94,0.15)" : "rgba(217,164,65,0.15)",
+                            color: w.status === "paid" ? COLORS.teal : w.status === "rejected" ? COLORS.danger : COLORS.goldSoft,
+                          }}
+                        >
+                          {w.status === "paid" ? "Payé" : w.status === "rejected" ? "Refusé" : "En attente"}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>
@@ -5932,6 +6083,46 @@ export default function GuichetApp() {
                       </button>
                       <button
                         onClick={() => validateSubPayment(p, false)}
+                        className="gc-btn px-3 py-1.5 rounded-lg text-xs font-medium border"
+                        style={{ borderColor: COLORS.surfaceLine, color: COLORS.textMuted }}
+                      >
+                        Refuser
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {tab === "backoffice-parrainage" && agent?.isPlatformOwner && (
+          <div className="gc-fade-in">
+            <div className="text-sm font-medium mb-3">Retraits de gains de parrainage en attente</div>
+            {pendingReferralWithdrawalsLoading ? (
+              <div className="text-xs" style={{ color: COLORS.textMuted }}>Chargement…</div>
+            ) : pendingReferralWithdrawals.length === 0 ? (
+              <div className="text-xs" style={{ color: COLORS.textMuted }}>Aucun retrait en attente.</div>
+            ) : (
+              <div className="space-y-2">
+                {pendingReferralWithdrawals.map((w) => (
+                  <div key={w.id} className="p-4 rounded-xl flex items-center justify-between gap-3" style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}` }}>
+                    <div>
+                      <div className="text-sm font-medium">{w.agents?.full_name} — {w.agents?.phone}</div>
+                      <div className="text-xs" style={{ color: COLORS.textMuted }}>
+                        {w.method === "wave" ? "Wave" : "USDT (BNB — BEP20)"} · brut {formatFCFA(w.gross_amount)} · frais {formatFCFA(w.fee_amount)} · net à envoyer <strong>{formatFCFA(w.net_amount)}</strong>
+                      </div>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => decideReferralWithdrawal(w.id, true)}
+                        className="gc-btn px-3 py-1.5 rounded-lg text-xs font-medium"
+                        style={{ background: COLORS.teal, color: "#052E36" }}
+                      >
+                        Marquer payé
+                      </button>
+                      <button
+                        onClick={() => decideReferralWithdrawal(w.id, false)}
                         className="gc-btn px-3 py-1.5 rounded-lg text-xs font-medium border"
                         style={{ borderColor: COLORS.surfaceLine, color: COLORS.textMuted }}
                       >
