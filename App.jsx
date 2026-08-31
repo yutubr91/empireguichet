@@ -922,6 +922,8 @@ export default function GuichetApp() {
       isPlatformOwner: data.is_platform_owner || false,
       avatarUrl: data.avatar_url || null,
       agencyCode: null,
+      identityDuplicateMatchType: data.identity_duplicate_match_type || null,
+      identityOverride: !!data.identity_override,
     };
   }
 
@@ -1730,6 +1732,8 @@ export default function GuichetApp() {
     pushNotification("Adresse Gmail vérifiée ✅");
   }
 
+  const kycBlockedByDuplicate = !!(agent?.identityDuplicateMatchType && !agent?.identityOverride);
+
   async function handleKycSaveProfile(e) {
     e.preventDefault();
     if (!kycFirstName || !kycLastName || !kycCountry || !kycAddress || !kycIdNumber || !kycDob) {
@@ -1737,6 +1741,20 @@ export default function GuichetApp() {
       return;
     }
     setKycProfileError("");
+
+    // Vérification anti-doublon : une même personne (même identité) ne peut
+    // avoir qu'un seul compte vérifié, même si elle change de Gmail ou de
+    // numéro de téléphone pour ce nouveau compte.
+    const { data: dup, error: dupError } = await supabase.rpc("check_duplicate_identity", {
+      p_id_number: kycIdNumber,
+      p_first_name: kycFirstName,
+      p_last_name: kycLastName,
+      p_address: kycAddress,
+    });
+    const duplicateFound = !dupError && dup && dup.length > 0;
+
+    // On enregistre le profil dans tous les cas (même en cas de doublon détecté)
+    // pour que le propriétaire puisse retrouver et examiner le dossier ensuite.
     const { error } = await supabase
       .from("agents")
       .update({
@@ -1746,6 +1764,8 @@ export default function GuichetApp() {
         address: kycAddress,
         id_number: kycIdNumber,
         date_of_birth: kycDob,
+        identity_duplicate_match_type: duplicateFound ? dup[0].match_type : null,
+        identity_duplicate_agent_id: duplicateFound ? dup[0].matched_agent_id : null,
       })
       .eq("id", agent.id);
     if (error) {
@@ -1760,7 +1780,17 @@ export default function GuichetApp() {
       address: kycAddress,
       idNumber: kycIdNumber,
       dob: kycDob,
+      identityDuplicateMatchType: duplicateFound ? dup[0].match_type : null,
     }));
+
+    if (duplicateFound) {
+      pushNotification(
+        dup[0].match_type === "id_number"
+          ? "Numéro de pièce d'identité déjà utilisé — dossier transmis au propriétaire pour vérification."
+          : "Nom et adresse déjà utilisés par un compte vérifié — dossier transmis au propriétaire pour vérification."
+      );
+      return;
+    }
     pushNotification("Profil complété ✅");
   }
 
@@ -1918,8 +1948,41 @@ export default function GuichetApp() {
     if (tab === "kyc-review-managers" && agent?.isPlatformOwner) {
       loadPendingManagers();
     }
+    if (tab === "identity-disputes" && agent?.isPlatformOwner) {
+      loadIdentityDisputes();
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab]);
+
+  // ===== Litiges d'identité (doublons de compte suspectés) =====
+  const [identityDisputes, setIdentityDisputes] = useState([]);
+  const [identityDisputesLoading, setIdentityDisputesLoading] = useState(false);
+  const [identityDisputeActionError, setIdentityDisputeActionError] = useState("");
+
+  async function loadIdentityDisputes() {
+    setIdentityDisputesLoading(true);
+    const { data, error } = await supabase.rpc("get_identity_duplicates");
+    if (!error && data) setIdentityDisputes(data);
+    setIdentityDisputesLoading(false);
+  }
+
+  async function handleResolveIdentityDuplicate(disputeAgentId, action, name) {
+    setIdentityDisputeActionError("");
+    const { error } = await supabase.rpc("resolve_identity_duplicate", {
+      p_agent_id: disputeAgentId,
+      p_action: action,
+    });
+    if (error) {
+      setIdentityDisputeActionError("Erreur : " + error.message);
+      return;
+    }
+    pushNotification(
+      action === "override"
+        ? `Compte de ${name} débloqué — fausse alerte confirmée ✅`
+        : `Compte de ${name} refusé — doublon d'identité confirmé`
+    );
+    loadIdentityDisputes();
+  }
 
   // ===== Publicités (annonceurs) =====
   const AD_PRICING = [
@@ -3554,6 +3617,7 @@ export default function GuichetApp() {
                       </div>
                       {[
                         { id: "kyc-review-managers", label: "Vérif. chefs d'agence", icon: ShieldCheck },
+                        { id: "identity-disputes", label: "Litiges d'identité", icon: AlertTriangle },
                         { id: "backoffice-pub", label: "Backoffice publicité", icon: BarChart3 },
                         { id: "backoffice-abonnements", label: "Backoffice abonnements", icon: CreditCard },
                         { id: "backoffice-parrainage", label: "Backoffice parrainage", icon: Gift },
@@ -4655,9 +4719,20 @@ export default function GuichetApp() {
               <p className="text-xs mb-4" style={{ color: COLORS.textMuted }}>Ces informations doivent correspondre à ta pièce d'identité.</p>
 
               {kycProfileDone ? (
-                <div className="flex items-center gap-2 p-3 rounded-lg text-xs" style={{ background: "rgba(43,191,138,0.1)", color: COLORS.teal }}>
-                  <CheckCircle2 size={14} /> Profil complété — {agent.firstName} {agent.lastName}
-                </div>
+                kycBlockedByDuplicate ? (
+                  <div className="flex items-start gap-2 p-3 rounded-lg text-xs" style={{ background: "rgba(224,86,86,0.1)", color: COLORS.danger, border: `1px solid ${COLORS.danger}` }}>
+                    <AlertTriangle size={14} style={{ flexShrink: 0, marginTop: 1 }} />
+                    <span>
+                      {agent.identityDuplicateMatchType === "id_number"
+                        ? "Ce numéro de pièce d'identité correspond à un compte déjà vérifié. Ton dossier est en attente de vérification manuelle par le propriétaire."
+                        : "Un compte déjà vérifié porte le même nom et la même adresse. Ton dossier est en attente de vérification manuelle par le propriétaire."}
+                    </span>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2 p-3 rounded-lg text-xs" style={{ background: "rgba(43,191,138,0.1)", color: COLORS.teal }}>
+                    <CheckCircle2 size={14} /> Profil complété — {agent.firstName} {agent.lastName}
+                  </div>
+                )
               ) : (
                 <form onSubmit={handleKycSaveProfile} className="grid md:grid-cols-2 gap-3">
                   <div>
@@ -4774,6 +4849,10 @@ export default function GuichetApp() {
                 <div className="flex items-center gap-2 p-3 rounded-lg text-xs" style={{ background: "rgba(232,169,59,0.1)", color: COLORS.goldSoft }}>
                   <Clock size={14} /> En attente de vérification par ton chef d'agence — délai habituel jusqu'à 24h.
                 </div>
+              ) : kycBlockedByDuplicate ? (
+                <p className="text-xs" style={{ color: COLORS.textMuted }}>
+                  L'envoi des documents est suspendu le temps que le propriétaire examine ton dossier (voir message ci-dessus).
+                </p>
               ) : !kycProfileDone ? (
                 <p className="text-xs" style={{ color: COLORS.textMuted }}>Complète d'abord ton profil ci-dessus pour continuer.</p>
               ) : (
@@ -6524,6 +6603,67 @@ export default function GuichetApp() {
                     </div>
                   )}
                 </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {tab === "identity-disputes" && agent?.isPlatformOwner && (
+          <div className="gc-fade-in">
+            <p className="text-xs mb-4" style={{ color: COLORS.textMuted }}>
+              Dossiers bloqués automatiquement car ils correspondent à un compte déjà vérifié (même numéro de pièce
+              d'identité, ou même nom/prénom/adresse). Vérifie s'il s'agit vraiment de la même personne avant de décider.
+            </p>
+
+            {identityDisputeActionError && (
+              <p className="text-xs mb-3 px-3 py-2 rounded-lg" style={{ background: "#FEE2E2", color: "#991B1B" }}>
+                {identityDisputeActionError}
+              </p>
+            )}
+
+            {identityDisputesLoading ? (
+              <p className="text-sm" style={{ color: COLORS.textMuted }}>Chargement…</p>
+            ) : identityDisputes.length === 0 ? (
+              <div className="p-6 rounded-xl text-center" style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}` }}>
+                <CheckCircle2 size={22} style={{ color: COLORS.teal, margin: "0 auto 8px" }} />
+                <p className="text-sm" style={{ color: COLORS.textMuted }}>Aucun litige d'identité en attente pour le moment.</p>
+              </div>
+            ) : (
+              <div className="grid gap-3">
+                {identityDisputes.map((d) => (
+                  <div
+                    key={d.agent_id}
+                    className="p-4 rounded-xl"
+                    style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}` }}
+                  >
+                    <div className="flex items-start gap-2 mb-3">
+                      <AlertTriangle size={15} style={{ color: COLORS.goldSoft, flexShrink: 0, marginTop: 1 }} />
+                      <div className="text-xs" style={{ color: COLORS.textMuted }}>
+                        <span className="font-medium" style={{ color: COLORS.text }}>{d.agent_full_name}</span> ({d.agent_phone}) —{" "}
+                        {d.match_type === "id_number"
+                          ? "même numéro de pièce d'identité que"
+                          : "même nom, prénom et adresse que"}{" "}
+                        <span className="font-medium" style={{ color: COLORS.text }}>{d.matched_full_name || "un compte déjà vérifié"}</span>, déjà vérifié.
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        onClick={() => handleResolveIdentityDuplicate(d.agent_id, "override", d.agent_full_name)}
+                        className="gc-btn px-3.5 py-2 rounded-lg text-xs font-medium flex items-center gap-1.5"
+                        style={{ background: "rgba(43,191,138,0.12)", color: COLORS.teal }}
+                      >
+                        <CheckCircle2 size={13} /> Débloquer (fausse alerte)
+                      </button>
+                      <button
+                        onClick={() => handleResolveIdentityDuplicate(d.agent_id, "reject", d.agent_full_name)}
+                        className="gc-btn px-3.5 py-2 rounded-lg text-xs font-medium flex items-center gap-1.5"
+                        style={{ background: "rgba(224,86,86,0.12)", color: COLORS.danger }}
+                      >
+                        <X size={13} /> Refuser (doublon confirmé)
+                      </button>
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
           </div>
