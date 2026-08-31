@@ -4583,6 +4583,20 @@ export default function GuichetApp() {
 
         {tab === "kyc" && (
           <div className="gc-fade-in max-w-3xl">
+            {!kycVerified && (
+              <div
+                className="p-5 rounded-xl mb-4 flex items-start gap-3"
+                style={{ background: "rgba(217,164,65,0.1)", border: `1px solid ${COLORS.surfaceLine}` }}
+              >
+                <ShieldCheck size={22} style={{ color: COLORS.goldSoft, flexShrink: 0, marginTop: 2 }} />
+                <div>
+                  <p className="text-sm font-medium mb-1">Bienvenue sur EmpireGuichet 👋</p>
+                  <p className="text-xs" style={{ color: COLORS.textMuted }}>
+                    Avant de commencer à traiter des transactions, prends un instant pour vérifier ton identité — c'est rapide et ça protège ton compte comme celui de tes clients. Suis simplement les étapes ci-dessous.
+                  </p>
+                </div>
+              </div>
+            )}
             {/* Étape email */}
             <div className="p-6 rounded-xl mb-4" style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}` }}>
               <div className="flex items-center gap-2 mb-1">
