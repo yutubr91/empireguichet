@@ -733,17 +733,27 @@ export default function GuichetApp() {
           <Send size={14} /> Payer {formatFCFA(getWaveAmount(fcfaAmount))} avec Wave
         </a>
         <div className="p-3 rounded-lg" style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}` }}>
-          <div className="text-xs font-medium mb-1.5" style={{ color: COLORS.textMuted }}>
+          <div className="text-xs font-medium mb-2" style={{ color: COLORS.textMuted }}>
             Ou en USDT (réseau BNB — BEP20) — {getUsdtAmount(fcfaAmount)} USD
           </div>
+          <div className="flex items-center gap-3 mb-2">
+            <img
+              src={`https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${USDT_BEP20_ADDRESS}`}
+              alt="QR code adresse USDT BEP20"
+              width={90}
+              height={90}
+              className="rounded-lg flex-shrink-0"
+              style={{ background: "#fff", padding: 4 }}
+            />
+            <span className="gc-mono text-xs break-all flex-1" style={{ color: COLORS.text }}>{USDT_BEP20_ADDRESS}</span>
+          </div>
           <div className="flex items-center gap-2">
-            <span className="gc-mono text-xs flex-1 break-all" style={{ color: COLORS.text }}>{USDT_BEP20_ADDRESS}</span>
             <button
               onClick={() => copyUsdtAddress(blockKey)}
-              className="gc-btn px-2.5 py-1.5 rounded-lg text-xs flex items-center gap-1 flex-shrink-0"
+              className="gc-btn w-full px-2.5 py-1.5 rounded-lg text-xs flex items-center justify-center gap-1"
               style={{ background: COLORS.gold, color: "#052E36" }}
             >
-              <Copy size={12} /> {usdtCopiedFor === blockKey ? "Copié !" : "Copier"}
+              <Copy size={12} /> {usdtCopiedFor === blockKey ? "Copié !" : "Copier l'adresse"}
             </button>
           </div>
         </div>
