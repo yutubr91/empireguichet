@@ -616,6 +616,81 @@ const FAQ_ITEMS = [
   },
 ];
 
+// ===== Chatbot du service client : réponses automatiques par mots-clés =====
+// Pas de vraie IA (ça coûterait de l'argent et exposerait une clé côté
+// navigateur) — juste une recherche de mots-clés dans la question posée.
+const SUPPORT_BOT_KB = [
+  {
+    keywords: ["abonnement", "combien coute", "combien coûte", "prix", "tarif"],
+    answer: "L'abonnement coûte 2 500 FCFA pour 6 mois (agent comme chef d'agence). Si tu deviens chef d'agence par promotion, le tarif chef d'agence est de 3 500 FCFA. Tu peux payer par Wave ou en USDT (réseau BNB/BEP20) directement depuis l'onglet Abonnement.",
+  },
+  {
+    keywords: ["historique"],
+    answer: "L'historique détaillé (recherche, filtres, export PDF/Excel) coûte 200 FCFA tous les 2 mois, séparément de l'abonnement. Tu peux le débloquer depuis l'onglet Historique.",
+  },
+  {
+    keywords: ["kyc", "verification", "vérification", "identite", "identité", "piece", "pièce"],
+    answer: "La vérification KYC se fait dans l'onglet 'Vérification KYC' : confirme ton e-mail, puis envoie une pièce d'identité recto/verso et un selfie. Ton chef d'agence (ou nous, pour un chef d'agence) valide ensuite ton dossier.",
+  },
+  {
+    keywords: ["parrainage", "parrain", "filleul", "invite", "invitation"],
+    answer: "Le parrainage te rapporte 300 FCFA quand ton filleul active son premier abonnement. Pour retirer tes gains (Wave ou USDT BEP20, frais 20%), ton propre abonnement doit être actif — tout se passe dans l'onglet Parrainage.",
+  },
+  {
+    keywords: ["chef d'agence", "devenir chef", "promotion", "manager"],
+    answer: "Un agent simple peut demander à devenir chef d'agence depuis Paramètres → 'Devenir chef d'agence'. Ton chef actuel doit valider la demande, puis un abonnement chef d'agence de 3 500 FCFA est à payer pour activer ton accès complet.",
+  },
+  {
+    keywords: ["mot de passe", "oublie", "oublié", "connecter", "connexion", "login"],
+    answer: "Si tu as oublié ton mot de passe, utilise le lien 'Mot de passe oublié' sur l'écran de connexion — un code te sera envoyé par e-mail pour le réinitialiser.",
+  },
+  {
+    keywords: ["pin", "code pin"],
+    answer: "Tu peux changer ton code PIN depuis Paramètres → 'Changer le code PIN'. Il te sera demandé pour confirmer les opérations sensibles.",
+  },
+  {
+    keywords: ["depot", "dépôt", "retrait", "transaction", "wave", "orange money", "mtn", "moov"],
+    answer: "Pour faire une transaction : va dans 'Nouvelle transaction', choisis le réseau (MTN, Orange, Moov, Wave, Djamo, crypto…), entre le numéro et le montant, puis confirme. Un ticket est généré automatiquement.",
+  },
+  {
+    keywords: ["equipe", "équipe", "agent de mon agence", "mes agents"],
+    answer: "En tant que chef d'agence, l'onglet 'Équipe' te montre tous tes agents, leurs transactions et leur statut KYC.",
+  },
+  {
+    keywords: ["publicite", "publicité", "annonce", "annonceur"],
+    answer: "L'onglet 'Publicités' te permet de publier une annonce visible par les autres agents. L'espace 'Annonceurs' est réservé aux annonces externes mises en avant par EmpireGuichet.",
+  },
+  {
+    keywords: ["discussion", "chat", "message", "chef d'agence me contacter"],
+    answer: "La bulle verte en bas de l'écran ouvre la Discussion entre agents : un espace général, plus des messages privés entre chaque chef d'agence et ses agents.",
+  },
+  {
+    keywords: ["photo de profil", "avatar", "photo"],
+    answer: "Tu peux changer ta photo de profil en cliquant sur la petite icône appareil photo à côté de ton avatar, en haut de l'écran.",
+  },
+];
+
+function getSupportBotReply(userText) {
+  const normalized = userText
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, ""); // enlève les accents pour un matching plus robuste
+  let best = null;
+  let bestScore = 0;
+  for (const entry of SUPPORT_BOT_KB) {
+    const score = entry.keywords.filter((k) => {
+      const kNorm = k.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      return normalized.includes(kNorm);
+    }).length;
+    if (score > bestScore) {
+      bestScore = score;
+      best = entry;
+    }
+  }
+  if (best) return best.answer;
+  return "Je n'ai pas de réponse toute prête pour cette question. Un conseiller EmpireGuichet te répondra sous peu — sinon tu peux aussi consulter l'onglet FAQ ou nous écrire via l'onglet Contact.";
+}
+
 function formatFCFA(n) {
   return new Intl.NumberFormat("fr-FR").format(Math.round(n)) + " FCFA";
 }
@@ -2803,15 +2878,13 @@ export default function GuichetApp() {
   function handleSendChat(e) {
     e.preventDefault();
     if (!chatInput.trim()) return;
-    const userMsg = { from: "user", text: chatInput };
+    const userText = chatInput;
+    const userMsg = { from: "user", text: userText };
     setChatMessages((m) => [...m, userMsg]);
     setChatInput("");
     setTimeout(() => {
-      setChatMessages((m) => [
-        ...m,
-        { from: "agent", text: "Merci pour ton message — un conseiller EmpireGuichet te répondra sous peu. Pour une réponse immédiate, utilise WhatsApp." },
-      ]);
-    }, 1000);
+      setChatMessages((m) => [...m, { from: "agent", text: getSupportBotReply(userText) }]);
+    }, 700);
   }
 
   function handleContactSubmit(e) {
