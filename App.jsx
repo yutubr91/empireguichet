@@ -621,6 +621,10 @@ const FAQ_ITEMS = [
 // navigateur) — juste une recherche de mots-clés dans la question posée.
 const SUPPORT_BOT_KB = [
   {
+    keywords: ["salut", "bonjour", "bonsoir", "coucou", "hello"],
+    answer: "Bonjour 👋 Comment puis-je t'aider avec EmpireGuichet ? Tu peux me poser une question sur l'abonnement, le KYC, une transaction, le parrainage, etc.",
+  },
+  {
     keywords: ["abonnement", "combien coute", "combien coûte", "prix", "tarif"],
     answer: "L'abonnement coûte 2 500 FCFA pour 6 mois (agent comme chef d'agence). Si tu deviens chef d'agence par promotion, le tarif chef d'agence est de 3 500 FCFA. Tu peux payer par Wave ou en USDT (réseau BNB/BEP20) directement depuis l'onglet Abonnement.",
   },
