@@ -5760,8 +5760,11 @@ export default function GuichetApp() {
                 </p>
 
                 <div className="text-xs font-medium mb-3" style={{ color: COLORS.textMuted }}>TOUTES LES PUBLICITÉS ET ANNONCES ({allAds.length})</div>
-                <div className="rounded-xl overflow-hidden" style={{ border: `1px solid ${COLORS.surfaceLine}` }}>
-                  <table className="w-full text-xs">
+
+                {/* Tableau classique — écrans larges */}
+                <div className="hidden md:block rounded-xl overflow-hidden" style={{ border: `1px solid ${COLORS.surfaceLine}` }}>
+                  <div className="overflow-x-auto">
+                  <table className="w-full text-xs" style={{ minWidth: 640 }}>
                     <thead>
                       <tr style={{ background: COLORS.bgSoft, color: COLORS.textMuted }}>
                         <th className="text-left px-3 py-2.5">Titre</th>
@@ -5811,6 +5814,68 @@ export default function GuichetApp() {
                       })}
                     </tbody>
                   </table>
+                  </div>
+                </div>
+
+                {/* Cartes empilées — écrans étroits (téléphone) */}
+                <div className="md:hidden flex flex-col gap-3">
+                  {allAds.length === 0 && (
+                    <div
+                      className="rounded-xl px-4 py-6 text-center text-xs"
+                      style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}`, color: COLORS.textMuted }}
+                    >
+                      Aucune publicité ou annonce pour le moment.
+                    </div>
+                  )}
+                  {allAds.map((ad) => {
+                    const isActive = ad.status === "active" && new Date(ad.ends_at) > new Date();
+                    const isAnnonce = ad.kind === "annonce";
+                    return (
+                      <div
+                        key={ad.id}
+                        className="rounded-xl p-4"
+                        style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}` }}
+                      >
+                        <div className="flex items-start justify-between gap-2 mb-2">
+                          <div className="text-sm font-semibold min-w-0 truncate">{ad.title}</div>
+                          <span
+                            className="flex-shrink-0 px-2 py-0.5 rounded-md text-[10px]"
+                            style={
+                              isActive
+                                ? { background: "rgba(43,191,138,0.12)", color: COLORS.teal }
+                                : { background: COLORS.bgSoft, color: COLORS.textMuted }
+                            }
+                          >
+                            {isActive ? "En ligne" : "Expirée"}
+                          </span>
+                        </div>
+                        <div className="text-xs mb-3" style={{ color: COLORS.textMuted }}>{ad.agency_name || "—"}</div>
+                        <div className="grid grid-cols-3 gap-2 pt-3" style={{ borderTop: `1px solid ${COLORS.surfaceLine}` }}>
+                          <div>
+                            <div className="text-[10px] mb-0.5" style={{ color: COLORS.textMuted }}>Type</div>
+                            <span
+                              className="inline-block px-1.5 py-0.5 rounded text-[10px]"
+                              style={
+                                isAnnonce
+                                  ? { background: "rgba(34,211,238,0.14)", color: COLORS.gold }
+                                  : { background: COLORS.bgSoft, color: COLORS.textMuted, border: `1px solid ${COLORS.surfaceLine}` }
+                              }
+                            >
+                              {isAnnonce ? "Annonce" : "Publicité"}
+                            </span>
+                          </div>
+                          <div>
+                            <div className="text-[10px] mb-0.5" style={{ color: COLORS.textMuted }}>Montant</div>
+                            <div className="text-xs font-medium gc-mono">{formatFCFA(ad.amount_paid)}</div>
+                          </div>
+                          <div>
+                            <div className="text-[10px] mb-0.5" style={{ color: COLORS.textMuted }}>Expire</div>
+                            <div className="text-xs font-medium">{new Date(ad.ends_at).toLocaleDateString("fr-FR")}</div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </>
             )}
