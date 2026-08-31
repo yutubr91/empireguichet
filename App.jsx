@@ -6192,7 +6192,8 @@ export default function GuichetApp() {
               ))}
             </div>
 
-            <div className="rounded-xl overflow-hidden" style={{ border: `1px solid ${COLORS.surfaceLine}` }}>
+            {/* Tableau classique — écrans larges */}
+            <div className="hidden md:block rounded-xl overflow-hidden" style={{ border: `1px solid ${COLORS.surfaceLine}` }}>
               <div className="overflow-x-auto">
               <table className="w-full text-sm" style={{ minWidth: 640 }}>
                 <thead>
@@ -6241,6 +6242,60 @@ export default function GuichetApp() {
                 </tbody>
               </table>
               </div>
+            </div>
+
+            {/* Cartes empilées — écrans étroits (téléphone), plus lisibles qu'un tableau compressé */}
+            <div className="md:hidden flex flex-col gap-3">
+              {!realTeamLoading && realTeam.length === 0 && (
+                <div
+                  className="rounded-xl px-4 py-6 text-center text-sm"
+                  style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}`, color: COLORS.textMuted }}
+                >
+                  Aucun agent n'a encore rejoint ton équipe avec ton code d'agence.
+                </div>
+              )}
+              {realTeam.map((a) => {
+                const agentTx = teamTransactions.filter((t) => t.agent_id === a.id);
+                const agentVolume = agentTx.reduce((s, t) => s + Number(t.amount || 0), 0);
+                return (
+                  <div
+                    key={a.id}
+                    className="rounded-xl p-4"
+                    style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}` }}
+                  >
+                    <div className="flex items-center justify-between gap-2 mb-3">
+                      <div className="min-w-0">
+                        <div className="text-sm font-semibold truncate">{a.full_name}</div>
+                        <div className="text-xs gc-mono mt-0.5" style={{ color: COLORS.textMuted }}>{a.phone}</div>
+                      </div>
+                      <span
+                        className="flex-shrink-0 inline-flex items-center gap-1 text-xs px-2 py-1 rounded-md"
+                        style={
+                          a.kyc_status === "validated"
+                            ? { background: "rgba(43,191,138,0.12)", color: COLORS.teal }
+                            : { background: "rgba(217,164,65,0.12)", color: COLORS.goldSoft }
+                        }
+                      >
+                        {a.kyc_status === "validated" ? "Vérifié" : "En attente"}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2 pt-3" style={{ borderTop: `1px solid ${COLORS.surfaceLine}` }}>
+                      <div>
+                        <div className="text-[10px] mb-0.5" style={{ color: COLORS.textMuted }}>Rôle</div>
+                        <div className="text-xs font-medium">{a.role === "manager" ? "Chef d'agence" : "Agent"}</div>
+                      </div>
+                      <div>
+                        <div className="text-[10px] mb-0.5" style={{ color: COLORS.textMuted }}>Transactions</div>
+                        <div className="text-xs font-medium gc-mono">{agentTx.length}</div>
+                      </div>
+                      <div>
+                        <div className="text-[10px] mb-0.5" style={{ color: COLORS.textMuted }}>Volume</div>
+                        <div className="text-xs font-medium gc-mono truncate">{formatFCFA(agentVolume)}</div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
             <p className="text-xs mt-3" style={{ color: COLORS.textMuted }}>
               Les transactions apparaissent ici en temps réel, dès qu'un agent de ton équipe en effectue une.
