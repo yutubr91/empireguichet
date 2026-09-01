@@ -621,78 +621,191 @@ const FAQ_ITEMS = [
 // navigateur) — juste une recherche de mots-clés dans la question posée.
 const SUPPORT_BOT_KB = [
   {
-    keywords: ["salut", "bonjour", "bonsoir", "coucou", "hello"],
-    answer: "Bonjour 👋 Comment puis-je t'aider avec EmpireGuichet ? Tu peux me poser une question sur l'abonnement, le KYC, une transaction, le parrainage, etc.",
+    keywords: ["salut", "bonjour", "bonsoir", "coucou", "hello", "slt", "bjr"],
+    answer: "Bonjour 👋 Comment puis-je t'aider avec EmpireGuichet ? Tu peux me poser une question sur l'inscription, l'abonnement, le KYC, une transaction, le parrainage, etc.",
   },
   {
-    keywords: ["abonnement", "combien coute", "combien coûte", "prix", "tarif"],
+    keywords: ["abonnement", "combien coute", "combien coûte", "prix", "tarif", "cout de l'abonnement", "coût de l'abonnement", "ca coute combien", "ça coûte combien", "montant abonnement"],
     answer: "L'abonnement coûte 2 500 FCFA pour 6 mois (agent comme chef d'agence). Si tu deviens chef d'agence par promotion, le tarif chef d'agence est de 3 500 FCFA. Tu peux payer par Wave ou en USDT (réseau BNB/BEP20) directement depuis l'onglet Abonnement.",
+  },
+  {
+    keywords: ["abonnement expire", "abonnement expiré", "renouveler", "renouvellement", "abonnement termine", "abonnement terminé", "compte bloque abonnement", "compte bloqué abonnement"],
+    answer: "Quand ton abonnement expire, l'accès à certaines fonctions est suspendu jusqu'au renouvellement. Va dans l'onglet Abonnement pour repayer (Wave ou USDT) et réactiver ton compte immédiatement après confirmation du paiement.",
+  },
+  {
+    keywords: ["inscription", "inscrire", "creer un compte", "créer un compte", "comment s'inscrire", "nouveau compte", "ouvrir un compte"],
+    answer: "Pour t'inscrire : renseigne ton nom, ton numéro de téléphone, une adresse e-mail et crée ton code PIN. Tu recevras un code de confirmation par e-mail. Ensuite, complète ta vérification KYC pour activer pleinement ton compte.",
+  },
+  {
+    keywords: ["code agence", "code d'agence", "rejoindre une agence", "rejoindre agence", "code chef d'agence"],
+    answer: "Le code d'agence te permet de rattacher ton compte au bon chef d'agence. Ton chef d'agence peut te communiquer ce code — tu le renseignes lors de l'inscription ou dans Paramètres si tu veux changer d'agence plus tard.",
   },
   {
     keywords: ["historique"],
     answer: "L'historique détaillé (recherche, filtres, export PDF/Excel) coûte 200 FCFA tous les 2 mois, séparément de l'abonnement. Tu peux le débloquer depuis l'onglet Historique.",
   },
   {
-    keywords: ["kyc", "verification", "vérification", "identite", "identité", "piece", "pièce"],
-    answer: "La vérification KYC se fait dans l'onglet 'Vérification KYC' : confirme ton e-mail, puis envoie une pièce d'identité recto/verso et un selfie. Ton chef d'agence (ou nous, pour un chef d'agence) valide ensuite ton dossier.",
+    keywords: ["kyc", "verification", "vérification", "identite", "identité", "piece", "pièce", "verifier mon compte", "vérifier mon compte", "documents acceptes", "documents acceptés", "quels documents"],
+    answer: "La vérification KYC se fait dans l'onglet 'Vérification KYC' : confirme ton e-mail, puis envoie une pièce d'identité recto/verso (CNI, passeport ou permis) et un selfie. Ton chef d'agence (ou nous, pour un chef d'agence) valide ensuite ton dossier, généralement sous 24h.",
   },
   {
-    keywords: ["parrainage", "parrain", "filleul", "invite", "invitation"],
+    keywords: ["delai kyc", "délai kyc", "combien de temps kyc", "temps de validation", "delai de validation", "délai de validation", "attente kyc"],
+    answer: "La validation KYC prend généralement jusqu'à 24h une fois tes documents envoyés. Tu peux suivre le statut de ton dossier dans l'onglet 'Vérification KYC'.",
+  },
+  {
+    keywords: ["parrainage", "parrain", "filleul", "invite", "invitation", "lien de parrainage", "code de parrainage"],
     answer: "Le parrainage te rapporte 300 FCFA quand ton filleul active son premier abonnement. Pour retirer tes gains (Wave ou USDT BEP20, frais 20%), ton propre abonnement doit être actif — tout se passe dans l'onglet Parrainage.",
   },
   {
-    keywords: ["chef d'agence", "devenir chef", "promotion", "manager"],
+    keywords: ["delai retrait parrainage", "délai retrait parrainage", "quand retirer parrainage", "retrait parrainage bloque", "retrait parrainage bloqué"],
+    answer: "Le retrait de tes gains de parrainage nécessite que ton propre abonnement soit actif. Une fois la demande envoyée depuis l'onglet Parrainage, elle est traitée manuellement — un délai court est normal.",
+  },
+  {
+    keywords: ["chef d'agence", "devenir chef", "promotion", "manager", "comment devenir chef"],
     answer: "Un agent simple peut demander à devenir chef d'agence depuis Paramètres → 'Devenir chef d'agence'. Ton chef actuel doit valider la demande, puis un abonnement chef d'agence de 3 500 FCFA est à payer pour activer ton accès complet.",
   },
   {
-    keywords: ["mot de passe", "oublie", "oublié", "connecter", "connexion", "login"],
-    answer: "Si tu as oublié ton mot de passe, utilise le lien 'Mot de passe oublié' sur l'écran de connexion — un code te sera envoyé par e-mail pour le réinitialiser.",
+    keywords: ["mot de passe", "oublie", "oublié", "connecter", "connexion", "login", "impossible de me connecter", "je n'arrive pas a me connecter", "je n'arrive pas à me connecter"],
+    answer: "Si tu as oublié ton mot de passe, utilise le lien 'Mot de passe oublié' sur l'écran de connexion — un code te sera envoyé par e-mail pour le réinitialiser. Si le souci persiste, écris-nous via l'onglet Contact.",
   },
   {
-    keywords: ["pin", "code pin"],
+    keywords: ["pin", "code pin", "changer mon pin", "changer mon code"],
     answer: "Tu peux changer ton code PIN depuis Paramètres → 'Changer le code PIN'. Il te sera demandé pour confirmer les opérations sensibles.",
   },
   {
-    keywords: ["depot", "dépôt", "retrait", "transaction", "wave", "orange money", "mtn", "moov"],
+    keywords: ["depot", "dépôt", "retrait", "transaction", "wave", "orange money", "mtn", "moov", "comment faire une transaction", "nouvelle transaction"],
     answer: "Pour faire une transaction : va dans 'Nouvelle transaction', choisis le réseau (MTN, Orange, Moov, Wave, Djamo, crypto…), entre le numéro et le montant, puis confirme. Un ticket est généré automatiquement.",
   },
   {
-    keywords: ["equipe", "équipe", "agent de mon agence", "mes agents"],
-    answer: "En tant que chef d'agence, l'onglet 'Équipe' te montre tous tes agents, leurs transactions et leur statut KYC.",
+    keywords: ["transaction echouee", "transaction échouée", "transaction bloquee", "transaction bloquée", "paiement bloque", "paiement bloqué", "paiement echoue", "paiement échoué"],
+    answer: "Si une transaction ou un paiement (abonnement, parrainage) semble bloqué, vérifie d'abord ta connexion internet et l'état de ton solde chez l'opérateur. Si le problème persiste, contacte-nous via l'onglet Contact avec le numéro de ticket concerné.",
   },
   {
-    keywords: ["publicite", "publicité", "annonce", "annonceur"],
-    answer: "L'onglet 'Publicités' te permet de publier une annonce visible par les autres agents. L'espace 'Annonceurs' est réservé aux annonces externes mises en avant par EmpireGuichet.",
+    keywords: ["montant minimum", "montant maximum", "plafond", "limite de transaction"],
+    answer: "Les montants min/max dépendent du réseau utilisé et de ton propre compte marchand chez l'opérateur (MTN, Orange, Moov, Wave…) — EmpireGuichet n'impose pas de plafond supplémentaire de son côté.",
   },
   {
-    keywords: ["discussion", "chat", "message", "chef d'agence me contacter"],
+    keywords: ["equipe", "équipe", "agent de mon agence", "mes agents", "ajouter un agent", "combien d'agents"],
+    answer: "En tant que chef d'agence, l'onglet 'Équipe' te montre tous tes agents, leurs transactions et leur statut KYC. Un agent rejoint ton équipe simplement en renseignant ton code d'agence.",
+  },
+  {
+    keywords: ["publicite", "publicité", "annonce", "annonceur", "annonce gratuite", "publier une annonce"],
+    answer: "L'onglet 'Publicités' te permet de publier une annonce payante visible par les autres agents. L'espace 'Annonceur' (gratuit) sert à publier de simples annonces entre agents. L'espace 'Annonceurs' public est réservé aux annonces externes mises en avant par EmpireGuichet.",
+  },
+  {
+    keywords: ["discussion", "chat entre agents", "message aux agents", "chef d'agence me contacter"],
     answer: "La bulle verte en bas de l'écran ouvre la Discussion entre agents : un espace général, plus des messages privés entre chaque chef d'agence et ses agents.",
   },
   {
-    keywords: ["photo de profil", "avatar", "photo"],
+    keywords: ["photo de profil", "avatar", "changer ma photo"],
     answer: "Tu peux changer ta photo de profil en cliquant sur la petite icône appareil photo à côté de ton avatar, en haut de l'écran.",
+  },
+  {
+    keywords: ["nom cache", "nom caché", "anonyme", "anonymat", "pseudo", "agent #"],
+    answer: "Dans la discussion générale, ton vrai nom est caché par défaut (tu apparais comme \"Agent #XXXX\"). Tu peux choisir de le révéler avec le bouton prévu à cet effet si tu le souhaites.",
+  },
+  {
+    keywords: ["message prive", "message privé", "dm"],
+    answer: "Un chef d'agence et l'un de ses agents peuvent s'écrire en privé (dans les deux sens), invisible aux autres membres de l'agence. Clique sur le nom de la personne dans la discussion pour ouvrir la conversation privée.",
+  },
+  {
+    keywords: ["changer d'agence", "changer agence", "transfert d'agence", "transfert agence", "nouveau chef", "quitter mon chef"],
+    answer: "Pour changer de chef d'agence, va dans Paramètres et entre le code de la nouvelle agence. Ton chef actuel recevra une demande et devra la valider avant que le transfert soit effectif.",
+  },
+  {
+    keywords: ["mode nuit", "mode sombre", "theme sombre", "thème sombre", "dark mode", "mode jour", "mode clair"],
+    answer: "Tu peux basculer entre le mode jour et le mode nuit avec l'icône soleil/lune en haut de l'écran. Ton choix est mémorisé automatiquement pour tes prochaines visites.",
+  },
+  {
+    keywords: ["notification", "cloche", "alerte"],
+    answer: "L'icône en forme de cloche en haut de l'écran affiche tes notifications : nouvelles transactions de ton équipe, messages privés non lus, mises à jour de ton dossier KYC, etc.",
+  },
+  {
+    keywords: ["rejete", "rejeté", "refuse", "refusé", "dossier refuse", "dossier refusé", "kyc refuse", "kyc refusé"],
+    answer: "Si ton dossier KYC a été refusé, le motif du refus s'affiche dans l'onglet 'Vérification KYC'. Tu peux corriger l'information concernée et renvoyer tes documents.",
+  },
+  {
+    keywords: ["doublon", "deux comptes", "2 comptes", "meme personne", "même personne", "compte existe deja", "compte existe déjà", "litige d'identite", "litige d'identité", "compte bloque doublon", "compte bloqué doublon"],
+    answer: "Une seule inscription vérifiée est autorisée par personne : si tes informations (nom, adresse, pièce d'identité) correspondent à un compte déjà vérifié, ton dossier est mis en attente pour une vérification manuelle par le propriétaire. Si tu penses qu'il s'agit d'une erreur, contacte le support via l'onglet Contact.",
+  },
+  {
+    keywords: ["export", "pdf", "excel", "telecharger", "télécharger"],
+    answer: "Depuis l'onglet Historique, tu peux exporter tes transactions en PDF ou en Excel, une fois l'accès historique débloqué.",
+  },
+  {
+    keywords: ["ticket", "numero de ticket", "numéro de ticket", "recu", "reçu"],
+    answer: "Chaque transaction génère automatiquement un ticket avec un numéro unique, le montant, les frais et le total — tu le retrouves dans le résumé juste après l'opération, et dans ton historique.",
+  },
+  {
+    keywords: ["frais", "commission empireguichet", "empireguichet prend"],
+    answer: "EmpireGuichet ne prend aucune commission sur tes transactions : tu continues d'opérer directement avec tes propres puces MTN, Orange, Moov, Wave, Djamo. Les seuls frais sont l'abonnement et, en option, l'accès à l'historique détaillé.",
+  },
+  {
+    keywords: ["supprimer mon compte", "supprimer compte", "fermer mon compte", "desinscrire", "désinscrire"],
+    answer: "Pour supprimer ton compte, contacte le support via l'onglet Contact — c'est une opération à faire vérifier manuellement pour éviter toute perte de données par erreur.",
+  },
+  {
+    keywords: ["changer mon numero", "changer mon numéro", "changer email", "changer mon e-mail", "modifier mes coordonnees", "modifier mes coordonnées"],
+    answer: "Pour changer ton numéro de téléphone ou ton e-mail, passe par Paramètres. Certaines modifications peuvent nécessiter une nouvelle confirmation par e-mail ou par ton chef d'agence pour rester sécurisées.",
+  },
+  {
+    keywords: ["reseaux", "réseaux", "quels reseaux", "quels réseaux", "networks"],
+    answer: "EmpireGuichet prend en charge MTN MoMo, Orange Money, Moov Money, Wave, Djamo, la crypto (USDT), ainsi que les factures CIE, SODECI et les péages.",
+  },
+  {
+    keywords: ["email", "e-mail", "confirmer mon email", "confirmer mon e-mail", "code de confirmation", "je n'ai pas recu le code", "je n'ai pas reçu le code"],
+    answer: "Un code de confirmation est envoyé par e-mail lors de l'inscription et de certaines actions sensibles. Vérifie aussi tes courriers indésirables (spam) si tu ne le reçois pas.",
+  },
+  {
+    keywords: ["securite", "sécurité", "mes donnees", "mes données", "confidentialite", "confidentialité"],
+    answer: "Tes données (identité, documents KYC) sont utilisées uniquement pour vérifier ton compte et prévenir la fraude. Elles ne sont jamais partagées à des fins commerciales.",
+  },
+  {
+    keywords: ["application mobile", "app mobile", "installer l'application", "pwa", "icone sur mon telephone", "icône sur mon téléphone"],
+    answer: "EmpireGuichet fonctionne directement dans ton navigateur, et tu peux l'installer comme une application sur ton téléphone (icône sur l'écran d'accueil) via l'option 'Ajouter à l'écran d'accueil' de ton navigateur.",
+  },
+  {
+    keywords: ["parler a quelqu'un", "parler à quelqu'un", "conseiller humain", "vrai humain", "vraie personne", "support humain"],
+    answer: "Pour parler directement à un conseiller humain, utilise l'onglet 'Contact' ci-dessus ou écris-nous sur WhatsApp — je fais de mon mieux pour répondre en attendant, mais je suis un simple assistant automatique.",
+  },
+  {
+    keywords: ["merci", "d'accord merci", "ok merci"],
+    answer: "Avec plaisir 🙂 N'hésite pas si tu as une autre question sur EmpireGuichet.",
   },
 ];
 
-function getSupportBotReply(userText) {
-  const normalized = userText
+function normalizeText(t) {
+  return t
     .toLowerCase()
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, ""); // enlève les accents pour un matching plus robuste
+}
+
+function getSupportBotReply(userText) {
+  const normalized = normalizeText(userText);
+  const textWords = new Set(normalized.split(/[^a-z0-9]+/).filter(Boolean));
   let best = null;
   let bestScore = 0;
   for (const entry of SUPPORT_BOT_KB) {
-    const score = entry.keywords.filter((k) => {
-      const kNorm = k.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-      return normalized.includes(kNorm);
-    }).length;
+    let score = 0;
+    for (const k of entry.keywords) {
+      const kNorm = normalizeText(k);
+      if (normalized.includes(kNorm)) {
+        score += 2; // la phrase-clé apparaît telle quelle : correspondance forte
+        continue;
+      }
+      const kWords = kNorm.split(/[^a-z0-9]+/).filter(Boolean);
+      if (kWords.length > 1 && kWords.every((w) => textWords.has(w))) {
+        score += 1; // tous les mots de la phrase-clé sont présents, même dans un autre ordre
+      }
+    }
     if (score > bestScore) {
       bestScore = score;
       best = entry;
     }
   }
   if (best) return best.answer;
-  return "Je n'ai pas de réponse toute prête pour cette question. Un conseiller EmpireGuichet te répondra sous peu — sinon tu peux aussi consulter l'onglet FAQ ou nous écrire via l'onglet Contact.";
+  return "Je n'ai pas de réponse toute prête pour cette question 🤔 Essaie de la reformuler plus simplement (ex : \"abonnement\", \"KYC\", \"parrainage\", \"transaction\"), consulte l'onglet FAQ, ou écris-nous via l'onglet Contact pour parler à un conseiller.";
 }
 
 function formatFCFA(n) {
