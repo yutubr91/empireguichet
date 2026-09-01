@@ -625,6 +625,10 @@ const SUPPORT_BOT_KB = [
     answer: "Bonjour 👋 Comment puis-je t'aider avec EmpireGuichet ? Tu peux me poser une question sur l'inscription, l'abonnement, le KYC, une transaction, le parrainage, etc.",
   },
   {
+    keywords: ["c'est quoi empireguichet", "c'est quoi empire guichet", "qu'est-ce que empireguichet", "qu'est-ce qu'empireguichet", "c'est quoi ce site", "c'est quoi cette application", "c'est quoi cette appli", "ça sert a quoi", "ça sert à quoi", "a quoi ca sert", "à quoi ça sert", "presentation", "présentation", "c'est quoi le principe", "comment ça marche", "comment ca marche"],
+    answer: "EmpireGuichet est un guichet unique de mobile money pour les agents et chefs d'agence en Côte d'Ivoire : tu y gères MTN MoMo, Orange Money, Moov Money, Wave, Djamo, la crypto (USDT), les factures CIE/SODECI et les péages, avec un seul ticket et un seul historique — sans commission sur tes transactions. Un abonnement (2 500 FCFA/6 mois) donne accès à l'application.",
+  },
+  {
     keywords: ["abonnement", "combien coute", "combien coûte", "prix", "tarif", "cout de l'abonnement", "coût de l'abonnement", "ca coute combien", "ça coûte combien", "montant abonnement"],
     answer: "L'abonnement coûte 2 500 FCFA pour 6 mois (agent comme chef d'agence). Si tu deviens chef d'agence par promotion, le tarif chef d'agence est de 3 500 FCFA. Tu peux payer par Wave ou en USDT (réseau BNB/BEP20) directement depuis l'onglet Abonnement.",
   },
