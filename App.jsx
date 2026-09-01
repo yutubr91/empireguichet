@@ -633,6 +633,10 @@ const SUPPORT_BOT_KB = [
     answer: "Quand ton abonnement expire, l'accès à certaines fonctions est suspendu jusqu'au renouvellement. Va dans l'onglet Abonnement pour repayer (Wave ou USDT) et réactiver ton compte immédiatement après confirmation du paiement.",
   },
   {
+    keywords: ["rien recu", "rien reçu", "pas recu", "pas reçu", "j'ai paye", "j'ai payé", "j'ai deja paye", "j'ai déjà payé", "compte pas active", "compte pas activé", "toujours pas actif", "paiement non pris en compte", "argent debite", "argent débité", "achat d'un abonnement", "viens de payer", "viens d'acheter", "viens de faire l'achat"],
+    answer: "Si tu as payé ton abonnement (ou le parrainage/l'historique) mais que rien ne se met à jour, patiente d'abord quelques minutes le temps que le paiement soit confirmé. Si ça reste bloqué après ça, écris-nous via l'onglet Contact avec une capture d'écran ou la référence de ta transaction, pour qu'on vérifie manuellement et débloque ton compte.",
+  },
+  {
     keywords: ["inscription", "inscrire", "creer un compte", "créer un compte", "comment s'inscrire", "nouveau compte", "ouvrir un compte"],
     answer: "Pour t'inscrire : renseigne ton nom, ton numéro de téléphone, une adresse e-mail et crée ton code PIN. Tu recevras un code de confirmation par e-mail. Ensuite, complète ta vérification KYC pour activer pleinement ton compte.",
   },
