@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import bcrypt from "bcryptjs";
 import {
   Wallet,
   ArrowRightLeft,
@@ -1096,22 +1097,16 @@ export default function GuichetApp() {
     return `${base}-${rand}`;
   }
 
+  // Un hash bcrypt commence toujours par $2a$, $2b$ ou $2y$. Si pin_hash ne
+  // correspond pas à ce format, c'est un ancien PIN stocké en clair (avant la
+  // mise en place du hashage) : l'agent devra en recréer un nouveau.
+  function isBcryptHash(value) {
+    return typeof value === "string" && /^\$2[aby]\$/.test(value);
+  }
+
   async function fetchAgentProfile(userId) {
-    // pin_hash n'est JAMAIS sélectionné ici : la liste de colonnes est
-    // explicite (au lieu de "*") pour garantir que le hash du PIN ne quitte
-    // jamais la base pour atterrir dans le navigateur.
-    const { data, error } = await supabase
-      .from("agents")
-      .select(
-        "id, full_name, phone, email, agency_name, agency_id, role, kyc_email_verified, kyc_status, first_name, last_name, country, address, id_number, date_of_birth, document_type, kyc_rejected_reason, is_platform_owner, avatar_url, identity_duplicate_match_type, identity_override"
-      )
-      .eq("id", userId)
-      .single();
+    const { data, error } = await supabase.from("agents").select("*").eq("id", userId).single();
     if (error || !data) return null;
-    // Statut du PIN calculé côté base (fonction get_pin_status) : on ne
-    // récupère qu'un booléen, jamais le hash lui-même.
-    const { data: pinStatusRows } = await supabase.rpc("get_pin_status");
-    const pinStatus = pinStatusRows?.[0] || {};
     return {
       id: data.id,
       name: data.full_name,
@@ -1119,8 +1114,8 @@ export default function GuichetApp() {
       email: data.email,
       agency: data.agency_name,
       agencyId: data.agency_id,
-      hasValidPin: !!pinStatus.has_valid_pin,
-      pinNeedsReset: !!pinStatus.has_legacy_pin,
+      pinHash: data.pin_hash,
+      pinNeedsReset: !!data.pin_hash && !isBcryptHash(data.pin_hash),
       role: data.role,
       kycEmailVerified: data.kyc_email_verified,
       kycStatus: data.kyc_status || "incomplete",
@@ -1801,21 +1796,24 @@ export default function GuichetApp() {
     setRecoveryError("");
     setRecoveryLoading(true);
     const fullPhone = `${recoveryCountryCode} ${recoveryPhone}`.trim();
-    // La comparaison téléphone + e-mail se fait côté serveur (RPC
-    // check_recovery_match) : seul un booléen revient au client, jamais
-    // l'adresse e-mail elle-même — cet écran est accessible avant connexion.
-    const { data: matches, error } = await supabase.rpc("check_recovery_match", {
-      p_phone: fullPhone,
-      p_email: recoveryEmail,
-    });
+    const { data, error } = await supabase
+      .from("agents")
+      .select("email")
+      .eq("phone", fullPhone)
+      .maybeSingle();
     if (error) {
       setRecoveryLoading(false);
       setRecoveryError("Connexion impossible — vérifie ta connexion internet et réessaie.");
       return;
     }
-    if (!matches) {
+    if (!data) {
       setRecoveryLoading(false);
-      setRecoveryError("Vérifie ton numéro de téléphone et ton adresse Gmail — nous ne retrouvons pas de compte correspondant.");
+      setRecoveryError("Vérifie ton numéro de téléphone — nous ne retrouvons pas de compte associé.");
+      return;
+    }
+    if ((data.email || "").trim().toLowerCase() !== recoveryEmail.trim().toLowerCase()) {
+      setRecoveryLoading(false);
+      setRecoveryError("Cette adresse Gmail ne correspond pas à celle enregistrée pour ce numéro.");
       return;
     }
     // Déclenche le VRAI envoi d'un code de récupération via Supabase Auth (Brevo derrière).
@@ -2076,17 +2074,11 @@ export default function GuichetApp() {
   const [selectedKycUrls, setSelectedKycUrls] = useState(null);
   const [kycRejectReason, setKycRejectReason] = useState("");
 
-  // Colonnes explicites (jamais "*") : ces listes sont visibles par un chef
-  // d'agence ou le propriétaire pour d'AUTRES comptes que le leur, donc
-  // pin_hash ne doit jamais y figurer.
-  const KYC_REVIEW_COLUMNS =
-    "id, full_name, phone, email, role, agency_name, agency_id, country, address, id_number, date_of_birth, document_type, kyc_status, kyc_rejected_reason, kyc_recto_path, kyc_verso_path, kyc_selfie_path, kyc_selfie_id_path";
-
   async function loadPendingKycAgents() {
     setKycLoadingList(true);
     const { data, error } = await supabase
       .from("agents")
-      .select(KYC_REVIEW_COLUMNS)
+      .select("*")
       .eq("agency_id", agent.agencyId)
       .neq("id", agent.id)
       .order("kyc_status", { ascending: true });
@@ -2098,7 +2090,7 @@ export default function GuichetApp() {
     setKycLoadingList(true);
     const { data, error } = await supabase
       .from("agents")
-      .select(KYC_REVIEW_COLUMNS)
+      .select("*")
       .eq("role", "manager")
       .neq("id", agent.id)
       .order("kyc_status", { ascending: true });
@@ -2125,11 +2117,11 @@ export default function GuichetApp() {
   async function approveKycAgent() {
     if (!selectedKycAgent) return;
     setKycActionError("");
-    // La vérification des droits (qui peut valider quoi) se fait maintenant
-    // côté serveur, dans la fonction validate_kyc — plus dans la RLS seule.
-    const { error } = await supabase.rpc("validate_kyc", { p_agent_id: selectedKycAgent.id });
+    const { error } = await supabase.from("agents").update({ kyc_status: "validated" }).eq("id", selectedKycAgent.id);
     if (error) {
-      setKycActionError("Échec de la validation : " + error.message);
+      setKycActionError(
+        "Échec de la validation : " + error.message + " (vérifie les règles RLS de la table agents dans Supabase)"
+      );
       return;
     }
     pushNotification(`Identité de ${selectedKycAgent.full_name} validée ✅`);
@@ -2141,12 +2133,14 @@ export default function GuichetApp() {
   async function rejectKycAgent() {
     if (!selectedKycAgent) return;
     setKycActionError("");
-    const { error } = await supabase.rpc("reject_kyc", {
-      p_agent_id: selectedKycAgent.id,
-      p_reason: kycRejectReason || "Documents non conformes",
-    });
+    const { error } = await supabase
+      .from("agents")
+      .update({ kyc_status: "rejected", kyc_rejected_reason: kycRejectReason || "Documents non conformes" })
+      .eq("id", selectedKycAgent.id);
     if (error) {
-      setKycActionError("Échec du refus : " + error.message);
+      setKycActionError(
+        "Échec du refus : " + error.message + " (vérifie les règles RLS de la table agents dans Supabase)"
+      );
       return;
     }
     pushNotification(`Identité de ${selectedKycAgent.full_name} refusée`);
@@ -2481,7 +2475,6 @@ export default function GuichetApp() {
   const [pinModalOpen, setPinModalOpen] = useState(false);
   const [pinInput, setPinInput] = useState("");
   const [pinError, setPinError] = useState("");
-  const [pinLoading, setPinLoading] = useState(false);
   const [draftEntry, setDraftEntry] = useState(null);
 
   async function handleLogin(e) {
@@ -2543,17 +2536,14 @@ export default function GuichetApp() {
       return;
     }
     setForcedPinLoading(true);
-    // Le nouveau PIN est haché côté serveur (Edge Function set-pin) : le
-    // hash n'est ni calculé ni stocké dans le navigateur.
-    const { data, error } = await supabase.functions.invoke("set-pin", {
-      body: { newPin: forcedPinInput },
-    });
+    const newPinHash = bcrypt.hashSync(forcedPinInput, 10);
+    const { error } = await supabase.from("agents").update({ pin_hash: newPinHash }).eq("id", agent.id);
     setForcedPinLoading(false);
-    if (error || data?.error) {
-      setForcedPinError("Erreur : " + (data?.error || error.message));
+    if (error) {
+      setForcedPinError("Erreur : " + error.message);
       return;
     }
-    setAgent((a) => ({ ...a, hasValidPin: true, pinNeedsReset: false }));
+    setAgent((a) => ({ ...a, pinHash: newPinHash, pinNeedsReset: false }));
     setForcedPinInput("");
     setForcedPinConfirmInput("");
   }
@@ -2693,6 +2683,7 @@ export default function GuichetApp() {
     }
 
     const fullPhone = `${signupCountryCode} ${signupPhone}`.trim();
+    const signupPinHash = bcrypt.hashSync(signupPin, 10);
 
     const { error: insertErr } = await supabase.from("agents").insert({
       id: userId,
@@ -2702,24 +2693,13 @@ export default function GuichetApp() {
       agency_id: agencyId,
       agency_name: agencyName,
       role: signupRole,
+      pin_hash: signupPinHash,
       kyc_email_verified: true,
       referred_by_phone: referredByPhone || null,
     });
-    if (insertErr) {
-      setAuthLoading(false);
-      setAuthError("Erreur lors de la création du profil : " + insertErr.message);
-      return;
-    }
-
-    // Le PIN est haché côté serveur (Edge Function set-pin) : ni le PIN en
-    // clair au-delà de cet appel HTTPS, ni le hash, ne transitent ou ne
-    // séjournent dans l'état du navigateur.
-    const { data: pinData, error: pinErr } = await supabase.functions.invoke("set-pin", {
-      body: { newPin: signupPin },
-    });
     setAuthLoading(false);
-    if (pinErr || pinData?.error) {
-      setAuthError("Erreur lors de la sécurisation du PIN : " + (pinData?.error || pinErr.message));
+    if (insertErr) {
+      setAuthError("Erreur lors de la création du profil : " + insertErr.message);
       return;
     }
 
@@ -2730,7 +2710,7 @@ export default function GuichetApp() {
       email: signupEmail,
       agency: agencyName,
       agencyId,
-      hasValidPin: true,
+      pinHash: signupPinHash,
       role: signupRole,
       kycEmailVerified: true,
       kycStatus: "incomplete",
@@ -2910,19 +2890,19 @@ export default function GuichetApp() {
   const [confirmPasswordInput, setConfirmPasswordInput] = useState("");
   const [passwordChangeMsg, setPasswordChangeMsg] = useState({ type: "", text: "" });
 
-  // Vérifie un PIN saisi en appelant l'Edge Function verify-pin : la
-  // comparaison bcrypt se fait côté serveur, avec la clé service_role — le
-  // hash stocké n'est jamais chargé ni envoyé au navigateur.
-  async function verifyPin(inputPin) {
-    const { data, error } = await supabase.functions.invoke("verify-pin", {
-      body: { pin: inputPin },
-    });
-    if (error || data?.error) return false;
-    return !!data?.valid;
+  // Vérifie un PIN saisi contre le hash stocké (bcrypt). Si l'agent n'a pas encore
+  // de hash (compte de démo), on retombe sur DEMO_PIN en clair pour ne pas casser la démo.
+  function verifyPin(inputPin) {
+    if (agent?.pinHash) return bcrypt.compareSync(inputPin, agent.pinHash);
+    return inputPin === DEMO_PIN;
   }
 
   async function handleChangePin(e) {
     e.preventDefault();
+    if (!verifyPin(currentPinInput)) {
+      setPinChangeMsg({ type: "error", text: "Code PIN actuel incorrect." });
+      return;
+    }
     if (newPinInput.length !== 4) {
       setPinChangeMsg({ type: "error", text: "Le nouveau code doit contenir 4 chiffres." });
       return;
@@ -2931,16 +2911,13 @@ export default function GuichetApp() {
       setPinChangeMsg({ type: "error", text: "Les deux codes ne correspondent pas." });
       return;
     }
-    // set-pin vérifie lui-même currentPin côté serveur avant d'accepter le
-    // nouveau hash — aucune comparaison ni hachage ne se fait ici.
-    const { data, error } = await supabase.functions.invoke("set-pin", {
-      body: { newPin: newPinInput, currentPin: currentPinInput },
-    });
-    if (error || data?.error) {
-      setPinChangeMsg({ type: "error", text: "Erreur : " + (data?.error || error.message) });
+    const newPinHash = bcrypt.hashSync(newPinInput, 10);
+    const { error } = await supabase.from("agents").update({ pin_hash: newPinHash }).eq("id", agent.id);
+    if (error) {
+      setPinChangeMsg({ type: "error", text: "Erreur : " + error.message });
       return;
     }
-    setAgent((a) => ({ ...a, hasValidPin: true }));
+    setAgent((a) => ({ ...a, pinHash: newPinHash }));
     setCurrentPinInput("");
     setNewPinInput("");
     setConfirmPinInput("");
@@ -3270,12 +3247,9 @@ export default function GuichetApp() {
     setPinModalOpen(true);
   }
 
-  async function handlePinConfirm(e) {
+  function handlePinConfirm(e) {
     e.preventDefault();
-    setPinLoading(true);
-    const ok = await verifyPin(pinInput);
-    setPinLoading(false);
-    if (!ok) {
+    if (!verifyPin(pinInput)) {
       setPinError("Code PIN incorrect. Réessaie.");
       setPinInput("");
       return;
@@ -7488,7 +7462,7 @@ export default function GuichetApp() {
             />
             {pinError ? (
               <p className="text-xs mb-4" style={{ color: COLORS.danger }}>{pinError}</p>
-            ) : !agent?.hasValidPin ? (
+            ) : !agent?.pinHash ? (
               <p className="text-xs mb-4" style={{ color: COLORS.textMuted }}>Code démo : {DEMO_PIN}</p>
             ) : (
               <div className="mb-4" />
@@ -7497,19 +7471,18 @@ export default function GuichetApp() {
               <button
                 type="button"
                 onClick={handlePinCancel}
-                disabled={pinLoading}
-                className="gc-btn flex-1 py-2.5 rounded-lg text-sm font-medium border disabled:opacity-40"
+                className="gc-btn flex-1 py-2.5 rounded-lg text-sm font-medium border"
                 style={{ borderColor: COLORS.surfaceLine, color: COLORS.textMuted }}
               >
                 Annuler
               </button>
               <button
                 type="submit"
-                disabled={pinInput.length !== 4 || pinLoading}
+                disabled={pinInput.length !== 4}
                 className="gc-btn flex-1 py-2.5 rounded-lg text-sm font-medium disabled:opacity-40"
                 style={{ background: COLORS.gold, color: "#052E36" }}
               >
-                {pinLoading ? "Vérification…" : "Confirmer"}
+                Confirmer
               </button>
             </div>
           </form>
