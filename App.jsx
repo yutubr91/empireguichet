@@ -761,6 +761,14 @@ const SUPPORT_BOT_KB = [
     answer: "EmpireGuichet prend en charge MTN MoMo, Orange Money, Moov Money, Wave, Djamo, la crypto (USDT), ainsi que les factures CIE, SODECI et les péages.",
   },
   {
+    keywords: ["combien de pays", "quel pays", "quels pays", "pays disponible", "disponible dans quel pays", "dans quel pays", "cote d'ivoire", "côte d'ivoire", "international", "autre pays", "autres pays", "afrique", "hors de cote d'ivoire", "hors de côte d'ivoire"],
+    answer: "Pour le moment, EmpireGuichet est disponible en Côte d'Ivoire uniquement — c'est là que les réseaux pris en charge (MTN, Orange, Moov, Wave, CIE, SODECI…) opèrent. Il n'y a pas d'annonce officielle d'extension à d'autres pays pour l'instant.",
+  },
+  {
+    keywords: ["wave disponible", "wave pays", "wave dans quel pays", "wave fonctionne", "wave marche dans quel pays", "pays wave", "wave senegal", "wave sénégal", "wave mali", "wave guinee", "wave guinée", "wave cameroun", "wave togo", "wave benin", "wave bénin", "wave niger", "wave burkina", "wave france"],
+    answer: "Wave est disponible en Côte d'Ivoire, au Sénégal, au Mali, en Guinée, au Cameroun, au Togo, au Bénin, au Niger et au Burkina Faso. Il n'est en revanche pas encore disponible en France.",
+  },
+  {
     keywords: ["email", "e-mail", "confirmer mon email", "confirmer mon e-mail", "code de confirmation", "je n'ai pas recu le code", "je n'ai pas reçu le code"],
     answer: "Un code de confirmation est envoyé par e-mail lors de l'inscription et de certaines actions sensibles. Vérifie aussi tes courriers indésirables (spam) si tu ne le reçois pas.",
   },
