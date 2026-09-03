@@ -1120,7 +1120,9 @@ export default function GuichetApp() {
       agency: data.agency_name,
       agencyId: data.agency_id,
       hasValidPin: !!pinStatus.has_valid_pin,
-      pinNeedsReset: !!pinStatus.has_legacy_pin,
+      // Vrai si : ancien PIN stocké en clair (pré-bcrypt), OU compte existant
+      // que l'on force à recréer son PIN après le renforcement de sécurité.
+      pinNeedsReset: !!pinStatus.has_legacy_pin || !!pinStatus.pin_reset_required,
       role: data.role,
       kycEmailVerified: data.kyc_email_verified,
       kycStatus: data.kyc_status || "incomplete",

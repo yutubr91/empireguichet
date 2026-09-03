@@ -84,7 +84,7 @@ Deno.serve(async (req) => {
     const newHash = bcrypt.hashSync(newPin, 10);
     const { error: updateErr } = await admin
       .from("agents")
-      .update({ pin_hash: newHash })
+      .update({ pin_hash: newHash, pin_reset_required: false })
       .eq("id", userId);
     if (updateErr) {
       return json({ error: "Erreur lors de l'enregistrement : " + updateErr.message }, 500);
