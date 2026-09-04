@@ -1,0 +1,37 @@
+
+---
+
+## 📄 CONTENU DES FICHIERS
+
+### 1. `.gitignore`
+
+```gitignore
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build output
+dist/
+.vite/
+
+# Environment variables
+.env
+.env.local
+.env.production
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log
+npm-debug.log*
+
+# Supabase (si tu utilises la CLI)
+supabase/.temp/

@@ -1,0 +1,30 @@
+# PROMPT : GÉNÉRATION AUTOMATIQUE DU PROJET EMPIREGUICHET
+
+Tu es un expert en développement web full-stack. Ton objectif est de créer automatiquement toute la structure de dossiers et fichiers pour le projet **EmpireGuichet**, une application de gestion de guichet mobile money pour agents et chefs d'agence en Afrique de l'Ouest.
+
+## 📋 CONTEXTE DU PROJET
+
+**EmpireGuichet** est une PWA (Progressive Web App) qui permet aux agents de mobile money de :
+- Gérer des transactions multi-réseaux (MTN, Orange, Moov, Wave, Djamo)
+- Traiter des transactions crypto (USDT BEP20)
+- Payer des factures (CIE, SODECI, Péage)
+- Gérer un système d'agences avec codes d'invitation
+- Effectuer une vérification KYC sécurisée
+- Communiquer via un chat (public + messages privés)
+- Bénéficier d'un système de parrainage (300 FCFA par filleul)
+- Voir des publicités et annonces
+- Travailler hors-ligne avec synchronisation
+
+**Stack technique** :
+- Frontend : React 18 + Vite + Tailwind CSS
+- Backend : Supabase (PostgreSQL + Auth + Storage + Edge Functions)
+- Déploiement : Vercel
+- PWA installable sur mobile
+
+## 🎯 TA MISSION
+
+Crée TOUS les fichiers suivants avec leur contenu COMPLET et FONCTIONNEL. Ne laisse aucun placeholder.
+
+---
+
+## 📁 STRUCTURE DE DOSSIERS À CRÉER

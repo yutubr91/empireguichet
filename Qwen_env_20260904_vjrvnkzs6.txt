@@ -1,0 +1,6 @@
+# Supabase
+VITE_SUPABASE_URL=https://usixupqhrniunlxbgyem.supabase.co
+VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+
+# Optionnel : clé API pour services externes
+# VITE_API_KEY=your_api_key_here

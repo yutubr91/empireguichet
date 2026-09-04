@@ -1,0 +1,52 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-dark text-text font-display;
+  }
+}
+
+@layer components {
+  .gc-btn {
+    @apply px-4 py-2 rounded-lg font-medium transition-all duration-200 hover:opacity-90 active:scale-95;
+  }
+  
+  .gc-card {
+    @apply p-6 rounded-xl bg-surface border border-surfaceLine shadow-lg;
+  }
+  
+  .gc-mono {
+    @apply font-mono;
+  }
+  
+  .gc-display {
+    @apply font-display font-semibold;
+  }
+  
+  .gc-fade-in {
+    @apply animate-fadeIn;
+  }
+}
+
+@layer utilities {
+  .text-gold {
+    color: #E8A93B;
+  }
+  
+  .bg-gold {
+    background-color: #E8A93B;
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
