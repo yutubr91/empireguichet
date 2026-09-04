@@ -1,0 +1,38 @@
+empireguichet/
+├── public/
+│   ├── pwa-192.png
+│   ├── pwa-512.png
+│   └── pwa-maskable-512.png
+├── src/
+│   ├── App.jsx
+│   ├── main.jsx
+│   ├── index.css
+│   └── supabaseClient.js
+── supabase/
+│   ├── functions/
+│   │   ├── set-pin/
+│   │   │   └── index.ts
+│   │   └── verify-pin/
+│   │       └── index.ts
+│   └── migrations/
+│       ├── 001_abonnement.sql
+│       ├── 002_anti_double_compte.sql
+│       ├── 003_chat_prive_anonymat.sql
+│       ├── 004_chat_lu_non_lu.sql
+│       ├── 005_correctif_dm_agent.sql
+│       ├── 006_transfert_agence.sql
+│       ├── 007_securite_pin.sql
+│       ├── 008_securite_recuperation_mdp.sql
+│       ├── 009_securite_kyc_roles.sql
+│       └── 010_forcer_reset_pin.sql
+├── docs/
+│   ├── SECURITE-PIN-DEPLOIEMENT.md
+│   └── SECURITE-KYC-ROLES-DEPLOIEMENT.md
+├── .gitignore
+├── .env.example
+├── package.json
+── vite.config.js
+├── tailwind.config.js
+├── postcss.config.js
+├── index.html
+└── README.md

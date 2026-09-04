@@ -1,0 +1,16 @@
+
+---
+
+##  Prochaines étapes
+
+1. **Crée un dépôt GitHub** nommé `empireguichet`
+2. **Télécharge tous ces fichiers** dans ton dépôt
+3. **Ajoute les images PWA** dans le dossier `public/` :
+   - `pwa-192.png` (192x192)
+   - `pwa-512.png` (512x512)
+   - `pwa-maskable-512.png` (512x512)
+4. **Pousse sur GitHub** :
+   ```bash
+   git add .
+   git commit -m "Initial commit - EmpireGuichet"
+   git push origin main
