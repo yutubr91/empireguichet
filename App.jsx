@@ -1107,7 +1107,12 @@ export default function GuichetApp() {
       )
       .eq("id", userId)
       .single();
-    if (error || !data) return null;
+    if (error || !data) {
+      // Diagnostic temporaire : on log l'erreur exacte de Supabase (colonne
+      // manquante, RLS, réseau...) au lieu de l'avaler silencieusement.
+      console.error("[fetchAgentProfile] échec de la requête agents :", error);
+      return null;
+    }
     // Statut du PIN calculé côté base (fonction get_pin_status) : on ne
     // récupère qu'un booléen, jamais le hash lui-même.
     const { data: pinStatusRows } = await supabase.rpc("get_pin_status");
@@ -2518,7 +2523,19 @@ export default function GuichetApp() {
     const profile = await fetchAgentProfile(data.user.id);
     setAuthLoading(false);
     if (!profile) {
-      setAuthError("Compte introuvable. Réessaie ou crée un compte.");
+      // Diagnostic temporaire : requête minimale rien que pour récupérer le
+      // message d'erreur exact de Supabase et l'afficher à l'écran (à
+      // retirer une fois le vrai problème identifié et corrigé).
+      const { error: diagError } = await supabase
+        .from("agents")
+        .select("id")
+        .eq("id", data.user.id)
+        .single();
+      console.error("[handleLogin] diagnostic compte introuvable :", diagError);
+      const detail = diagError
+        ? ` [détail technique : ${diagError.code || ""} ${diagError.message || ""}]`
+        : " [détail technique : la requête n'a renvoyé aucune erreur mais aucune ligne — vérifie que la ligne existe bien dans la table agents avec cet id]";
+      setAuthError(`Compte introuvable. Réessaie ou crée un compte.${detail}`);
       return;
     }
     if (profile.role === "manager") {
