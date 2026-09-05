@@ -20,7 +20,9 @@ update public.agents
 
 -- get_pin_status() renvoie maintenant aussi ce drapeau, sans jamais exposer
 -- le hash lui-même.
-create or replace function public.get_pin_status()
+drop function if exists public.get_pin_status();
+
+create function public.get_pin_status()
 returns table (has_valid_pin boolean, has_legacy_pin boolean, pin_reset_required boolean)
 language sql
 security definer

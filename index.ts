@@ -60,15 +60,19 @@ Deno.serve(async (req) => {
 
     const { data: agentRow, error: agentErr } = await admin
       .from("agents")
-      .select("pin_hash")
+      .select("pin_hash, pin_reset_required")
       .eq("id", userId)
       .single();
     if (agentErr || !agentRow) return json({ error: "Compte introuvable." }, 404);
 
     const storedHash = agentRow.pin_hash as string | null;
     const isBcrypt = typeof storedHash === "string" && /^\$2[aby]\$/.test(storedHash);
+    // Un compte marqué "pin_reset_required" (ancien compte forcé à recréer
+    // son PIN après le renforcement de sécurité) n'a pas besoin de fournir
+    // l'ancien PIN — exactement comme un ancien PIN en clair pré-migration.
+    const requiresCurrentPin = isBcrypt && !agentRow.pin_reset_required;
 
-    if (isBcrypt) {
+    if (requiresCurrentPin) {
       // Vrai changement de PIN : le PIN actuel doit être fourni et correct.
       if (!/^\d{4}$/.test(currentPin)) {
         return json({ error: "Code PIN actuel requis." }, 400);
