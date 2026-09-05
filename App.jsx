@@ -102,6 +102,9 @@ function getWaveAmount(baseFcfa) {
   if (baseFcfa === HISTORY_UNLOCK_PRICE) return 205;
   if (baseFcfa === 3500) return 3535;
   if (baseFcfa === 2500) return 2525;
+  if (baseFcfa === 15000) return 15150;
+  if (baseFcfa === 25000) return 25250;
+  if (baseFcfa === 40000) return 40400;
   return baseFcfa;
 }
 function getWaveLink(amountFcfa) {
@@ -112,11 +115,24 @@ const USDT_BEP20_ADDRESS = "0x38b6527df24a91b00acad48dfb303ad257d9125d";
 const USDT_PRICE_SUBSCRIPTION = 4.21; // ≈ 2 500 FCFA
 const USDT_PRICE_HISTORY = 0.34;      // ≈ 200 FCFA
 const USDT_PRICE_PROMOTION = 5.89;    // ≈ 3 500 FCFA
+const USDT_PRICE_AD_7J = 25.51;       // ≈ 15 000 FCFA (7 jours)
+const USDT_PRICE_AD_15J = 42.51;      // ≈ 25 000 FCFA (15 jours)
+const USDT_PRICE_AD_30J = 68.01;      // ≈ 40 000 FCFA (30 jours)
 
-function getUsdtAmount(fcfaAmount) {
+function getUsdtAmount(fcfaAmount, liveXofPerUsdt) {
+  // Taux récupéré en direct (voir le useEffect dans GuichetApp) : on calcule
+  // dynamiquement, ce qui marche pour n'importe quel montant.
+  if (typeof liveXofPerUsdt === "number" && liveXofPerUsdt > 0) {
+    return +(fcfaAmount / liveXofPerUsdt).toFixed(2);
+  }
+  // Repli si le taux en direct n'est pas disponible (API indisponible, pas de
+  // réseau...) : les équivalents USD fixés manuellement ci-dessus.
   if (fcfaAmount === HISTORY_UNLOCK_PRICE) return USDT_PRICE_HISTORY;
   if (fcfaAmount === 3500) return USDT_PRICE_PROMOTION;
   if (fcfaAmount === 2500) return USDT_PRICE_SUBSCRIPTION;
+  if (fcfaAmount === 15000) return USDT_PRICE_AD_7J;
+  if (fcfaAmount === 25000) return USDT_PRICE_AD_15J;
+  if (fcfaAmount === 40000) return USDT_PRICE_AD_30J;
   // Taux de repli approximatif si jamais un montant différent apparaît un jour
   return +(fcfaAmount / 594).toFixed(2);
 }
@@ -918,6 +934,30 @@ export default function GuichetApp() {
   }, [theme]);
   const COLORS = theme === "light" ? LIGHT_COLORS : DARK_COLORS;
 
+  // ===== Taux de change FCFA (XOF) → USDT, récupéré automatiquement =====
+  // USDT est arrimé au dollar US (≈ 1 USDT = 1 USD), donc on utilise le taux
+  // USD → XOF comme équivalent. Si l'appel échoue (API indisponible, pas de
+  // réseau...), on ne fait rien : getUsdtAmount retombe alors silencieusement
+  // sur les tarifs fixes codés en dur ci-dessus.
+  const [liveXofPerUsdt, setLiveXofPerUsdt] = useState(null);
+  useEffect(() => {
+    let cancelled = false;
+    fetch("https://open.er-api.com/v6/latest/USD")
+      .then((r) => r.json())
+      .then((data) => {
+        const rate = data?.rates?.XOF;
+        if (!cancelled && typeof rate === "number" && rate > 0) {
+          setLiveXofPerUsdt(rate);
+        }
+      })
+      .catch(() => {
+        // Silencieux — repli automatique sur les tarifs fixes.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   // ===== Moyen de paiement : choix Wave ou USDT (BNB/BEP20) =====
   const [usdtCopiedFor, setUsdtCopiedFor] = useState(null); // clé unique du bloc où la copie vient d'avoir lieu
   function copyUsdtAddress(key) {
@@ -941,7 +981,7 @@ export default function GuichetApp() {
         </a>
         <div className="p-3 rounded-lg" style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}` }}>
           <div className="text-xs font-medium mb-2" style={{ color: COLORS.textMuted }}>
-            Ou en USDT (réseau BNB — BEP20) — {getUsdtAmount(fcfaAmount)} USD
+            Ou en USDT (réseau BNB — BEP20) — {getUsdtAmount(fcfaAmount, liveXofPerUsdt)} USD
           </div>
           <div className="flex items-center gap-3 mb-2">
             <img
@@ -1312,7 +1352,7 @@ export default function GuichetApp() {
       .insert({
         agent_id: agentId,
         plan,
-        monthly_amount: SUBSCRIPTION_PRICING[plan],
+        monthly_amount: SUBSCRIPTION_PRICING[plan].total,
         status: "pending_payment",
       })
       .select()
@@ -1438,22 +1478,14 @@ export default function GuichetApp() {
   }
 
   async function validateSubPayment(payment, approve) {
-    if (approve) {
-      const { error } = await supabase
-        .from("subscription_payments")
-        .update({ status: "validated", validated_at: new Date().toISOString() })
-        .eq("id", payment.id);
-      if (error) return;
-      if (payment.type === "abonnement") {
-        const periodEnd = new Date();
-        periodEnd.setMonth(periodEnd.getMonth() + SUBSCRIPTION_PERIOD_MONTHS);
-        await supabase
-          .from("subscriptions")
-          .update({ status: "active", current_period_end: periodEnd.toISOString(), updated_at: new Date().toISOString() })
-          .eq("agent_id", payment.agent_id);
-      }
-    } else {
-      await supabase.from("subscription_payments").update({ status: "rejected" }).eq("id", payment.id);
+    const { error } = await supabase.rpc("validate_subscription_payment", {
+      p_payment_id: payment.id,
+      p_approve: approve,
+      p_reject_reason: approve ? null : "Référence de paiement non valide",
+    });
+    if (error) {
+      console.error("[validateSubPayment] échec :", error);
+      return;
     }
     loadPendingSubPayments();
   }
