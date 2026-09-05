@@ -301,6 +301,13 @@ export default function ChatBot({ theme = "light" }) {
       className="flex flex-col h-full"
       style={{ background: COLORS.bg, fontFamily: "'IBM Plex Sans', sans-serif" }}
     >
+      {/* Keyframes pour l'indicateur "en train d'écrire" (non fournis par Tailwind ici) */}
+      <style>{`
+        @keyframes bounce {
+          0%, 60%, 100% { transform: translateY(0); opacity: 0.5; }
+          30% { transform: translateY(-5px); opacity: 1; }
+        }
+      `}</style>
       {/* Header */}
       <div
         className="px-4 py-3 flex items-center justify-between"
