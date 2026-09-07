@@ -11,6 +11,10 @@
 //   currentPin n'est requis — l'appelant est déjà authentifié via son
 //   propre token Supabase (cas : inscription, réinitialisation forcée).
 //
+// Anti-bruteforce : la vérification de currentPin partage le même compteur
+// d'échecs que verify-pin (pin_failed_attempts/pin_locked_until) — sinon on
+// pourrait contourner la limite de verify-pin en devinant le PIN ici.
+//
 // Appel côté client :
 //   await supabase.functions.invoke("set-pin", {
 //     body: { newPin: "1234", currentPin: "0000" }, // currentPin optionnel
@@ -22,6 +26,9 @@ const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
+
+const MAX_ATTEMPTS = 5;
+const LOCKOUT_MINUTES = 15;
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -60,7 +67,7 @@ Deno.serve(async (req) => {
 
     const { data: agentRow, error: agentErr } = await admin
       .from("agents")
-      .select("pin_hash, pin_reset_required")
+      .select("pin_hash, pin_reset_required, pin_failed_attempts, pin_locked_until")
       .eq("id", userId)
       .single();
     if (agentErr || !agentRow) return json({ error: "Compte introuvable." }, 404);
@@ -73,12 +80,37 @@ Deno.serve(async (req) => {
     const requiresCurrentPin = isBcrypt && !agentRow.pin_reset_required;
 
     if (requiresCurrentPin) {
+      // Compte déjà verrouillé suite à trop d'échecs récents (sur cette
+      // fonction ou sur verify-pin, compteur partagé) ?
+      const lockedUntil = agentRow.pin_locked_until ? new Date(agentRow.pin_locked_until as string) : null;
+      if (lockedUntil && lockedUntil.getTime() > Date.now()) {
+        const minutesLeft = Math.max(1, Math.ceil((lockedUntil.getTime() - Date.now()) / 60000));
+        return json(
+          { error: `Trop de tentatives. Réessaie dans ${minutesLeft} minute${minutesLeft > 1 ? "s" : ""}.` },
+          429
+        );
+      }
+
       // Vrai changement de PIN : le PIN actuel doit être fourni et correct.
       if (!/^\d{4}$/.test(currentPin)) {
         return json({ error: "Code PIN actuel requis." }, 400);
       }
       if (!bcrypt.compareSync(currentPin, storedHash as string)) {
-        return json({ error: "Code PIN actuel incorrect." }, 401);
+        const newAttempts = (agentRow.pin_failed_attempts ?? 0) + 1;
+        if (newAttempts >= MAX_ATTEMPTS) {
+          const lockUntil = new Date(Date.now() + LOCKOUT_MINUTES * 60_000).toISOString();
+          await admin.from("agents").update({ pin_failed_attempts: 0, pin_locked_until: lockUntil }).eq("id", userId);
+          return json(
+            { error: `Trop de tentatives incorrectes. Compte bloqué ${LOCKOUT_MINUTES} minutes pour ta sécurité.` },
+            429
+          );
+        }
+        await admin.from("agents").update({ pin_failed_attempts: newAttempts }).eq("id", userId);
+        return json({ error: "Code PIN actuel incorrect.", attemptsRemaining: MAX_ATTEMPTS - newAttempts }, 401);
+      }
+      // PIN actuel correct : réinitialise le compteur d'échecs.
+      if ((agentRow.pin_failed_attempts ?? 0) > 0 || agentRow.pin_locked_until) {
+        await admin.from("agents").update({ pin_failed_attempts: 0, pin_locked_until: null }).eq("id", userId);
       }
     }
     // Sinon : création initiale (inscription) ou réinitialisation forcée

@@ -2948,13 +2948,16 @@ export default function GuichetApp() {
 
   // Vérifie un PIN saisi en appelant l'Edge Function verify-pin : la
   // comparaison bcrypt se fait côté serveur, avec la clé service_role — le
-  // hash stocké n'est jamais chargé ni envoyé au navigateur.
+  // hash stocké n'est jamais chargé ni envoyé au navigateur. Renvoie aussi
+  // le message d'erreur exact (verrouillage temporaire, tentatives
+  // restantes...) pour que l'agent comprenne ce qui se passe.
   async function verifyPin(inputPin) {
     const { data, error } = await supabase.functions.invoke("verify-pin", {
       body: { pin: inputPin },
     });
-    if (error || data?.error) return false;
-    return !!data?.valid;
+    if (error) return { valid: false, message: "Erreur de connexion, réessaie." };
+    if (data?.error) return { valid: false, message: data.error };
+    return { valid: !!data?.valid, attemptsRemaining: data?.attemptsRemaining };
   }
 
   async function handleChangePin(e) {
@@ -3309,10 +3312,16 @@ export default function GuichetApp() {
   async function handlePinConfirm(e) {
     e.preventDefault();
     setPinLoading(true);
-    const ok = await verifyPin(pinInput);
+    const result = await verifyPin(pinInput);
     setPinLoading(false);
-    if (!ok) {
-      setPinError("Code PIN incorrect. Réessaie.");
+    if (!result.valid) {
+      const fallback =
+        typeof result.attemptsRemaining === "number"
+          ? `Code PIN incorrect. ${result.attemptsRemaining} tentative${result.attemptsRemaining > 1 ? "s" : ""} restante${
+              result.attemptsRemaining > 1 ? "s" : ""
+            }.`
+          : "Code PIN incorrect. Réessaie.";
+      setPinError(result.message || fallback);
       setPinInput("");
       return;
     }
