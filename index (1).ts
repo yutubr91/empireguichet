@@ -42,27 +42,27 @@ Deno.serve(async (req) => {
     return new Response("ok", { headers: corsHeaders });
   }
   if (req.method !== "POST") {
-    return json({ error: "Méthode non autorisée." }, 405);
+    return json({ error: "Méthode non autorisée." });
   }
 
   try {
     const authHeader = req.headers.get("Authorization") || "";
     const jwt = authHeader.replace(/^Bearer\s+/i, "");
-    if (!jwt) return json({ error: "Non authentifié." }, 401);
+    if (!jwt) return json({ error: "Non authentifié." });
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const admin = createClient(supabaseUrl, serviceRoleKey);
 
     const { data: userData, error: userErr } = await admin.auth.getUser(jwt);
-    if (userErr || !userData?.user) return json({ error: "Session invalide." }, 401);
+    if (userErr || !userData?.user) return json({ error: "Session invalide." });
     const userId = userData.user.id;
 
     const body = await req.json().catch(() => ({}));
     const newPin = typeof body?.newPin === "string" ? body.newPin : "";
     const currentPin = typeof body?.currentPin === "string" ? body.currentPin : "";
     if (!/^\d{4}$/.test(newPin)) {
-      return json({ error: "Le nouveau code PIN doit contenir exactement 4 chiffres." }, 400);
+      return json({ error: "Le nouveau code PIN doit contenir exactement 4 chiffres." });
     }
 
     const { data: agentRow, error: agentErr } = await admin
@@ -70,7 +70,7 @@ Deno.serve(async (req) => {
       .select("pin_hash, pin_reset_required, pin_failed_attempts, pin_locked_until")
       .eq("id", userId)
       .single();
-    if (agentErr || !agentRow) return json({ error: "Compte introuvable." }, 404);
+    if (agentErr || !agentRow) return json({ error: "Compte introuvable." });
 
     const storedHash = agentRow.pin_hash as string | null;
     const isBcrypt = typeof storedHash === "string" && /^\$2[aby]\$/.test(storedHash);
@@ -86,14 +86,12 @@ Deno.serve(async (req) => {
       if (lockedUntil && lockedUntil.getTime() > Date.now()) {
         const minutesLeft = Math.max(1, Math.ceil((lockedUntil.getTime() - Date.now()) / 60000));
         return json(
-          { error: `Trop de tentatives. Réessaie dans ${minutesLeft} minute${minutesLeft > 1 ? "s" : ""}.` },
-          429
-        );
+          { error: `Trop de tentatives. Réessaie dans ${minutesLeft} minute${minutesLeft > 1 ? "s" : ""}.` });
       }
 
       // Vrai changement de PIN : le PIN actuel doit être fourni et correct.
       if (!/^\d{4}$/.test(currentPin)) {
-        return json({ error: "Code PIN actuel requis." }, 400);
+        return json({ error: "Code PIN actuel requis." });
       }
       if (!bcrypt.compareSync(currentPin, storedHash as string)) {
         const newAttempts = (agentRow.pin_failed_attempts ?? 0) + 1;
@@ -101,12 +99,10 @@ Deno.serve(async (req) => {
           const lockUntil = new Date(Date.now() + LOCKOUT_MINUTES * 60_000).toISOString();
           await admin.from("agents").update({ pin_failed_attempts: 0, pin_locked_until: lockUntil }).eq("id", userId);
           return json(
-            { error: `Trop de tentatives incorrectes. Compte bloqué ${LOCKOUT_MINUTES} minutes pour ta sécurité.` },
-            429
-          );
+            { error: `Trop de tentatives incorrectes. Compte bloqué ${LOCKOUT_MINUTES} minutes pour ta sécurité.` });
         }
         await admin.from("agents").update({ pin_failed_attempts: newAttempts }).eq("id", userId);
-        return json({ error: "Code PIN actuel incorrect.", attemptsRemaining: MAX_ATTEMPTS - newAttempts }, 401);
+        return json({ error: "Code PIN actuel incorrect.", attemptsRemaining: MAX_ATTEMPTS - newAttempts });
       }
       // PIN actuel correct : réinitialise le compteur d'échecs.
       if ((agentRow.pin_failed_attempts ?? 0) > 0 || agentRow.pin_locked_until) {
@@ -123,11 +119,11 @@ Deno.serve(async (req) => {
       .update({ pin_hash: newHash, pin_reset_required: false })
       .eq("id", userId);
     if (updateErr) {
-      return json({ error: "Erreur lors de l'enregistrement : " + updateErr.message }, 500);
+      return json({ error: "Erreur lors de l'enregistrement : " + updateErr.message });
     }
 
     return json({ success: true });
   } catch (_e) {
-    return json({ error: "Erreur serveur." }, 500);
+    return json({ error: "Erreur serveur." });
   }
 });

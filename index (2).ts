@@ -44,13 +44,13 @@ Deno.serve(async (req) => {
     return new Response("ok", { headers: corsHeaders });
   }
   if (req.method !== "POST") {
-    return json({ error: "Méthode non autorisée." }, 405);
+    return json({ error: "Méthode non autorisée." });
   }
 
   try {
     const authHeader = req.headers.get("Authorization") || "";
     const jwt = authHeader.replace(/^Bearer\s+/i, "");
-    if (!jwt) return json({ error: "Non authentifié." }, 401);
+    if (!jwt) return json({ error: "Non authentifié." });
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -59,28 +59,26 @@ Deno.serve(async (req) => {
     // Vérifie le JWT et récupère l'utilisateur authentifié — on ne fait
     // jamais confiance à un userId envoyé par le client.
     const { data: userData, error: userErr } = await admin.auth.getUser(jwt);
-    if (userErr || !userData?.user) return json({ error: "Session invalide." }, 401);
+    if (userErr || !userData?.user) return json({ error: "Session invalide." });
     const userId = userData.user.id;
 
     const body = await req.json().catch(() => ({}));
     const pin = typeof body?.pin === "string" ? body.pin : "";
-    if (!/^\d{4}$/.test(pin)) return json({ error: "Code PIN invalide." }, 400);
+    if (!/^\d{4}$/.test(pin)) return json({ error: "Code PIN invalide." });
 
     const { data: agentRow, error: agentErr } = await admin
       .from("agents")
       .select("pin_hash, pin_failed_attempts, pin_locked_until")
       .eq("id", userId)
       .single();
-    if (agentErr || !agentRow) return json({ error: "Compte introuvable." }, 404);
+    if (agentErr || !agentRow) return json({ error: "Compte introuvable." });
 
     // Compte déjà verrouillé suite à trop d'échecs récents ?
     const lockedUntil = agentRow.pin_locked_until ? new Date(agentRow.pin_locked_until as string) : null;
     if (lockedUntil && lockedUntil.getTime() > Date.now()) {
       const minutesLeft = Math.max(1, Math.ceil((lockedUntil.getTime() - Date.now()) / 60000));
       return json(
-        { valid: false, error: `Trop de tentatives. Réessaie dans ${minutesLeft} minute${minutesLeft > 1 ? "s" : ""}.` },
-        429
-      );
+        { valid: false, error: `Trop de tentatives. Réessaie dans ${minutesLeft} minute${minutesLeft > 1 ? "s" : ""}.` });
     }
 
     const storedHash = agentRow.pin_hash as string | null;
@@ -103,13 +101,11 @@ Deno.serve(async (req) => {
       const lockUntil = new Date(Date.now() + LOCKOUT_MINUTES * 60_000).toISOString();
       await admin.from("agents").update({ pin_failed_attempts: 0, pin_locked_until: lockUntil }).eq("id", userId);
       return json(
-        { valid: false, error: `Trop de tentatives incorrectes. Compte bloqué ${LOCKOUT_MINUTES} minutes pour ta sécurité.` },
-        429
-      );
+        { valid: false, error: `Trop de tentatives incorrectes. Compte bloqué ${LOCKOUT_MINUTES} minutes pour ta sécurité.` });
     }
     await admin.from("agents").update({ pin_failed_attempts: newAttempts }).eq("id", userId);
     return json({ valid: false, attemptsRemaining: MAX_ATTEMPTS - newAttempts });
   } catch (_e) {
-    return json({ error: "Erreur serveur." }, 500);
+    return json({ error: "Erreur serveur." });
   }
 });

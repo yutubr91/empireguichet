@@ -35,6 +35,18 @@ const corsHeaders = {
 // attaquant si un numéro est associé à un compte.
 const GENERIC_ERROR = "Numéro ou mot de passe incorrect.";
 
+// Toujours répondre en HTTP 200 : la bibliothèque cliente Supabase
+// n'expose le contenu JSON dans "data" que pour les statuts 2xx — un
+// statut d'erreur (401, 429...) ferait disparaître notre message précis
+// derrière une erreur générique. Le vrai résultat est donc uniquement
+// porté par le contenu (error / access_token...), jamais par le code HTTP.
+function json(body: unknown) {
+  return new Response(JSON.stringify(body), {
+    status: 200,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -43,10 +55,7 @@ Deno.serve(async (req) => {
   try {
     const { phone, password } = await req.json();
     if (!phone || !password) {
-      return new Response(JSON.stringify({ error: "Numéro et mot de passe requis." }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return json({ error: "Numéro et mot de passe requis." });
     }
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
@@ -66,10 +75,7 @@ Deno.serve(async (req) => {
     if (!agentRow?.email) {
       // Même message que pour un mauvais mot de passe : aucune fuite
       // d'information sur l'existence du numéro.
-      return new Response(JSON.stringify({ error: GENERIC_ERROR }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return json({ error: GENERIC_ERROR });
     }
 
     // Vérifie le mot de passe via l'API Auth standard (clé anon, comme le
@@ -82,24 +88,15 @@ Deno.serve(async (req) => {
     });
 
     if (error || !data?.session) {
-      return new Response(JSON.stringify({ error: GENERIC_ERROR }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return json({ error: GENERIC_ERROR });
     }
 
-    return new Response(
-      JSON.stringify({
-        access_token: data.session.access_token,
-        refresh_token: data.session.refresh_token,
-        user_id: data.user.id,
-      }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-  } catch (e) {
-    return new Response(JSON.stringify({ error: "Erreur serveur, réessaie." }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    return json({
+      access_token: data.session.access_token,
+      refresh_token: data.session.refresh_token,
+      user_id: data.user.id,
     });
+  } catch (_e) {
+    return json({ error: "Erreur serveur, réessaie." });
   }
 });

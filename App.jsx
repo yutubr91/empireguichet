@@ -75,6 +75,26 @@ import {
 } from "recharts";
 import { supabase } from "./supabaseClient";
 
+// Appelle une Edge Function et renvoie toujours le corps JSON de la
+// réponse, que le statut HTTP soit un succès ou une erreur (401, 404,
+// 429...). supabase-js range les réponses non-2xx dans `error` plutôt que
+// `data`, et le message JSON qu'on renvoie côté serveur (ex. "3 tentatives
+// restantes", "Compte bloqué 15 minutes") n'est alors accessible que via
+// `error.context.json()` — sans ça, ces messages précis n'atteignaient
+// jamais l'écran.
+async function invokeEdgeFunction(name, body) {
+  const { data, error } = await supabase.functions.invoke(name, { body });
+  if (data) return data;
+  if (error?.context) {
+    try {
+      return await error.context.json();
+    } catch (_e) {
+      // Pas de corps JSON exploitable dans la réponse.
+    }
+  }
+  return { error: "Erreur de connexion, réessaie." };
+}
+
 // ===== Tarification de l'abonnement EmpireGuichet =====
 const SUBSCRIPTION_PERIOD_MONTHS = 6;
 const SUBSCRIPTION_PRICING = {
@@ -2532,10 +2552,8 @@ export default function GuichetApp() {
     // service_role) : l'e-mail réel de l'agent ne transite plus jamais par
     // le navigateur, ni en cas de succès ni en cas d'échec, pour empêcher
     // quiconque de l'extraire en devinant des numéros de téléphone.
-    const { data, error } = await supabase.functions.invoke("login-by-phone", {
-      body: { phone: fullLoginPhone, password: loginPassword },
-    });
-    if (error || data?.error) {
+    const data = await invokeEdgeFunction("login-by-phone", { phone: fullLoginPhone, password: loginPassword });
+    if (data?.error || !data?.access_token) {
       setAuthLoading(false);
       setAuthError(data?.error || "Connexion impossible — vérifie ta connexion internet et réessaie.");
       return;
@@ -2952,11 +2970,8 @@ export default function GuichetApp() {
   // le message d'erreur exact (verrouillage temporaire, tentatives
   // restantes...) pour que l'agent comprenne ce qui se passe.
   async function verifyPin(inputPin) {
-    const { data, error } = await supabase.functions.invoke("verify-pin", {
-      body: { pin: inputPin },
-    });
-    if (error) return { valid: false, message: "Erreur de connexion, réessaie." };
-    if (data?.error) return { valid: false, message: data.error };
+    const data = await invokeEdgeFunction("verify-pin", { pin: inputPin });
+    if (data?.error) return { valid: false, message: data.error, attemptsRemaining: data.attemptsRemaining };
     return { valid: !!data?.valid, attemptsRemaining: data?.attemptsRemaining };
   }
 
