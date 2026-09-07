@@ -1,101 +1,105 @@
-// Edge Function : set-pin
+// Edge Function : login-by-phone
 //
-// Crée ou change le PIN (4 chiffres) de l'agent connecté. Le hachage bcrypt
-// se fait ici, côté serveur — jamais dans le navigateur — et le nouveau
-// hash est écrit directement en base avec la clé service_role.
+// Remplace l'ancien flux "get_email_by_phone (RPC accessible à anon) puis
+// signInWithPassword côté client". Problème de l'ancien flux : n'importe qui
+// pouvait appeler get_email_by_phone directement (sans authentification) et
+// récupérer l'e-mail réel associé à un numéro de téléphone — un attaquant
+// pouvait ainsi constituer une base d'e-mails valides en essayant des
+// numéros au hasard, sans jamais se connecter.
 //
-// - Si l'agent a déjà un PIN sécurisé (hash bcrypt en base), `currentPin`
-//   est obligatoire et vérifié ici avant d'accepter le nouveau PIN
-//   (cas : changement de PIN depuis Paramètres).
-// - Sinon (inscription, ou ancien PIN en clair pré-migration), aucun
-//   currentPin n'est requis — l'appelant est déjà authentifié via son
-//   propre token Supabase (cas : inscription, réinitialisation forcée).
+// Ici, la correspondance téléphone → e-mail se fait ENTIÈREMENT côté
+// serveur, avec la clé service_role, et l'e-mail n'est JAMAIS renvoyé au
+// client — ni en cas de succès, ni en cas d'échec. Le message d'erreur est
+// volontairement identique que le numéro existe ou non ("Numéro ou mot de
+// passe incorrect."), pour ne rien laisser deviner à un attaquant.
 //
 // Appel côté client :
-//   await supabase.functions.invoke("set-pin", {
-//     body: { newPin: "1234", currentPin: "0000" }, // currentPin optionnel
+//   const { data } = await supabase.functions.invoke("login-by-phone", {
+//     body: { phone: "+225 0102030405", password: "..." },
 //   });
+//   // en cas de succès : { access_token, refresh_token, user_id }
+//   // en cas d'échec   : { error: "Numéro ou mot de passe incorrect." }
+//
+// ⚠️ À déployer avec la vérification JWT désactivée (aucune session
+// n'existe encore avant la connexion) :
+//   supabase functions deploy login-by-phone --no-verify-jwt
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
-import bcrypt from "npm:bcryptjs@3.0.3";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-function json(body: unknown, status = 200) {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
-  });
-}
+// Message unique, volontairement identique que le numéro existe ou non, ou
+// que le mot de passe soit faux — pour ne jamais laisser deviner à un
+// attaquant si un numéro est associé à un compte.
+const GENERIC_ERROR = "Numéro ou mot de passe incorrect.";
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
-  if (req.method !== "POST") {
-    return json({ error: "Méthode non autorisée." }, 405);
-  }
 
   try {
-    const authHeader = req.headers.get("Authorization") || "";
-    const jwt = authHeader.replace(/^Bearer\s+/i, "");
-    if (!jwt) return json({ error: "Non authentifié." }, 401);
-
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const admin = createClient(supabaseUrl, serviceRoleKey);
-
-    const { data: userData, error: userErr } = await admin.auth.getUser(jwt);
-    if (userErr || !userData?.user) return json({ error: "Session invalide." }, 401);
-    const userId = userData.user.id;
-
-    const body = await req.json().catch(() => ({}));
-    const newPin = typeof body?.newPin === "string" ? body.newPin : "";
-    const currentPin = typeof body?.currentPin === "string" ? body.currentPin : "";
-    if (!/^\d{4}$/.test(newPin)) {
-      return json({ error: "Le nouveau code PIN doit contenir exactement 4 chiffres." }, 400);
+    const { phone, password } = await req.json();
+    if (!phone || !password) {
+      return new Response(JSON.stringify({ error: "Numéro et mot de passe requis." }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
-    const { data: agentRow, error: agentErr } = await admin
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
+
+    // Résout l'e-mail depuis le téléphone avec la clé service_role — cette
+    // requête contourne la RLS mais reste entièrement côté serveur, jamais
+    // exposée au client.
+    const adminClient = createClient(supabaseUrl, serviceRoleKey);
+    const { data: agentRow } = await adminClient
       .from("agents")
-      .select("pin_hash, pin_reset_required")
-      .eq("id", userId)
-      .single();
-    if (agentErr || !agentRow) return json({ error: "Compte introuvable." }, 404);
+      .select("email")
+      .eq("phone", phone)
+      .maybeSingle();
 
-    const storedHash = agentRow.pin_hash as string | null;
-    const isBcrypt = typeof storedHash === "string" && /^\$2[aby]\$/.test(storedHash);
-    // Un compte marqué "pin_reset_required" (ancien compte forcé à recréer
-    // son PIN après le renforcement de sécurité) n'a pas besoin de fournir
-    // l'ancien PIN — exactement comme un ancien PIN en clair pré-migration.
-    const requiresCurrentPin = isBcrypt && !agentRow.pin_reset_required;
-
-    if (requiresCurrentPin) {
-      // Vrai changement de PIN : le PIN actuel doit être fourni et correct.
-      if (!/^\d{4}$/.test(currentPin)) {
-        return json({ error: "Code PIN actuel requis." }, 400);
-      }
-      if (!bcrypt.compareSync(currentPin, storedHash as string)) {
-        return json({ error: "Code PIN actuel incorrect." }, 401);
-      }
-    }
-    // Sinon : création initiale (inscription) ou réinitialisation forcée
-    // d'un ancien PIN en clair — déjà protégées par l'authentification de
-    // la requête elle-même, pas de currentPin exigé ici.
-
-    const newHash = bcrypt.hashSync(newPin, 10);
-    const { error: updateErr } = await admin
-      .from("agents")
-      .update({ pin_hash: newHash, pin_reset_required: false })
-      .eq("id", userId);
-    if (updateErr) {
-      return json({ error: "Erreur lors de l'enregistrement : " + updateErr.message }, 500);
+    if (!agentRow?.email) {
+      // Même message que pour un mauvais mot de passe : aucune fuite
+      // d'information sur l'existence du numéro.
+      return new Response(JSON.stringify({ error: GENERIC_ERROR }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
-    return json({ success: true });
-  } catch (_e) {
-    return json({ error: "Erreur serveur." }, 500);
+    // Vérifie le mot de passe via l'API Auth standard (clé anon, comme le
+    // ferait le navigateur) — l'e-mail utilisé ici ne quitte jamais cette
+    // fonction.
+    const authClient = createClient(supabaseUrl, anonKey);
+    const { data, error } = await authClient.auth.signInWithPassword({
+      email: agentRow.email,
+      password,
+    });
+
+    if (error || !data?.session) {
+      return new Response(JSON.stringify({ error: GENERIC_ERROR }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    return new Response(
+      JSON.stringify({
+        access_token: data.session.access_token,
+        refresh_token: data.session.refresh_token,
+        user_id: data.user.id,
+      }),
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  } catch (e) {
+    return new Response(JSON.stringify({ error: "Erreur serveur, réessaie." }), {
+      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   }
 });
