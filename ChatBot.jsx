@@ -9,7 +9,7 @@ const SUPPORT_BOT_KB = [
     answer: "Bonjour 👋 Je suis l'assistant EmpireGuichet. Comment puis-je t'aider aujourd'hui ?",
   },
   {
-    keywords: ["c'est quoi empireguichet", "presentation", "présentation", "comment ça marche", "comment ca marche"],
+    keywords: ["c'est quoi empireguichet", "c'est quoi empire guichet", "cest quoi empire guichet", "qu'est-ce que empireguichet", "qu'est-ce que empire guichet", "empire guichet c'est quoi", "presentation", "présentation", "comment ça marche", "comment ca marche", "a quoi sert empire guichet", "à quoi sert empire guichet"],
     answer: "EmpireGuichet est un guichet unique de mobile money pour les agents et chefs d'agence en Côte d'Ivoire : tu y gères MTN MoMo, Orange Money, Moov Money, Wave, Djamo, la crypto (USDT), les factures CIE/SODECI et les péages, avec un seul ticket et un seul historique. Un abonnement (2 500 FCFA/6 mois) donne accès à l'application.",
   },
   {
@@ -117,7 +117,7 @@ const SUPPORT_BOT_KB = [
     answer: "Chaque transaction génère automatiquement un ticket avec un numéro unique, le montant, les frais et le total — tu le retrouves dans le résumé juste après l'opération, et dans ton historique.",
   },
   {
-    keywords: ["frais", "commission empireguichet", "empireguichet prend"],
+    keywords: ["frais", "commission empireguichet", "empireguichet prend", "commission empire guichet", "empire guichet prend"],
     answer: "EmpireGuichet ne prend aucune commission sur tes transactions : tu continues d'opérer directement avec tes propres puces MTN, Orange, Moov, Wave, Djamo. Les seuls frais sont l'abonnement et, en option, l'accès à l'historique détaillé.",
   },
   {
@@ -311,10 +311,14 @@ export default function ChatBot({ theme = "light" }) {
       >
         <div className="flex items-center gap-2">
           <div
-            className="w-8 h-8 rounded-full flex items-center justify-center"
+            className="w-8 h-8 rounded-full overflow-hidden flex items-center justify-center"
             style={{ background: COLORS.teal }}
           >
-            <span style={{ fontSize: 16 }}>🤖</span>
+            <img
+              src="/bot-avatar.jpg"
+              alt="Assistant EmpireGuichet"
+              className="w-full h-full object-cover"
+            />
           </div>
           <div>
             <div className="text-sm font-semibold">Assistant EmpireGuichet</div>
