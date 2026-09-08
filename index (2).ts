@@ -6,6 +6,14 @@
 // service_role — cette clé n'existe que dans l'environnement de la
 // fonction et n'est jamais envoyée au navigateur.
 //
+// Aucune valeur fixe n'est jamais acceptée, quel que soit l'état du compte :
+// - PIN bcrypt (cas normal) : comparaison bcrypt.
+// - Ancien PIN en clair (compte pas encore migré) : comparé à sa VRAIE
+//   valeur stockée, jamais à une constante — et de toute façon l'app
+//   bloque déjà ces comptes sur un écran de recréation de PIN avant de les
+//   laisser faire quoi que ce soit (pinNeedsReset).
+// - Pas de PIN du tout (pin_hash null) : toujours refusé.
+//
 // Anti-bruteforce : après MAX_ATTEMPTS échecs consécutifs, le compte est
 // verrouillé LOCKOUT_MINUTES minutes (compteur partagé avec set-pin, qui
 // vérifie aussi un PIN — sinon on pourrait contourner cette limite en
@@ -24,10 +32,6 @@ const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
-
-// Doit rester identique au DEMO_PIN défini côté client (App.jsx), pour les
-// comptes de démo qui n'ont pas encore de PIN sécurisé.
-const DEMO_PIN = "1234";
 
 const MAX_ATTEMPTS = 5;
 const LOCKOUT_MINUTES = 15;
@@ -82,11 +86,17 @@ Deno.serve(async (req) => {
     }
 
     const storedHash = agentRow.pin_hash as string | null;
-    const isBcrypt = typeof storedHash === "string" && /^\$2[aby]\$/.test(storedHash);
+    if (!storedHash) {
+      // Aucun PIN configuré du tout : ne compte pas comme une tentative
+      // ratée (ce n'est pas de la devinette, il n'y a rien à deviner) —
+      // message clair invitant à en créer un.
+      return json({ valid: false, error: "Aucun code PIN configuré. Crée-en un dans Paramètres avant de continuer." });
+    }
 
-    // Pas encore de PIN sécurisé (compte de démo, ou ancien PIN en clair
-    // pré-migration) : on retombe sur le PIN de démo pour ne rien casser.
-    const valid = isBcrypt ? bcrypt.compareSync(pin, storedHash as string) : pin === DEMO_PIN;
+    const isBcrypt = typeof storedHash === "string" && /^\$2[aby]\$/.test(storedHash);
+    // Ancien PIN stocké en clair (compte pas encore migré) : comparé à sa
+    // vraie valeur, jamais à une constante devinable.
+    const valid = isBcrypt ? bcrypt.compareSync(pin, storedHash) : pin === storedHash;
 
     if (valid) {
       // Réinitialise le compteur d'échecs en cas de succès.

@@ -622,7 +622,6 @@ const LOGO_DATA_URI = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAWgAAAFQCAY
 const MAX_TRANSACTION = 1000000;
 const INITIAL_FLOAT = 500000;
 const AGENT_COMMISSION_RATE = 0.35;
-const DEMO_PIN = "1234";
 const PAST_DAYS = [
   { day: "Lun", volume: 420000 },
   { day: "Mar", volume: 380000 },
@@ -7548,8 +7547,6 @@ export default function GuichetApp() {
             />
             {pinError ? (
               <p className="text-xs mb-4" style={{ color: COLORS.danger }}>{pinError}</p>
-            ) : !agent?.hasValidPin ? (
-              <p className="text-xs mb-4" style={{ color: COLORS.textMuted }}>Code démo : {DEMO_PIN}</p>
             ) : (
               <div className="mb-4" />
             )}
