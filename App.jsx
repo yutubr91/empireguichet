@@ -917,6 +917,11 @@ export default function GuichetApp() {
   const [agentChatInput, setAgentChatInput] = useState("");
   const [agentChatLoading, setAgentChatLoading] = useState(false);
   const agentChatEndRef = useRef(null);
+  // Indicateur "en train d'écrire" pour la discussion entre agents (générale ou privée)
+  const [chatTypingName, setChatTypingName] = useState(null);
+  const typingChannelRef = useRef(null);
+  const typingClearTimeoutRef = useRef(null);
+  const lastTypingSentAtRef = useRef(0);
 
   // Capture le parrain depuis le lien de parrainage (?parrain=...) dès l'ouverture du site
   const [referredByPhone, setReferredByPhone] = useState("");
@@ -1536,11 +1541,60 @@ export default function GuichetApp() {
             : m.recipient_id === null;
           if (!belongsHere) return;
           setAgentChatMessages((prev) => (prev.some((x) => x.id === m.id) ? prev : [...prev, m]));
+          // Un message vient d'arriver : la personne a fini d'écrire, on
+          // masque l'indicateur tout de suite plutôt que d'attendre le délai.
+          if (m.agent_id !== agent.id) {
+            setChatTypingName(null);
+            if (typingClearTimeoutRef.current) clearTimeout(typingClearTimeoutRef.current);
+          }
+        })
+        // "Quelqu'un écrit…" — diffusé (pas stocké en base), filtré côté
+        // client pour ne concerner que la conversation actuellement ouverte.
+        .on("broadcast", { event: "typing" }, (payload) => {
+          const p = payload.payload || {};
+          if (!p.senderId || p.senderId === agent.id) return;
+          const belongsHere = chatRecipient
+            ? p.recipientId === agent.id && p.senderId === chatRecipient.id
+            : p.recipientId === null;
+          if (!belongsHere) return;
+          setChatTypingName(p.senderName || "Quelqu'un");
+          if (typingClearTimeoutRef.current) clearTimeout(typingClearTimeoutRef.current);
+          typingClearTimeoutRef.current = setTimeout(() => setChatTypingName(null), 2500);
         })
         .subscribe();
-      return () => supabase.removeChannel(channel);
+      typingChannelRef.current = channel;
+      return () => {
+        supabase.removeChannel(channel);
+        typingChannelRef.current = null;
+        if (typingClearTimeoutRef.current) clearTimeout(typingClearTimeoutRef.current);
+        setChatTypingName(null);
+      };
     }
   }, [discussionOpen, agent?.id, chatRecipient?.id]);
+
+  // Efface l'indicateur quand on change de conversation, pour ne jamais
+  // afficher "en train d'écrire" venant de l'ancienne discussion.
+  useEffect(() => {
+    setChatTypingName(null);
+  }, [chatRecipient?.id]);
+
+  // Diffuse un événement "typing" (pas plus d'une fois toutes les 1,5s tant
+  // que la personne continue de taper, pour ne pas saturer le canal).
+  function broadcastTyping() {
+    if (!agent || !typingChannelRef.current) return;
+    const now = Date.now();
+    if (now - lastTypingSentAtRef.current < 1500) return;
+    lastTypingSentAtRef.current = now;
+    typingChannelRef.current.send({
+      type: "broadcast",
+      event: "typing",
+      payload: {
+        senderId: agent.id,
+        senderName: chatDisplayName(),
+        recipientId: chatRecipient ? chatRecipient.id : null,
+      },
+    });
+  }
 
   useEffect(() => {
     if (agentChatEndRef.current) agentChatEndRef.current.scrollIntoView({ behavior: "smooth" });
@@ -7627,6 +7681,23 @@ export default function GuichetApp() {
                     </div>
                   </div>
                 ))}
+                {chatTypingName && (
+                  <div className="flex items-end gap-1.5 justify-start">
+                    <div
+                      className="px-3.5 py-2.5 rounded-xl"
+                      style={{ background: COLORS.bgSoft, border: `1px solid ${COLORS.surfaceLine}` }}
+                    >
+                      <div className="text-[9px] font-medium mb-1" style={{ color: COLORS.textMuted, opacity: 0.75 }}>
+                        {chatTypingName}
+                      </div>
+                      <div className="flex gap-1 items-center">
+                        <span style={{ width: 6, height: 6, borderRadius: "50%", background: COLORS.textMuted, animation: "bounce 1s infinite", animationDelay: "0ms" }} />
+                        <span style={{ width: 6, height: 6, borderRadius: "50%", background: COLORS.textMuted, animation: "bounce 1s infinite", animationDelay: "150ms" }} />
+                        <span style={{ width: 6, height: 6, borderRadius: "50%", background: COLORS.textMuted, animation: "bounce 1s infinite", animationDelay: "300ms" }} />
+                      </div>
+                    </div>
+                  </div>
+                )}
                 <div ref={agentChatEndRef} />
               </div>
 
@@ -7634,7 +7705,10 @@ export default function GuichetApp() {
               <div className="flex gap-2 p-3" style={{ borderTop: `1px solid ${COLORS.surfaceLine}` }}>
                 <input
                   value={agentChatInput}
-                  onChange={(e) => setAgentChatInput(e.target.value)}
+                  onChange={(e) => {
+                    setAgentChatInput(e.target.value);
+                    if (e.target.value.trim()) broadcastTyping();
+                  }}
                   onKeyDown={(e) => e.key === "Enter" && handleSendChatMessage()}
                   placeholder={chatRecipient ? `Message privé à ${chatRecipient.full_name}…` : "Écris ton message…"}
                   className="flex-1 px-3.5 py-2.5 rounded-lg text-sm outline-none"

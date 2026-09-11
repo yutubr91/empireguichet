@@ -10,7 +10,7 @@ const SUPPORT_BOT_KB = [
   },
   {
     keywords: ["c'est quoi empireguichet", "c'est quoi empire guichet", "cest quoi empire guichet", "qu'est-ce que empireguichet", "qu'est-ce que empire guichet", "empire guichet c'est quoi", "presentation", "présentation", "comment ça marche", "comment ca marche", "a quoi sert empire guichet", "à quoi sert empire guichet"],
-    answer: "EmpireGuichet est un guichet unique de mobile money pour les agents et chefs d'agence en Côte d'Ivoire : tu y gères MTN MoMo, Orange Money, Moov Money, Wave, Djamo, la crypto (USDT), les factures CIE/SODECI et les péages, avec un seul ticket et un seul historique. Un abonnement (2 500 FCFA/6 mois) donne accès à l'application.",
+    answer: "EmpireGuichet est un guichet unique de mobile money pour les agents et chefs d'agence, disponible dans 10 pays (Côte d'Ivoire, Sénégal, Mali, Burkina Faso, Bénin, Togo, Guinée, Niger, Cameroun, France) : tu y gères MTN MoMo, Orange Money, Moov Money, Wave, Djamo, la crypto (USDT), les factures CIE/SODECI et les péages, avec un seul ticket et un seul historique. Un abonnement (2 500 FCFA/6 mois) donne accès à l'application.",
   },
   {
     keywords: ["abonnement", "combien coute", "combien coûte", "prix", "tarif"],
@@ -134,7 +134,7 @@ const SUPPORT_BOT_KB = [
   },
   {
     keywords: ["combien de pays", "quel pays", "quels pays", "pays disponible", "disponible dans quel pays", "international", "autre pays", "autres pays"],
-    answer: "Pour le moment, EmpireGuichet est disponible en Côte d'Ivoire uniquement — c'est là que les réseaux pris en charge (MTN, Orange, Moov, Wave, CIE, SODECI…) opèrent. Il n'y a pas d'annonce officielle d'extension à d'autres pays pour l'instant.",
+    answer: "EmpireGuichet est disponible dans 10 pays : Côte d'Ivoire, Sénégal, Mali, Burkina Faso, Bénin, Togo, Guinée, Niger, Cameroun et France.",
   },
   {
     keywords: ["wave disponible", "wave pays", "wave dans quel pays", "wave fonctionne", "wave senegal", "wave sénégal", "wave mali", "wave guinee", "wave guinée", "wave cameroun", "wave togo", "wave benin", "wave bénin", "wave niger", "wave burkina", "wave france"],
