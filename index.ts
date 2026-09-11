@@ -13,13 +13,6 @@
 // volontairement identique que le numéro existe ou non ("Numéro ou mot de
 // passe incorrect."), pour ne rien laisser deviner à un attaquant.
 //
-// Anti-bruteforce : après MAX_ATTEMPTS mots de passe incorrects consécutifs
-// sur un même compte, celui-ci est verrouillé LOCKOUT_MINUTES minutes —
-// même principe que verify-pin/set-pin, mais avec son propre compteur
-// (login_failed_attempts/login_locked_until) : se connecter au compte et
-// confirmer une transaction sont deux frontières de sécurité différentes,
-// elles ne doivent pas partager le même verrou.
-//
 // Appel côté client :
 //   const { data } = await supabase.functions.invoke("login-by-phone", {
 //     body: { phone: "+225 0102030405", password: "..." },
@@ -30,9 +23,6 @@
 // ⚠️ À déployer avec la vérification JWT désactivée (aucune session
 // n'existe encore avant la connexion) :
 //   supabase functions deploy login-by-phone --no-verify-jwt
-//
-// ⚠️ Nécessite la migration supabase_migration_securite_login_phone.sql
-// (colonnes login_failed_attempts / login_locked_until sur agents).
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
 
 const corsHeaders = {
@@ -40,21 +30,10 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const MAX_ATTEMPTS = 5;
-const LOCKOUT_MINUTES = 15;
-
 // Message unique, volontairement identique que le numéro existe ou non, ou
 // que le mot de passe soit faux — pour ne jamais laisser deviner à un
 // attaquant si un numéro est associé à un compte.
 const GENERIC_ERROR = "Numéro ou mot de passe incorrect.";
-
-// Même message que ci-dessus, mais avec le temps d'attente — communiqué
-// seulement une fois qu'on sait déjà que le compte existe et est verrouillé,
-// donc ça ne révèle rien de plus qu'un attaquant ne saurait déjà.
-function lockedMessage(lockedUntil: Date) {
-  const minutesLeft = Math.max(1, Math.ceil((lockedUntil.getTime() - Date.now()) / 60000));
-  return `Trop de tentatives. Réessaie dans ${minutesLeft} minute${minutesLeft > 1 ? "s" : ""}.`;
-}
 
 // Toujours répondre en HTTP 200 : la bibliothèque cliente Supabase
 // n'expose le contenu JSON dans "data" que pour les statuts 2xx — un
@@ -85,26 +64,18 @@ Deno.serve(async (req) => {
 
     // Résout l'e-mail depuis le téléphone avec la clé service_role — cette
     // requête contourne la RLS mais reste entièrement côté serveur, jamais
-    // exposée au client. On récupère aussi l'id et l'état du verrou pour
-    // gérer l'anti-bruteforce.
+    // exposée au client.
     const adminClient = createClient(supabaseUrl, serviceRoleKey);
     const { data: agentRow } = await adminClient
       .from("agents")
-      .select("id, email, login_failed_attempts, login_locked_until")
+      .select("email")
       .eq("phone", phone)
       .maybeSingle();
 
     if (!agentRow?.email) {
       // Même message que pour un mauvais mot de passe : aucune fuite
-      // d'information sur l'existence du numéro. Pas de compteur à
-      // incrémenter non plus : il n'y a personne à verrouiller.
+      // d'information sur l'existence du numéro.
       return json({ error: GENERIC_ERROR });
-    }
-
-    // Compte déjà verrouillé suite à trop d'échecs récents ?
-    const lockedUntil = agentRow.login_locked_until ? new Date(agentRow.login_locked_until as string) : null;
-    if (lockedUntil && lockedUntil.getTime() > Date.now()) {
-      return json({ error: lockedMessage(lockedUntil) });
     }
 
     // Vérifie le mot de passe via l'API Auth standard (clé anon, comme le
@@ -117,28 +88,7 @@ Deno.serve(async (req) => {
     });
 
     if (error || !data?.session) {
-      const newAttempts = (agentRow.login_failed_attempts ?? 0) + 1;
-      if (newAttempts >= MAX_ATTEMPTS) {
-        const lockUntil = new Date(Date.now() + LOCKOUT_MINUTES * 60_000).toISOString();
-        await adminClient
-          .from("agents")
-          .update({ login_failed_attempts: 0, login_locked_until: lockUntil })
-          .eq("id", agentRow.id);
-      } else {
-        await adminClient
-          .from("agents")
-          .update({ login_failed_attempts: newAttempts })
-          .eq("id", agentRow.id);
-      }
       return json({ error: GENERIC_ERROR });
-    }
-
-    // Connexion réussie : réinitialise le compteur d'échecs.
-    if ((agentRow.login_failed_attempts ?? 0) > 0 || agentRow.login_locked_until) {
-      await adminClient
-        .from("agents")
-        .update({ login_failed_attempts: 0, login_locked_until: null })
-        .eq("id", agentRow.id);
     }
 
     return json({
