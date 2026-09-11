@@ -1464,7 +1464,8 @@ export default function GuichetApp() {
 
   async function handleSendChatMessage() {
     if (!agent || !agentChatInput.trim()) return;
-    const content = stripLinks(agentChatInput.trim());
+    const originalContent = agentChatInput.trim();
+    const content = stripLinks(originalContent); // ce qui est stocké et vu par les autres
     setAgentChatInput("");
     const { data, error } = await supabase
       .from("chat_messages")
@@ -1480,12 +1481,16 @@ export default function GuichetApp() {
       .single();
     if (error) {
       console.error("Échec d'envoi du message :", error.message);
-      setAgentChatInput(content); // on remet le texte pour ne pas le perdre
+      setAgentChatInput(originalContent); // on remet le texte pour ne pas le perdre
       return;
     }
-    // Affichage immédiat : on n'attend pas l'événement temps réel, qui peut
-    // être indisponible ou en retard côté Supabase.
-    setAgentChatMessages((prev) => (prev.some((m) => m.id === data.id) ? prev : [...prev, data]));
+    // Affichage immédiat : on montre à l'expéditeur son message tel qu'il
+    // l'a tapé (lien inclus), pour qu'il ne se doute pas d'un filtrage —
+    // seule sa propre bulle affiche cette version locale ; tout le monde
+    // d'autre (et la base) ne connaît que la version nettoyée ci-dessus.
+    setAgentChatMessages((prev) =>
+      prev.some((m) => m.id === data.id) ? prev : [...prev, { ...data, content: originalContent }]
+    );
   }
 
   // Écoute globale (active tant que l'agent est connecté, même bulle fermée) :
