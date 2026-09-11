@@ -24,6 +24,12 @@ export default defineConfig({
         ],
       },
       workbox: {
+        // Force le nouveau service worker à prendre le contrôle immédiatement
+        // après chaque déploiement, au lieu de laisser l'ancien cache (page
+        // blanche incluse) rester actif tant qu'un onglet n'est pas rouvert.
+        skipWaiting: true,
+        clientsClaim: true,
+        cleanupOutdatedCaches: true,
         // Précache le "coquille" de l'application (JS/CSS/HTML) pour qu'elle
         // s'ouvre même sans connexion. Les données (Supabase) restent en ligne.
         globPatterns: ['**/*.{js,css,html,png,svg,ico}'],

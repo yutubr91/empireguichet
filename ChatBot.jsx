@@ -312,13 +312,26 @@ export default function ChatBot({ theme = "light" }) {
         <div className="flex items-center gap-2">
           <div
             className="w-8 h-8 rounded-full overflow-hidden flex items-center justify-center"
-            style={{ background: COLORS.teal }}
+            style={{
+              background: `radial-gradient(circle at 32% 28%, #38D69A 0%, ${COLORS.teal} 55%, #0E5C3B 100%)`,
+              animation: "egBotBob 2.4s ease-in-out infinite",
+            }}
           >
-            <img
-              src="/bot-avatar.jpg"
-              alt="Assistant EmpireGuichet"
-              className="w-full h-full object-cover"
-            />
+            <style>{`
+              @keyframes egBotBob {
+                0%, 100% { transform: translateY(0); }
+                50% { transform: translateY(-1.5px); }
+              }
+              @keyframes egBotBlink {
+                0%, 92%, 100% { transform: scaleY(1); }
+                96% { transform: scaleY(0.12); }
+              }
+            `}</style>
+            <svg width="22" height="22" viewBox="0 0 40 40">
+              <ellipse cx="13" cy="19" rx="3.4" ry="4.2" fill="#0B2E20" style={{ animation: "egBotBlink 3.6s ease-in-out infinite", transformOrigin: "13px 19px" }} />
+              <ellipse cx="27" cy="19" rx="3.4" ry="4.2" fill="#0B2E20" style={{ animation: "egBotBlink 3.6s ease-in-out infinite", transformOrigin: "27px 19px" }} />
+              <path d="M13 27 Q20 33 27 27" stroke="#0B2E20" strokeWidth="2.4" fill="none" strokeLinecap="round" />
+            </svg>
           </div>
           <div>
             <div className="text-sm font-semibold">Assistant EmpireGuichet</div>
