@@ -1455,9 +1455,16 @@ export default function GuichetApp() {
     if (!error && data) setAgentChatMessages(data);
   }
 
+  // Remplace tout lien (http://, https://, www...) par un texte neutre —
+  // la discussion entre agents doit rester anonyme, on ne veut pas que des
+  // liens externes (phishing, doxxing…) y circulent.
+  function stripLinks(text) {
+    return text.replace(/(https?:\/\/\S+)|(\bwww\.\S+)/gi, "[lien non autorisé]");
+  }
+
   async function handleSendChatMessage() {
     if (!agent || !agentChatInput.trim()) return;
-    const content = agentChatInput.trim();
+    const content = stripLinks(agentChatInput.trim());
     setAgentChatInput("");
     const { data, error } = await supabase
       .from("chat_messages")
