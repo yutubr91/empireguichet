@@ -1427,7 +1427,16 @@ export default function GuichetApp() {
     if (data) setChatShowRealName(!!data.chat_show_real_name);
     if (agent.role === "manager") {
       const { data: team } = await supabase.rpc("get_team_members");
-      if (team) setChatTeamList(team);
+      const { data: unreadContacts } = await supabase.rpc("get_unread_private_contacts");
+      if (team) {
+        // On ajoute aussi les personnes ayant un message privé non lu mais
+        // qui ne sont plus dans l'équipe actuelle (ex : agent promu chef
+        // d'agence depuis) — sinon leur pastille de notification reste
+        // coincée pour toujours faute de pouvoir rouvrir la conversation.
+        const known = new Set(team.map((t) => t.id));
+        const extra = (unreadContacts || []).filter((c) => !known.has(c.id));
+        setChatTeamList([...team, ...extra]);
+      }
     } else {
       const { data: mgr } = await supabase.rpc("get_my_manager");
       if (mgr && mgr.length > 0) setChatMyManager(mgr[0]);
