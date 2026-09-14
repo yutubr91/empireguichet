@@ -3043,6 +3043,27 @@ export default function GuichetApp() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [agent?.id]);
 
+  // Dès que la session de l'agent est prête, on retente d'envoyer la file
+  // d'attente hors-ligne : la toute première tentative (juste après le
+  // chargement de la page) échoue souvent silencieusement parce que la
+  // session n'est pas encore prête, et les transactions restaient alors
+  // coincées pour toujours — un vrai passage hors-ligne → en ligne étant
+  // rare une fois connecté au wifi.
+  useEffect(() => {
+    if (agent?.id && isOnline) flushOfflineQueue();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [agent?.id]);
+
+  // Filet de sécurité : tant qu'il reste des transactions en attente et
+  // qu'on est en ligne, on retente régulièrement plutôt que de dépendre
+  // uniquement d'un événement "online" qui peut ne jamais se reproduire.
+  useEffect(() => {
+    if (!isOnline || offlineQueue.length === 0) return;
+    const id = setInterval(() => flushOfflineQueue(), 30000);
+    return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOnline, offlineQueue.length]);
+
   useEffect(() => {
     if (!pending) return;
     const t = setTimeout(async () => {
