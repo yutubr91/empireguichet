@@ -2998,8 +2998,15 @@ export default function GuichetApp() {
         let syncedCount = 0;
         for (const tx of current) {
           const { error } = await supabase.from("transactions").insert(tx);
-          if (error) remaining.push(tx);
-          else syncedCount++;
+          if (error) {
+            // On journalise l'erreur exacte : sans ça, une transaction qui
+            // échoue à cause d'une donnée invalide (pas d'un simple souci de
+            // réseau) reste coincée indéfiniment sans qu'on sache pourquoi.
+            console.error("Échec de synchronisation d'une transaction en attente :", error.message, tx);
+            remaining.push(tx);
+          } else {
+            syncedCount++;
+          }
         }
         persistOfflineQueue(remaining);
         setSyncingOffline(false);
