@@ -97,6 +97,76 @@ async function invokeEdgeFunction(name, body) {
 }
 
 // ===== Tarification de l'abonnement EmpireGuichet =====
+// ===== Chiffrement de la file de transactions hors-ligne =====
+// Les transactions en attente de synchronisation (téléphone, montant)
+// contiennent des données sensibles. Elles sont chiffrées avant d'être
+// écrites dans localStorage avec une clé AES-GCM NON-EXTRACTIBLE générée
+// par le navigateur et stockée dans IndexedDB : aucun code JavaScript,
+// même sur ce site, ne peut jamais lire ou copier la clé elle-même une
+// fois créée — seul le navigateur peut l'utiliser pour chiffrer/déchiffrer.
+// Un vol de données brutes sur l'appareil (sauvegarde, outil d'extraction
+// hors du navigateur) ne récupère donc que du texte chiffré illisible.
+const OFFLINE_DB_NAME = "eg_secure_store";
+const OFFLINE_DB_STORE = "keys";
+const OFFLINE_KEY_ID = "offline_queue_key";
+
+function openOfflineKeyDb() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(OFFLINE_DB_NAME, 1);
+    req.onupgradeneeded = () => {
+      req.result.createObjectStore(OFFLINE_DB_STORE);
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function getOrCreateOfflineKey() {
+  const db = await openOfflineKeyDb();
+  const existing = await new Promise((resolve, reject) => {
+    const tx = db.transaction(OFFLINE_DB_STORE, "readonly");
+    const req = tx.objectStore(OFFLINE_DB_STORE).get(OFFLINE_KEY_ID);
+    req.onsuccess = () => resolve(req.result || null);
+    req.onerror = () => reject(req.error);
+  });
+  if (existing) return existing;
+  const key = await crypto.subtle.generateKey({ name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]);
+  await new Promise((resolve, reject) => {
+    const tx = db.transaction(OFFLINE_DB_STORE, "readwrite");
+    tx.objectStore(OFFLINE_DB_STORE).put(key, OFFLINE_KEY_ID);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+  return key;
+}
+
+function bufToB64(buf) {
+  return btoa(String.fromCharCode(...new Uint8Array(buf)));
+}
+function b64ToBuf(b64) {
+  return Uint8Array.from(atob(b64), (c) => c.charCodeAt(0)).buffer;
+}
+
+async function encryptOfflineQueue(queue) {
+  const key = await getOrCreateOfflineKey();
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const encoded = new TextEncoder().encode(JSON.stringify(queue));
+  const cipher = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, encoded);
+  return { v: 1, iv: bufToB64(iv), data: bufToB64(cipher) };
+}
+
+async function decryptOfflineQueue(stored) {
+  try {
+    if (!stored || !stored.data || !stored.iv) return [];
+    const key = await getOrCreateOfflineKey();
+    const iv = new Uint8Array(b64ToBuf(stored.iv));
+    const plain = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, b64ToBuf(stored.data));
+    return JSON.parse(new TextDecoder().decode(plain));
+  } catch {
+    return [];
+  }
+}
+
 const SUBSCRIPTION_PERIOD_MONTHS = 6;
 const SUBSCRIPTION_PRICING = {
   agent: 2500,
@@ -841,14 +911,25 @@ export default function GuichetApp() {
   // --- Gestion hors-ligne : statut de connexion + file d'attente locale des
   // transactions non encore synchronisées avec Supabase ---
   const [isOnline, setIsOnline] = useState(typeof navigator !== "undefined" ? navigator.onLine : true);
-  const [offlineQueue, setOfflineQueue] = useState(() => {
-    try {
-      const raw = localStorage.getItem("eg_offline_queue");
-      return raw ? JSON.parse(raw) : [];
-    } catch {
-      return [];
-    }
-  });
+  const [offlineQueue, setOfflineQueue] = useState([]);
+  // Chargement au démarrage : déchiffre la file stockée. Gère aussi la
+  // migration d'anciennes files sauvegardées en clair (avant ce correctif) —
+  // si le contenu est un tableau brut plutôt que l'objet chiffré, il est
+  // repris tel quel puis rechiffré au prochain persistOfflineQueue().
+  useEffect(() => {
+    (async () => {
+      try {
+        const raw = localStorage.getItem("eg_offline_queue");
+        if (!raw) return;
+        const parsed = JSON.parse(raw);
+        const queue = Array.isArray(parsed) ? parsed : await decryptOfflineQueue(parsed);
+        if (queue.length) setOfflineQueue(queue);
+      } catch {
+        // file illisible/corrompue : on repart d'une file vide plutôt que
+        // de bloquer le chargement de l'appli.
+      }
+    })();
+  }, []);
   const [syncingOffline, setSyncingOffline] = useState(false);
   const demoRef = useRef(null);
   const annonceursRef = useRef(null);
@@ -2978,11 +3059,12 @@ export default function GuichetApp() {
   // localStorage, pour qu'elle survive à une fermeture de l'appli.
   function persistOfflineQueue(queue) {
     setOfflineQueue(queue);
-    try {
-      localStorage.setItem("eg_offline_queue", JSON.stringify(queue));
-    } catch {
-      // stockage plein ou indisponible — la file reste au moins en mémoire
-    }
+    encryptOfflineQueue(queue)
+      .then((enc) => localStorage.setItem("eg_offline_queue", JSON.stringify(enc)))
+      .catch(() => {
+        // chiffrement indisponible (navigateur trop ancien/contexte non
+        // sécurisé) — la file reste au moins en mémoire pour cette session.
+      });
   }
 
   // Tente d'envoyer à Supabase toutes les transactions en attente. Les

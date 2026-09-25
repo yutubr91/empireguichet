@@ -35,10 +35,24 @@
 // (colonnes login_failed_attempts / login_locked_until sur agents).
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+// CORS restreint : seules les origines listées ici peuvent appeler cette
+// fonction depuis un navigateur (avant, "*" acceptait n'importe quel site).
+// Ajoute ton domaine personnalisé ici si tu en configures un plus tard.
+const ALLOWED_ORIGINS = new Set([
+  "https://empireguichet.vercel.app",
+  "http://localhost:5173",
+  "http://localhost:3000",
+]);
+
+function getCorsHeaders(req: Request) {
+  const origin = req.headers.get("origin") || "";
+  const allowOrigin = ALLOWED_ORIGINS.has(origin) ? origin : "https://empireguichet.vercel.app";
+  return {
+    "Access-Control-Allow-Origin": allowOrigin,
+    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+    "Vary": "Origin",
+  };
+}
 
 const MAX_ATTEMPTS = 5;
 const LOCKOUT_MINUTES = 15;
@@ -61,16 +75,17 @@ function lockedMessage(lockedUntil: Date) {
 // statut d'erreur (401, 429...) ferait disparaître notre message précis
 // derrière une erreur générique. Le vrai résultat est donc uniquement
 // porté par le contenu (error / access_token...), jamais par le code HTTP.
-function json(body: unknown) {
-  return new Response(JSON.stringify(body), {
-    status: 200,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
-  });
-}
-
 Deno.serve(async (req) => {
+  const cors = getCorsHeaders(req);
+  function json(body: unknown) {
+    return new Response(JSON.stringify(body), {
+      status: 200,
+      headers: { ...cors, "Content-Type": "application/json" },
+    });
+  }
+
   if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
+    return new Response("ok", { headers: cors });
   }
 
   try {

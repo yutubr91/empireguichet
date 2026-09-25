@@ -22,24 +22,39 @@
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
 import bcrypt from "npm:bcryptjs@3.0.3";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+// CORS restreint : seules les origines listées ici peuvent appeler cette
+// fonction depuis un navigateur (avant, "*" acceptait n'importe quel site).
+// Ajoute ton domaine personnalisé ici si tu en configures un plus tard.
+const ALLOWED_ORIGINS = new Set([
+  "https://empireguichet.vercel.app",
+  "http://localhost:5173",
+  "http://localhost:3000",
+]);
+
+function getCorsHeaders(req) {
+  const origin = req.headers.get("origin") || "";
+  const allowOrigin = ALLOWED_ORIGINS.has(origin) ? origin : "https://empireguichet.vercel.app";
+  return {
+    "Access-Control-Allow-Origin": allowOrigin,
+    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+    "Vary": "Origin",
+  };
+}
 
 const MAX_ATTEMPTS = 5;
 const LOCKOUT_MINUTES = 15;
 
-function json(body: unknown, status = 200) {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
-  });
-}
-
 Deno.serve(async (req) => {
+  const cors = getCorsHeaders(req);
+  function json(body: unknown, status = 200) {
+    return new Response(JSON.stringify(body), {
+      status,
+      headers: { ...cors, "Content-Type": "application/json" },
+    });
+  }
+
   if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
+    return new Response("ok", { headers: cors });
   }
   if (req.method !== "POST") {
     return json({ error: "Méthode non autorisée." });
