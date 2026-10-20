@@ -75,6 +75,7 @@ import {
 } from "recharts";
 import { supabase } from "./supabaseClient";
 import ChatBot from "./ChatBot";
+import jsQR from "jsqr";
 
 // Appelle une Edge Function et renvoie toujours le corps JSON de la
 // réponse, que le statut HTTP soit un succès ou une erreur (401, 404,
@@ -754,6 +755,135 @@ function shadeColor(hex, percent) {
   return "#" + (0x1000000 + R * 0x10000 + G * 0x100 + B).toString(16).slice(1);
 }
 
+// Extrait la référence utile d'un QR code client : numéro (chiffres seuls) ou texte brut
+// (adresse PI-SPI, lien de paiement, etc.), tronqué à 200 caractères.
+function parseQrPayload(raw) {
+  const text = String(raw || "").trim().replace(/^tel:/i, "");
+  if (/^\+?[\d\s().-]{8,20}$/.test(text)) return text.replace(/\D/g, "");
+  return text.slice(0, 200);
+}
+
+// Scanner de QR code : caméra arrière en direct, ou import d'une image (capture d'écran du QR du client).
+function QrScanModal({ onResult, onClose, colors }) {
+  const videoRef = useRef(null);
+  const canvasRef = useRef(null);
+  const fileRef = useRef(null);
+  const [error, setError] = useState("");
+
+  function decodeFromSource(source, w, h) {
+    const canvas = canvasRef.current;
+    if (!canvas || !w || !h) return null;
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    ctx.drawImage(source, 0, 0, w, h);
+    const img = ctx.getImageData(0, 0, w, h);
+    const code = jsQR(img.data, w, h, { inversionAttempts: "attemptBoth" });
+    return code ? code.data : null;
+  }
+
+  useEffect(() => {
+    let stream = null;
+    let raf = 0;
+    let stopped = false;
+    async function start() {
+      if (!navigator.mediaDevices?.getUserMedia) {
+        setError("Caméra indisponible sur cet appareil. Importe une image du QR code à la place.");
+        return;
+      }
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" } }, audio: false });
+        if (stopped) {
+          stream.getTracks().forEach((t) => t.stop());
+          return;
+        }
+        const video = videoRef.current;
+        video.srcObject = stream;
+        await video.play();
+        const tick = () => {
+          if (stopped) return;
+          if (video.readyState === video.HAVE_ENOUGH_DATA) {
+            const value = decodeFromSource(video, video.videoWidth, video.videoHeight);
+            if (value) {
+              onResult(value);
+              return;
+            }
+          }
+          raf = requestAnimationFrame(tick);
+        };
+        raf = requestAnimationFrame(tick);
+      } catch (err) {
+        setError("Accès à la caméra refusé. Autorise la caméra ou importe une image du QR code.");
+      }
+    }
+    start();
+    return () => {
+      stopped = true;
+      cancelAnimationFrame(raf);
+      if (stream) stream.getTracks().forEach((t) => t.stop());
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function handleFile(e) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      const value = decodeFromSource(img, img.naturalWidth, img.naturalHeight);
+      URL.revokeObjectURL(url);
+      if (value) onResult(value);
+      else setError("Aucun QR code lisible dans cette image. Réessaie avec une image plus nette.");
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      setError("Impossible de lire cette image.");
+    };
+    img.src = url;
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ background: "rgba(0,0,0,0.6)" }}
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-sm p-5 rounded-xl"
+        style={{ background: colors.surface, border: `1px solid ${colors.surfaceLine}`, color: colors.text }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between mb-3">
+          <div className="text-sm font-medium">Scanner le QR code du client</div>
+          <button type="button" onClick={onClose} className="gc-btn text-xs px-2 py-1 rounded" style={{ color: colors.textMuted }}>
+            Fermer
+          </button>
+        </div>
+        <div className="rounded-lg overflow-hidden mb-3" style={{ background: "#000", aspectRatio: "1 / 1" }}>
+          <video ref={videoRef} playsInline muted className="w-full h-full object-cover" />
+        </div>
+        <canvas ref={canvasRef} style={{ display: "none" }} />
+        {error && (
+          <p className="text-xs mb-3" style={{ color: colors.danger }}>
+            {error}
+          </p>
+        )}
+        <input ref={fileRef} type="file" accept="image/*" onChange={handleFile} style={{ display: "none" }} />
+        <button
+          type="button"
+          onClick={() => fileRef.current?.click()}
+          className="gc-btn w-full py-2.5 rounded-lg text-xs font-medium flex items-center justify-center gap-1.5"
+          style={{ background: colors.bgSoft, color: colors.text, border: `1px solid ${colors.surfaceLine}` }}
+        >
+          <Upload size={14} /> Importer une image du QR code
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function NetworkBadge({ net, size = 40, colors = DARK_COLORS }) {
   const Icon = NETWORK_ICONS[net.id] || Smartphone;
   const chipSize = Math.max(Math.round(size * 0.4), 15);
@@ -903,6 +1033,9 @@ export default function GuichetApp() {
   const [amount, setAmount] = useState("");
   const [phone, setPhone] = useState("");
   const [txCountryCode, setTxCountryCode] = useState("+225");
+  // Mode d'identification du client pour MTN / Orange / Moov / Wave : "phone" | "qr" | "spi"
+  const [idMode, setIdMode] = useState("phone");
+  const [qrScanOpen, setQrScanOpen] = useState(false);
   const [ticketCounter, setTicketCounter] = useState(4);
   const [history, setHistory] = useState([]);
   const [pending, setPending] = useState(null);
@@ -3197,6 +3330,8 @@ export default function GuichetApp() {
   const amtNum = parseFloat(amount) || 0;
   const fee = amtNum * net.fee;
   const total = amtNum + fee;
+  const supportsIdModes = ["mtn", "orange", "moov", "wave"].includes(net.id);
+  const idModeEff = supportsIdModes ? idMode : "phone";
 
   // Préfixes officiels des opérateurs télécom, vérifiés pays par pays (sources : régulateurs
   // télécom nationaux / Wikipédia). Un réseau absent de la liste d'un pays (ex. MTN au Sénégal,
@@ -3232,19 +3367,31 @@ export default function GuichetApp() {
     e.preventDefault();
     setFormError("");
     if (!amtNum || !phone) {
-      setFormError("Renseigne un montant et un numéro valides.");
+      setFormError(
+        idModeEff === "qr"
+          ? "Scanne le QR code du client et renseigne un montant."
+          : idModeEff === "spi"
+          ? "Renseigne l'adresse PI-SPI du client et un montant."
+          : "Renseigne un montant et un numéro valides."
+      );
       return;
     }
     if (amtNum > MAX_TRANSACTION) {
       setFormError(`Montant au-delà de la limite simulée par transaction (${formatFCFA(MAX_TRANSACTION)}).`);
       return;
     }
-    if (net.type === "momo" && phone.replace(/\D/g, "").length < 8) {
+    if (net.type === "momo" && idModeEff === "phone" && phone.replace(/\D/g, "").length < 8) {
       setFormError("Le numéro de téléphone semble incomplet.");
       return;
     }
     const countryName = COUNTRY_CODES.find((c) => c.code === txCountryCode)?.name || txCountryCode;
-    if (net.id === "wave") {
+    if (idModeEff === "spi" && !/^[A-Za-z0-9._@+-]{3,80}$/.test(phone.trim())) {
+      setFormError("Adresse PI-SPI invalide (3 à 80 caractères, sans espace).");
+      return;
+    }
+    if (idModeEff !== "phone") {
+      // QR code ou adresse PI-SPI : pas de contrôle de préfixe téléphonique
+    } else if (net.id === "wave") {
       if (!WAVE_AVAILABLE_COUNTRIES.includes(txCountryCode)) {
         setFormError(`Wave n'est pas encore confirmé disponible en ${countryName}. Vérifie le pays ou change de réseau.`);
         return;
@@ -3270,7 +3417,8 @@ export default function GuichetApp() {
       id: ticketCounter,
       net: net.id,
       amount: amtNum,
-      phone,
+      phone: idModeEff === "phone" ? phone : phone.trim(),
+      idMode: idModeEff,
       status: "En cours",
       time: "À l'instant",
       direction: net.type === "momo" || net.type === "crypto" ? txDirection : "paiement",
@@ -3318,7 +3466,7 @@ export default function GuichetApp() {
       "Reçu EmpireGuichet",
       `Ticket #${String(receipt.id).padStart(5, "0")}`,
       `Service : ${n.name}`,
-      `Référence : ${receipt.phone}`,
+      `${receipt.idMode === "spi" ? "Adresse PI-SPI" : receipt.idMode === "qr" ? "QR code" : "Référence"} : ${receipt.phone}`,
       `Montant : ${formatFCFA(receipt.amount)}`,
       `Frais : ${formatFCFA(rFee)}`,
       `Total : ${formatFCFA(receipt.amount + rFee)}`,
@@ -5302,24 +5450,86 @@ export default function GuichetApp() {
                 </>
               )}
 
+              {supportsIdModes && (
+                <>
+                  <label className="text-xs mb-2 block" style={{ color: COLORS.textMuted }}>Identifier le client par</label>
+                  <div className="grid grid-cols-3 gap-2 mb-4">
+                    {[
+                      { id: "phone", label: "Numéro", Icon: Phone },
+                      { id: "qr", label: "QR code", Icon: QrCode },
+                      { id: "spi", label: "PI-SPI", Icon: Send },
+                    ].map((m) => (
+                      <button
+                        type="button"
+                        key={m.id}
+                        onClick={() => {
+                          setIdMode(m.id);
+                          setPhone("");
+                          setFormError("");
+                        }}
+                        className="gc-btn flex items-center justify-center gap-1.5 py-2.5 rounded-lg text-xs font-medium"
+                        style={
+                          idModeEff === m.id
+                            ? { background: COLORS.gold, color: "#052E36" }
+                            : { background: COLORS.bgSoft, color: COLORS.textMuted, border: `1px solid ${COLORS.surfaceLine}` }
+                        }
+                      >
+                        <m.Icon size={14} /> {m.label}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
               <label className="text-xs mb-2 block" style={{ color: COLORS.textMuted }}>
-                {NETWORK_TYPE_LABELS[net.type].field}
+                {idModeEff === "qr" ? "QR code du client" : idModeEff === "spi" ? "Adresse PI-SPI du client" : NETWORK_TYPE_LABELS[net.type].field}
               </label>
-              {net.type === "momo" && (
-                <div className="mb-2">
-                  <CountryDropdown value={txCountryCode} onChange={setTxCountryCode} colors={COLORS} width="100%" />
+              {idModeEff === "phone" && (
+                <>
+                  {net.type === "momo" && (
+                    <div className="mb-2">
+                      <CountryDropdown value={txCountryCode} onChange={setTxCountryCode} colors={COLORS} width="100%" />
+                    </div>
+                  )}
+                  <input
+                    value={phone}
+                    onChange={(e) =>
+                      setPhone(net.type === "momo" ? sanitizePhoneDigits(e.target.value, txCountryCode) : e.target.value)
+                    }
+                    placeholder={NETWORK_TYPE_LABELS[net.type].placeholder}
+                    maxLength={net.type === "momo" ? (COUNTRY_CODES.find((c) => c.code === txCountryCode)?.phoneLength || 10) : undefined}
+                    className="w-full px-3.5 py-2.5 rounded-lg text-sm mb-5 outline-none"
+                    style={{ background: COLORS.bgSoft, border: `1px solid ${COLORS.surfaceLine}`, color: COLORS.text }}
+                  />
+                </>
+              )}
+              {idModeEff === "qr" && (
+                <div className="mb-5">
+                  <button
+                    type="button"
+                    onClick={() => setQrScanOpen(true)}
+                    className="gc-btn w-full py-2.5 rounded-lg text-xs font-medium flex items-center justify-center gap-1.5"
+                    style={{ background: COLORS.bgSoft, color: COLORS.text, border: `1px solid ${COLORS.surfaceLine}` }}
+                  >
+                    <QrCode size={14} /> {phone ? "Scanner un autre QR code" : "Scanner le QR code"}
+                  </button>
+                  {phone && (
+                    <div className="mt-2 text-xs gc-mono break-all" style={{ color: COLORS.teal }}>
+                      QR lu : {phone}
+                    </div>
+                  )}
                 </div>
               )}
-              <input
-                value={phone}
-                onChange={(e) =>
-                  setPhone(net.type === "momo" ? sanitizePhoneDigits(e.target.value, txCountryCode) : e.target.value)
-                }
-                placeholder={NETWORK_TYPE_LABELS[net.type].placeholder}
-                maxLength={net.type === "momo" ? (COUNTRY_CODES.find((c) => c.code === txCountryCode)?.phoneLength || 10) : undefined}
-                className="w-full px-3.5 py-2.5 rounded-lg text-sm mb-5 outline-none"
-                style={{ background: COLORS.bgSoft, border: `1px solid ${COLORS.surfaceLine}`, color: COLORS.text }}
-              />
+              {idModeEff === "spi" && (
+                <input
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value.replace(/\s/g, "").slice(0, 80))}
+                  placeholder="Adresse PI-SPI (alias du client)"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  className="w-full px-3.5 py-2.5 rounded-lg text-sm mb-5 outline-none gc-mono"
+                  style={{ background: COLORS.bgSoft, border: `1px solid ${COLORS.surfaceLine}`, color: COLORS.text }}
+                />
+              )}
 
               <label className="text-xs mb-2 block" style={{ color: COLORS.textMuted }}>Montant (FCFA)</label>
               <input
@@ -5363,6 +5573,17 @@ export default function GuichetApp() {
                 {pending ? "Traitement en cours…" : "Continuer — confirmer par PIN"}
               </button>
             </form>
+            {qrScanOpen && (
+              <QrScanModal
+                colors={COLORS}
+                onClose={() => setQrScanOpen(false)}
+                onResult={(value) => {
+                  setPhone(parseQrPayload(value));
+                  setQrScanOpen(false);
+                  setFormError("");
+                }}
+              />
+            )}
 
             {/* Ticket preview */}
             <div>
@@ -5417,7 +5638,7 @@ export default function GuichetApp() {
                       )}
                     </div>
                     <div className="text-xs gc-mono" style={{ color: COLORS.textMuted }}>
-                      {phone || "—"}
+                      {phone ? (idModeEff !== "phone" && phone.length > 28 ? phone.slice(0, 28) + "…" : phone) : "—"}
                     </div>
                   </div>
                 </div>
