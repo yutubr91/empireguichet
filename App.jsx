@@ -1049,6 +1049,10 @@ export default function GuichetApp() {
   const [linkMsg, setLinkMsg] = useState(null);
   const [linkBusy, setLinkBusy] = useState("");
   const [linkScanFor, setLinkScanFor] = useState(null);
+  // Attribution des numéros aux agents : lignes { account_id, agent_id }. Un numéro sans ligne = utilisable par tous les agents.
+  const [linkAssignments, setLinkAssignments] = useState([]);
+  const [assignOpenFor, setAssignOpenFor] = useState(null);
+  const [txAccountId, setTxAccountId] = useState(""); // numéro de l'agence choisi pour la transaction en cours
   const [ticketCounter, setTicketCounter] = useState(4);
   const [history, setHistory] = useState([]);
   const [pending, setPending] = useState(null);
@@ -1877,7 +1881,7 @@ export default function GuichetApp() {
   }
 
   useEffect(() => {
-    if (tab === "equipe" && agent?.role === "manager") loadRealTeam();
+    if ((tab === "equipe" || tab === "comptes") && agent?.role === "manager") loadRealTeam();
     if (tab === "parrainage" && agent) loadRealReferrals();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab]);
@@ -1925,13 +1929,54 @@ export default function GuichetApp() {
     if (!error && data) {
       setLinkedAccounts(data);
       setLinkedLoaded(true);
+      const ids = data.map((a) => a.id);
+      if (ids.length > 0) {
+        // Si la migration « attribution » n'est pas encore exécutée, cette requête échoue : on retombe sur « tous les agents ».
+        const { data: rows, error: assignErr } = await supabase
+          .from("agency_linked_account_agents")
+          .select("account_id, agent_id")
+          .in("account_id", ids);
+        setLinkAssignments(!assignErr && rows ? rows : []);
+      } else {
+        setLinkAssignments([]);
+      }
     }
+  }
+
+  // Numéros de l'agence que l'utilisateur peut utiliser sur un réseau : le chef les a tous ; un agent a ceux qui lui sont
+  // attribués, plus ceux qui n'ont été attribués à personne (partagés avec tous les agents).
+  function availableAccountsFor(netId) {
+    const accs = linkedAccounts.filter((a) => a.network === netId);
+    if (agent?.role === "manager") return accs;
+    return accs.filter((a) => {
+      const rows = linkAssignments.filter((r) => r.account_id === a.id);
+      return rows.length === 0 || rows.some((r) => r.agent_id === agent?.id);
+    });
+  }
+
+  async function toggleAssignment(accountId, agentId) {
+    if (agent?.role !== "manager") return;
+    setLinkMsg(null);
+    const exists = linkAssignments.some((r) => r.account_id === accountId && r.agent_id === agentId);
+    setLinkBusy("assign");
+    const { error } = exists
+      ? await supabase.from("agency_linked_account_agents").delete().eq("account_id", accountId).eq("agent_id", agentId)
+      : await supabase.from("agency_linked_account_agents").insert({ account_id: accountId, agent_id: agentId });
+    setLinkBusy("");
+    if (error) {
+      setLinkMsg({
+        type: "error",
+        text: "Impossible de modifier l'attribution. Vérifie que la migration SQL « attribution des numéros aux agents » a bien été exécutée.",
+      });
+      return;
+    }
+    loadLinkedAccounts();
   }
 
   useEffect(() => {
     if (agent?.agencyId) loadLinkedAccounts();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [agent?.agencyId, tab === "comptes"]);
+  }, [agent?.agencyId, tab === "comptes", tab === "transaction"]);
 
   function linkField(netId, key) {
     const draft = linkForm[netId];
@@ -3331,7 +3376,7 @@ export default function GuichetApp() {
         const remaining = [];
         let syncedCount = 0;
         for (const tx of current) {
-          const { error } = await supabase.from("transactions").insert(tx);
+          const { error } = await supabase.from("transactions").insert({ network: tx.net, ...tx });
           if (error) {
             // On journalise l'erreur exacte : sans ça, une transaction qui
             // échoue à cause d'une donnée invalide (pas d'un simple souci de
@@ -3423,10 +3468,14 @@ export default function GuichetApp() {
           agency_id: agent.agencyId,
           ticket_id: completed.id,
           net: completed.net,
+          // La colonne « network » est obligatoire (NOT NULL, sans valeur par défaut) dans la base : on la renseigne avec le même réseau.
+          network: completed.net,
           amount: completed.amount,
           phone: completed.phone,
           direction: completed.direction,
           status: "Terminé",
+          // Numéro de l'agence utilisé (colonne ajoutée par la migration « attribution ») : omis s'il n'y en a pas.
+          ...(completed.linkedAccountId ? { linked_account_id: completed.linkedAccountId } : {}),
         };
         if (!navigator.onLine) {
           persistOfflineQueue([...offlineQueue, txPayload]);
@@ -3451,6 +3500,9 @@ export default function GuichetApp() {
   const total = amtNum + fee;
   const supportsIdModes = ["mtn", "orange", "moov", "wave"].includes(net.id);
   const idModeEff = supportsIdModes ? idMode : "phone";
+  const availableAccounts = LINKABLE_NETWORK_IDS.includes(net.id) ? availableAccountsFor(net.id) : [];
+  const chosenAccountId =
+    availableAccounts.length === 1 ? availableAccounts[0].id : availableAccounts.some((a) => a.id === txAccountId) ? txAccountId : "";
 
   // Préfixes officiels des opérateurs télécom, vérifiés pays par pays (sources : régulateurs
   // télécom nationaux / Wikipédia). Un réseau absent de la liste d'un pays (ex. MTN au Sénégal,
@@ -3492,6 +3544,16 @@ export default function GuichetApp() {
           : `Ton chef d'agence n'a pas encore relié son compte ${net.name}. Demande-lui de le faire dans « Comptes liés ».`
       );
       return;
+    }
+    if (linkedLoaded && LINKABLE_NETWORK_IDS.includes(net.id) && linkedAccounts.some((a) => a.network === net.id)) {
+      if (availableAccounts.length === 0) {
+        setFormError(`Aucun numéro ${net.name} ne t'est attribué. Demande à ton chef d'agence de t'en attribuer un dans « Comptes liés ».`);
+        return;
+      }
+      if (!chosenAccountId) {
+        setFormError(`Choisis le numéro ${net.name} de l'agence utilisé pour cette transaction.`);
+        return;
+      }
     }
     if (!amtNum || !phone) {
       setFormError(
@@ -3546,6 +3608,7 @@ export default function GuichetApp() {
       amount: amtNum,
       phone: idModeEff === "phone" ? phone : phone.trim(),
       idMode: idModeEff,
+      linkedAccountId: chosenAccountId || null,
       status: "En cours",
       time: "À l'instant",
       direction: net.type === "momo" || net.type === "crypto" ? txDirection : "paiement",
@@ -3577,6 +3640,7 @@ export default function GuichetApp() {
     setDraftEntry(null);
     setAmount("");
     setPhone("");
+    setTxAccountId("");
   }
 
   function handlePinCancel() {
@@ -5579,32 +5643,53 @@ export default function GuichetApp() {
               )}
 
               {linkedLoaded && LINKABLE_NETWORK_IDS.includes(net.id) && (() => {
-                const accs = linkedAccounts.filter((a) => a.network === net.id);
-                const acc = accs[0];
+                const allAccs = linkedAccounts.filter((a) => a.network === net.id);
+                const accs = availableAccounts;
+                const ok = accs.length > 0;
                 return (
                   <div
                     className="p-3 rounded-lg mb-4 text-xs"
                     style={{
-                      background: acc ? "rgba(43,191,138,0.1)" : "rgba(226,104,94,0.1)",
-                      border: `1px solid ${acc ? COLORS.teal : COLORS.danger}`,
+                      background: ok ? "rgba(43,191,138,0.1)" : "rgba(226,104,94,0.1)",
+                      border: `1px solid ${ok ? COLORS.teal : COLORS.danger}`,
                       color: COLORS.text,
                     }}
                   >
-                    {acc ? (
+                    {ok ? (
                       <>
-                        {accs.length > 1 ? `Comptes ${net.name} de l'agence :` : `Compte ${net.name} de l'agence :`}
-                        {accs.map((a) => (
-                          <div key={a.id} className="gc-mono break-all">
-                            {a.label ? `${a.label} — ` : ""}
-                            {a.identifier}
-                            {a.crypto_network ? ` (${a.crypto_network})` : ""}
+                        {accs.length > 1 ? `Numéros ${net.name} à ta disposition :` : `Numéro ${net.name} à ta disposition :`}
+                        {accs.length === 1 ? (
+                          <div className="gc-mono break-all">
+                            {accs[0].label ? `${accs[0].label} — ` : ""}
+                            {accs[0].identifier}
+                            {accs[0].crypto_network ? ` (${accs[0].crypto_network})` : ""}
                           </div>
-                        ))}
+                        ) : (
+                          <select
+                            value={chosenAccountId}
+                            onChange={(e) => setTxAccountId(e.target.value)}
+                            className="w-full mt-2 px-3 py-2 rounded-lg text-xs gc-mono outline-none"
+                            style={{ background: COLORS.bgSoft, border: `1px solid ${COLORS.surfaceLine}`, color: COLORS.text }}
+                          >
+                            <option value="">Choisis le numéro utilisé…</option>
+                            {accs.map((a) => (
+                              <option key={a.id} value={a.id}>
+                                {a.label ? `${a.label} — ` : ""}
+                                {a.identifier}
+                                {a.crypto_network ? ` (${a.crypto_network})` : ""}
+                              </option>
+                            ))}
+                          </select>
+                        )}
                       </>
-                    ) : agent?.role === "manager" ? (
-                      <>Compte {net.name} non relié. Relie-le dans l'onglet « Comptes liés » pour travailler sur ce réseau.</>
+                    ) : allAccs.length === 0 ? (
+                      agent?.role === "manager" ? (
+                        <>Compte {net.name} non relié. Relie-le dans l'onglet « Comptes liés » pour travailler sur ce réseau.</>
+                      ) : (
+                        <>Ton chef d'agence n'a pas encore relié son compte {net.name}. Tu pourras travailler sur ce réseau dès qu'il l'aura fait.</>
+                      )
                     ) : (
-                      <>Ton chef d'agence n'a pas encore relié son compte {net.name}. Tu pourras travailler sur ce réseau dès qu'il l'aura fait.</>
+                      <>Aucun numéro {net.name} ne t'est attribué. Demande à ton chef d'agence de t'en attribuer un dans « Comptes liés ».</>
                     )}
                   </div>
                 );
@@ -6932,10 +7017,12 @@ export default function GuichetApp() {
             </div>
             {(() => {
               const volumeByNet = {};
+              const volumeByAccount = {};
               let totalVolume = 0;
               teamTransactions.forEach((t) => {
                 if (t.status !== "Terminé" || !LINKABLE_NETWORK_IDS.includes(t.net)) return;
                 volumeByNet[t.net] = (volumeByNet[t.net] || 0) + (Number(t.amount) || 0);
+                if (t.linked_account_id) volumeByAccount[t.linked_account_id] = (volumeByAccount[t.linked_account_id] || 0) + (Number(t.amount) || 0);
                 totalVolume += Number(t.amount) || 0;
               });
               return (
@@ -6980,37 +7067,81 @@ export default function GuichetApp() {
                           </div>
                           {accs.length > 0 && (
                             <div className="flex flex-col gap-2 mb-3">
-                              {accs.map((a) => (
-                                <div
-                                  key={a.id}
-                                  className="flex items-center gap-2 p-2 rounded-lg text-xs"
-                                  style={{ background: COLORS.bgSoft, border: `1px solid ${COLORS.surfaceLine}` }}
-                                >
-                                  <div className="flex-1 min-w-0">
-                                    {a.label && <div className="font-medium truncate">{a.label}</div>}
-                                    <div className="gc-mono break-all" style={{ color: COLORS.textMuted }}>
-                                      {a.identifier}
-                                      {a.crypto_network ? ` (${a.crypto_network})` : ""}
+                              {accs.map((a) => {
+                                const assigned = linkAssignments.filter((r) => r.account_id === a.id).map((r) => r.agent_id);
+                                const assignedNames = assigned.map((id) => realTeam.find((m) => m.id === id)?.full_name || "Agent");
+                                return (
+                                  <div
+                                    key={a.id}
+                                    className="p-2 rounded-lg text-xs"
+                                    style={{ background: COLORS.bgSoft, border: `1px solid ${COLORS.surfaceLine}` }}
+                                  >
+                                    <div className="flex items-center gap-2">
+                                      <div className="flex-1 min-w-0">
+                                        {a.label && <div className="font-medium truncate">{a.label}</div>}
+                                        <div className="gc-mono break-all" style={{ color: COLORS.textMuted }}>
+                                          {a.identifier}
+                                          {a.crypto_network ? ` (${a.crypto_network})` : ""}
+                                        </div>
+                                        {(a.spi_address || a.qr_payload) && (
+                                          <div className="text-[10px]" style={{ color: COLORS.textMuted }}>
+                                            {a.spi_address ? `PI-SPI : ${a.spi_address}` : ""}
+                                            {a.spi_address && a.qr_payload ? " · " : ""}
+                                            {a.qr_payload ? "QR enregistré" : ""}
+                                          </div>
+                                        )}
+                                        <div className="text-[10px] gc-mono" style={{ color: COLORS.textMuted }}>
+                                          Volume : {formatFCFA(volumeByAccount[a.id] || 0)}
+                                        </div>
+                                      </div>
+                                      <button
+                                        type="button"
+                                        disabled={linkBusy === a.id}
+                                        onClick={() => unlinkAccount(a.id)}
+                                        className="gc-btn px-2.5 py-1.5 rounded-lg text-xs"
+                                        style={{ color: COLORS.danger, border: `1px solid ${COLORS.surfaceLine}`, opacity: linkBusy === a.id ? 0.6 : 1 }}
+                                      >
+                                        Délier
+                                      </button>
                                     </div>
-                                    {(a.spi_address || a.qr_payload) && (
-                                      <div className="text-[10px]" style={{ color: COLORS.textMuted }}>
-                                        {a.spi_address ? `PI-SPI : ${a.spi_address}` : ""}
-                                        {a.spi_address && a.qr_payload ? " · " : ""}
-                                        {a.qr_payload ? "QR enregistré" : ""}
+                                    <div className="mt-2 flex items-center justify-between gap-2">
+                                      <div className="text-[11px]" style={{ color: COLORS.textMuted }}>
+                                        {assigned.length === 0 ? "Utilisable par : tous les agents" : `Utilisable par : ${assignedNames.join(", ")}`}
+                                      </div>
+                                      <button
+                                        type="button"
+                                        onClick={() => setAssignOpenFor(assignOpenFor === a.id ? null : a.id)}
+                                        className="gc-btn px-2.5 py-1 rounded-lg text-[11px]"
+                                        style={{ color: COLORS.text, border: `1px solid ${COLORS.surfaceLine}` }}
+                                      >
+                                        {assignOpenFor === a.id ? "Fermer" : "Agents"}
+                                      </button>
+                                    </div>
+                                    {assignOpenFor === a.id && (
+                                      <div className="mt-2 p-2 rounded-lg" style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}` }}>
+                                        <div className="text-[11px] mb-2" style={{ color: COLORS.textMuted }}>
+                                          Coche les agents autorisés à utiliser ce numéro. Sans aucune coche, tous les agents de l'agence peuvent l'utiliser.
+                                        </div>
+                                        {realTeam.length === 0 ? (
+                                          <div className="text-[11px]" style={{ color: COLORS.textMuted }}>Aucun agent dans l'équipe pour l'instant.</div>
+                                        ) : (
+                                          realTeam.map((m) => (
+                                            <label key={m.id} className="flex items-center gap-2 py-1 text-xs cursor-pointer">
+                                              <input
+                                                type="checkbox"
+                                                checked={assigned.includes(m.id)}
+                                                disabled={linkBusy === "assign"}
+                                                onChange={() => toggleAssignment(a.id, m.id)}
+                                              />
+                                              {m.full_name}
+                                            </label>
+                                          ))
+                                        )}
                                       </div>
                                     )}
                                   </div>
-                                  <button
-                                    type="button"
-                                    disabled={linkBusy === a.id}
-                                    onClick={() => unlinkAccount(a.id)}
-                                    className="gc-btn px-2.5 py-1.5 rounded-lg text-xs"
-                                    style={{ color: COLORS.danger, border: `1px solid ${COLORS.surfaceLine}`, opacity: linkBusy === a.id ? 0.6 : 1 }}
-                                  >
-                                    Délier
-                                  </button>
-                                </div>
-                              ))}
+                                );
+                              })}
                             </div>
                           )}
                           <div className="text-xs font-medium mb-2">
