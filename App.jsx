@@ -281,6 +281,7 @@ const NETWORKS = [
 // Réseaux dont le chef d'agence relie le compte (numéro / adresse) : sert au suivi des volumes
 // et d'identifiant de travail pour les agents. L'application ne détient jamais d'argent.
 const LINKABLE_NETWORK_IDS = ["mtn", "orange", "moov", "wave", "djamo", "crypto"];
+const MAX_LINKED_PER_NETWORK = 20; // nombre maximum de numéros reliés par réseau et par agence
 
 const COUNTRY_CODES = [
   { code: "+225", iso: "ci", flag: "🇨🇮", name: "Côte d'Ivoire", phoneLength: 10 },
@@ -1934,80 +1935,91 @@ export default function GuichetApp() {
 
   function linkField(netId, key) {
     const draft = linkForm[netId];
-    if (draft && draft[key] !== undefined) return draft[key];
-    const ex = linkedAccounts.find((a) => a.network === netId);
-    if (!ex) return "";
-    return { identifier: ex.identifier, spi: ex.spi_address, qr: ex.qr_payload, cryptoNet: ex.crypto_network }[key] || "";
+    return draft && draft[key] !== undefined ? draft[key] : "";
   }
 
   function setLinkField(netId, key, value) {
     setLinkForm((prev) => ({ ...prev, [netId]: { ...(prev[netId] || {}), [key]: value } }));
   }
 
+  function clearLinkDraft(netId) {
+    setLinkForm((prev) => {
+      const next = { ...prev };
+      delete next[netId];
+      return next;
+    });
+  }
+
   async function saveLinkedAccount(netId) {
     if (!agent?.agencyId || agent.role !== "manager") return;
     setLinkMsg(null);
     const identifier = String(linkField(netId, "identifier")).trim();
+    const label = String(linkField(netId, "label")).trim().slice(0, 40);
     const spi = String(linkField(netId, "spi")).trim();
     const qr = String(linkField(netId, "qr")).trim();
     const cryptoNet = String(linkField(netId, "cryptoNet")).trim();
-    const label = NETWORKS.find((n) => n.id === netId)?.name || netId;
+    const netName = NETWORKS.find((n) => n.id === netId)?.name || netId;
+    if (linkedAccounts.filter((a) => a.network === netId).length >= MAX_LINKED_PER_NETWORK) {
+      setLinkMsg({ type: "error", text: `Limite atteinte : ${MAX_LINKED_PER_NETWORK} comptes ${netName} au maximum.` });
+      return;
+    }
     if (netId === "crypto") {
       if (!/^[A-Za-z0-9]{20,200}$/.test(identifier)) {
         setLinkMsg({ type: "error", text: "Adresse de portefeuille crypto invalide (20 caractères minimum, lettres et chiffres)." });
         return;
       }
     } else if (identifier.replace(/\D/g, "").length < 8 || identifier.replace(/\D/g, "").length > 15) {
-      setLinkMsg({ type: "error", text: `Numéro ${label} invalide (8 à 15 chiffres).` });
+      setLinkMsg({ type: "error", text: `Numéro ${netName} invalide (8 à 15 chiffres).` });
       return;
     }
     if (spi && !/^[A-Za-z0-9._@+-]{3,80}$/.test(spi)) {
       setLinkMsg({ type: "error", text: "Adresse PI-SPI invalide (3 à 80 caractères, sans espace)." });
       return;
     }
-    setLinkBusy(netId);
-    const { error } = await supabase.from("agency_linked_accounts").upsert(
-      {
-        agency_id: agent.agencyId,
-        network: netId,
-        identifier: netId === "crypto" ? identifier : identifier.replace(/[^\d+]/g, ""),
-        spi_address: netId === "crypto" ? null : spi || null,
-        qr_payload: qr ? qr.slice(0, 200) : null,
-        crypto_network: netId === "crypto" ? cryptoNet.slice(0, 20) || null : null,
-        linked_by: agent.id,
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: "agency_id,network" }
-    );
-    setLinkBusy("");
-    if (error) {
-      setLinkMsg({ type: "error", text: "Impossible d'enregistrer le compte. Vérifie que la migration SQL « comptes liés » a bien été exécutée." });
+    const cleanIdentifier = netId === "crypto" ? identifier : identifier.replace(/[^\d+]/g, "");
+    if (linkedAccounts.some((a) => a.network === netId && a.identifier === cleanIdentifier)) {
+      setLinkMsg({ type: "error", text: "Ce numéro est déjà relié à cette agence." });
       return;
     }
-    setLinkForm((prev) => {
-      const next = { ...prev };
-      delete next[netId];
-      return next;
+    setLinkBusy(netId);
+    const { error } = await supabase.from("agency_linked_accounts").insert({
+      agency_id: agent.agencyId,
+      network: netId,
+      label: label || null,
+      identifier: cleanIdentifier,
+      spi_address: netId === "crypto" ? null : spi || null,
+      qr_payload: qr ? qr.slice(0, 200) : null,
+      crypto_network: netId === "crypto" ? cryptoNet.slice(0, 20) || null : null,
+      linked_by: agent.id,
+      updated_at: new Date().toISOString(),
     });
-    setLinkMsg({ type: "success", text: `Compte ${label} relié.` });
+    setLinkBusy("");
+    if (error) {
+      setLinkMsg({
+        type: "error",
+        text:
+          error.code === "23505"
+            ? "Impossible d'ajouter ce numéro : il existe déjà, ou la migration SQL « plusieurs comptes par réseau » n'a pas encore été exécutée."
+            : "Impossible d'enregistrer le compte. Vérifie que les migrations SQL « comptes liés » ont bien été exécutées.",
+      });
+      return;
+    }
+    clearLinkDraft(netId);
+    setLinkMsg({ type: "success", text: `Compte ${netName} relié.` });
     loadLinkedAccounts();
   }
 
-  async function unlinkAccount(netId) {
-    const ex = linkedAccounts.find((a) => a.network === netId);
+  async function unlinkAccount(accountId) {
+    const ex = linkedAccounts.find((a) => a.id === accountId);
     if (!ex || agent?.role !== "manager") return;
-    setLinkBusy(netId);
-    const { error } = await supabase.from("agency_linked_accounts").delete().eq("id", ex.id);
+    if (!window.confirm(`Délier le compte ${ex.label ? ex.label + " — " : ""}${ex.identifier} ?`)) return;
+    setLinkBusy(accountId);
+    const { error } = await supabase.from("agency_linked_accounts").delete().eq("id", accountId);
     setLinkBusy("");
     if (error) {
       setLinkMsg({ type: "error", text: "Impossible de délier ce compte." });
       return;
     }
-    setLinkForm((prev) => {
-      const next = { ...prev };
-      delete next[netId];
-      return next;
-    });
     setLinkMsg({ type: "success", text: "Compte délié." });
     loadLinkedAccounts();
   }
@@ -5567,7 +5579,8 @@ export default function GuichetApp() {
               )}
 
               {linkedLoaded && LINKABLE_NETWORK_IDS.includes(net.id) && (() => {
-                const acc = linkedAccounts.find((a) => a.network === net.id);
+                const accs = linkedAccounts.filter((a) => a.network === net.id);
+                const acc = accs[0];
                 return (
                   <div
                     className="p-3 rounded-lg mb-4 text-xs"
@@ -5579,9 +5592,14 @@ export default function GuichetApp() {
                   >
                     {acc ? (
                       <>
-                        Compte {net.name} de l'agence :{" "}
-                        <span className="gc-mono break-all">{acc.identifier}</span>
-                        {acc.crypto_network ? ` (${acc.crypto_network})` : ""}
+                        {accs.length > 1 ? `Comptes ${net.name} de l'agence :` : `Compte ${net.name} de l'agence :`}
+                        {accs.map((a) => (
+                          <div key={a.id} className="gc-mono break-all">
+                            {a.label ? `${a.label} — ` : ""}
+                            {a.identifier}
+                            {a.crypto_network ? ` (${a.crypto_network})` : ""}
+                          </div>
+                        ))}
                       </>
                     ) : agent?.role === "manager" ? (
                       <>Compte {net.name} non relié. Relie-le dans l'onglet « Comptes liés » pour travailler sur ce réseau.</>
@@ -6942,7 +6960,7 @@ export default function GuichetApp() {
                   )}
                   <div className="grid gap-4 md:grid-cols-2">
                     {NETWORKS.filter((n) => LINKABLE_NETWORK_IDS.includes(n.id)).map((n) => {
-                      const linked = linkedAccounts.some((a) => a.network === n.id);
+                      const accs = linkedAccounts.filter((a) => a.network === n.id);
                       const isCrypto = n.id === "crypto";
                       const inputStyle = { background: COLORS.bgSoft, border: `1px solid ${COLORS.surfaceLine}`, color: COLORS.text };
                       return (
@@ -6951,8 +6969,8 @@ export default function GuichetApp() {
                             <NetworkBadge net={n} size={36} colors={COLORS} />
                             <div className="flex-1 min-w-0">
                               <div className="text-sm font-medium">{n.name}</div>
-                              <div className="text-xs" style={{ color: linked ? COLORS.teal : COLORS.textMuted }}>
-                                {linked ? "Compte relié" : "Non relié"}
+                              <div className="text-xs" style={{ color: accs.length ? COLORS.teal : COLORS.textMuted }}>
+                                {accs.length === 0 ? "Non relié" : accs.length === 1 ? "1 compte relié" : `${accs.length} comptes reliés`}
                               </div>
                             </div>
                             <div className="text-right">
@@ -6960,9 +6978,51 @@ export default function GuichetApp() {
                               <div className="text-xs font-medium gc-mono">{formatFCFA(volumeByNet[n.id] || 0)}</div>
                             </div>
                           </div>
-                          <label className="text-xs mb-1 block" style={{ color: COLORS.textMuted }}>
-                            {isCrypto ? "Adresse du portefeuille" : "Numéro du compte"}
-                          </label>
+                          {accs.length > 0 && (
+                            <div className="flex flex-col gap-2 mb-3">
+                              {accs.map((a) => (
+                                <div
+                                  key={a.id}
+                                  className="flex items-center gap-2 p-2 rounded-lg text-xs"
+                                  style={{ background: COLORS.bgSoft, border: `1px solid ${COLORS.surfaceLine}` }}
+                                >
+                                  <div className="flex-1 min-w-0">
+                                    {a.label && <div className="font-medium truncate">{a.label}</div>}
+                                    <div className="gc-mono break-all" style={{ color: COLORS.textMuted }}>
+                                      {a.identifier}
+                                      {a.crypto_network ? ` (${a.crypto_network})` : ""}
+                                    </div>
+                                    {(a.spi_address || a.qr_payload) && (
+                                      <div className="text-[10px]" style={{ color: COLORS.textMuted }}>
+                                        {a.spi_address ? `PI-SPI : ${a.spi_address}` : ""}
+                                        {a.spi_address && a.qr_payload ? " · " : ""}
+                                        {a.qr_payload ? "QR enregistré" : ""}
+                                      </div>
+                                    )}
+                                  </div>
+                                  <button
+                                    type="button"
+                                    disabled={linkBusy === a.id}
+                                    onClick={() => unlinkAccount(a.id)}
+                                    className="gc-btn px-2.5 py-1.5 rounded-lg text-xs"
+                                    style={{ color: COLORS.danger, border: `1px solid ${COLORS.surfaceLine}`, opacity: linkBusy === a.id ? 0.6 : 1 }}
+                                  >
+                                    Délier
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          <div className="text-xs font-medium mb-2">
+                            {accs.length > 0 ? "Ajouter un autre numéro" : isCrypto ? "Relier une adresse" : "Relier un numéro"}
+                          </div>
+                          <input
+                            value={linkField(n.id, "label")}
+                            onChange={(e) => setLinkField(n.id, "label", e.target.value.slice(0, 40))}
+                            placeholder="Nom du compte (facultatif, ex. Dépôts)"
+                            className="w-full px-3 py-2 rounded-lg text-sm mb-2 outline-none"
+                            style={inputStyle}
+                          />
                           <input
                             value={linkField(n.id, "identifier")}
                             onChange={(e) => setLinkField(n.id, "identifier", e.target.value.replace(/\s/g, "").slice(0, isCrypto ? 200 : 20))}
@@ -6990,38 +7050,23 @@ export default function GuichetApp() {
                               style={inputStyle}
                             />
                           )}
-                          <div className="flex items-center gap-2 mb-3">
-                            <button
-                              type="button"
-                              onClick={() => setLinkScanFor(n.id)}
-                              className="gc-btn flex-1 py-2 rounded-lg text-xs flex items-center justify-center gap-1.5"
-                              style={{ background: COLORS.bgSoft, color: COLORS.text, border: `1px solid ${COLORS.surfaceLine}` }}
-                            >
-                              <QrCode size={13} /> {linkField(n.id, "qr") ? "QR code enregistré — rescanner" : "Scanner le QR code (facultatif)"}
-                            </button>
-                          </div>
-                          <div className="flex gap-2">
-                            <button
-                              type="button"
-                              disabled={linkBusy === n.id}
-                              onClick={() => saveLinkedAccount(n.id)}
-                              className="gc-btn flex-1 py-2.5 rounded-lg text-xs font-medium"
-                              style={{ background: COLORS.gold, color: "#052E36", opacity: linkBusy === n.id ? 0.6 : 1 }}
-                            >
-                              {linked ? "Mettre à jour" : "Relier ce compte"}
-                            </button>
-                            {linked && (
-                              <button
-                                type="button"
-                                disabled={linkBusy === n.id}
-                                onClick={() => unlinkAccount(n.id)}
-                                className="gc-btn px-3 py-2.5 rounded-lg text-xs"
-                                style={{ background: COLORS.bgSoft, color: COLORS.danger, border: `1px solid ${COLORS.surfaceLine}` }}
-                              >
-                                Délier
-                              </button>
-                            )}
-                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setLinkScanFor(n.id)}
+                            className="gc-btn w-full py-2 rounded-lg text-xs flex items-center justify-center gap-1.5 mb-3"
+                            style={{ background: COLORS.bgSoft, color: COLORS.text, border: `1px solid ${COLORS.surfaceLine}` }}
+                          >
+                            <QrCode size={13} /> {linkField(n.id, "qr") ? "QR code lu — rescanner" : "Scanner le QR code (facultatif)"}
+                          </button>
+                          <button
+                            type="button"
+                            disabled={linkBusy === n.id}
+                            onClick={() => saveLinkedAccount(n.id)}
+                            className="gc-btn w-full py-2.5 rounded-lg text-xs font-medium"
+                            style={{ background: COLORS.gold, color: "#052E36", opacity: linkBusy === n.id ? 0.6 : 1 }}
+                          >
+                            {accs.length > 0 ? "Ajouter ce compte" : "Relier ce compte"}
+                          </button>
                         </div>
                       );
                     })}
