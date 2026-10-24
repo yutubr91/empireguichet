@@ -32,6 +32,7 @@ import {
   Sun,
   Moon,
   QrCode,
+  Link2,
   Copy,
   Share2,
   Users,
@@ -276,6 +277,10 @@ const NETWORKS = [
   { id: "sodeci", name: "SODECI (Eau)", color: "#29B6C7", fg: "#04262B", fee: 0.01, letter: "SDC", type: "facture" },
   { id: "peage", name: "Péage (Pont HKB)", color: "#8D6E63", fg: "#F3F0E8", fee: 0.02, letter: "PG", type: "peage" },
 ];
+
+// Réseaux dont le chef d'agence relie le compte (numéro / adresse) : sert au suivi des volumes
+// et d'identifiant de travail pour les agents. L'application ne détient jamais d'argent.
+const LINKABLE_NETWORK_IDS = ["mtn", "orange", "moov", "wave", "djamo", "crypto"];
 
 const COUNTRY_CODES = [
   { code: "+225", iso: "ci", flag: "🇨🇮", name: "Côte d'Ivoire", phoneLength: 10 },
@@ -1036,6 +1041,13 @@ export default function GuichetApp() {
   // Mode d'identification du client pour MTN / Orange / Moov / Wave : "phone" | "qr" | "spi"
   const [idMode, setIdMode] = useState("phone");
   const [qrScanOpen, setQrScanOpen] = useState(false);
+  // Comptes liés de l'agence (reliés par le chef d'agence)
+  const [linkedAccounts, setLinkedAccounts] = useState([]);
+  const [linkedLoaded, setLinkedLoaded] = useState(false);
+  const [linkForm, setLinkForm] = useState({}); // brouillon par réseau : { identifier, spi, qr, cryptoNet }
+  const [linkMsg, setLinkMsg] = useState(null);
+  const [linkBusy, setLinkBusy] = useState("");
+  const [linkScanFor, setLinkScanFor] = useState(null);
   const [ticketCounter, setTicketCounter] = useState(4);
   const [history, setHistory] = useState([]);
   const [pending, setPending] = useState(null);
@@ -1904,6 +1916,101 @@ export default function GuichetApp() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [agent?.role, agent?.agencyId]);
+
+  // ===== Comptes liés de l'agence (MTN, Orange, Moov, Wave, Djamo, crypto) =====
+  async function loadLinkedAccounts() {
+    if (!agent?.agencyId) return;
+    const { data, error } = await supabase.from("agency_linked_accounts").select("*").eq("agency_id", agent.agencyId);
+    if (!error && data) {
+      setLinkedAccounts(data);
+      setLinkedLoaded(true);
+    }
+  }
+
+  useEffect(() => {
+    if (agent?.agencyId) loadLinkedAccounts();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [agent?.agencyId, tab === "comptes"]);
+
+  function linkField(netId, key) {
+    const draft = linkForm[netId];
+    if (draft && draft[key] !== undefined) return draft[key];
+    const ex = linkedAccounts.find((a) => a.network === netId);
+    if (!ex) return "";
+    return { identifier: ex.identifier, spi: ex.spi_address, qr: ex.qr_payload, cryptoNet: ex.crypto_network }[key] || "";
+  }
+
+  function setLinkField(netId, key, value) {
+    setLinkForm((prev) => ({ ...prev, [netId]: { ...(prev[netId] || {}), [key]: value } }));
+  }
+
+  async function saveLinkedAccount(netId) {
+    if (!agent?.agencyId || agent.role !== "manager") return;
+    setLinkMsg(null);
+    const identifier = String(linkField(netId, "identifier")).trim();
+    const spi = String(linkField(netId, "spi")).trim();
+    const qr = String(linkField(netId, "qr")).trim();
+    const cryptoNet = String(linkField(netId, "cryptoNet")).trim();
+    const label = NETWORKS.find((n) => n.id === netId)?.name || netId;
+    if (netId === "crypto") {
+      if (!/^[A-Za-z0-9]{20,200}$/.test(identifier)) {
+        setLinkMsg({ type: "error", text: "Adresse de portefeuille crypto invalide (20 caractères minimum, lettres et chiffres)." });
+        return;
+      }
+    } else if (identifier.replace(/\D/g, "").length < 8 || identifier.replace(/\D/g, "").length > 15) {
+      setLinkMsg({ type: "error", text: `Numéro ${label} invalide (8 à 15 chiffres).` });
+      return;
+    }
+    if (spi && !/^[A-Za-z0-9._@+-]{3,80}$/.test(spi)) {
+      setLinkMsg({ type: "error", text: "Adresse PI-SPI invalide (3 à 80 caractères, sans espace)." });
+      return;
+    }
+    setLinkBusy(netId);
+    const { error } = await supabase.from("agency_linked_accounts").upsert(
+      {
+        agency_id: agent.agencyId,
+        network: netId,
+        identifier: netId === "crypto" ? identifier : identifier.replace(/[^\d+]/g, ""),
+        spi_address: netId === "crypto" ? null : spi || null,
+        qr_payload: qr ? qr.slice(0, 200) : null,
+        crypto_network: netId === "crypto" ? cryptoNet.slice(0, 20) || null : null,
+        linked_by: agent.id,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "agency_id,network" }
+    );
+    setLinkBusy("");
+    if (error) {
+      setLinkMsg({ type: "error", text: "Impossible d'enregistrer le compte. Vérifie que la migration SQL « comptes liés » a bien été exécutée." });
+      return;
+    }
+    setLinkForm((prev) => {
+      const next = { ...prev };
+      delete next[netId];
+      return next;
+    });
+    setLinkMsg({ type: "success", text: `Compte ${label} relié.` });
+    loadLinkedAccounts();
+  }
+
+  async function unlinkAccount(netId) {
+    const ex = linkedAccounts.find((a) => a.network === netId);
+    if (!ex || agent?.role !== "manager") return;
+    setLinkBusy(netId);
+    const { error } = await supabase.from("agency_linked_accounts").delete().eq("id", ex.id);
+    setLinkBusy("");
+    if (error) {
+      setLinkMsg({ type: "error", text: "Impossible de délier ce compte." });
+      return;
+    }
+    setLinkForm((prev) => {
+      const next = { ...prev };
+      delete next[netId];
+      return next;
+    });
+    setLinkMsg({ type: "success", text: "Compte délié." });
+    loadLinkedAccounts();
+  }
 
   // Mot de passe oublié
   const [recoveryStep, setRecoveryStep] = useState(1);
@@ -3366,6 +3473,14 @@ export default function GuichetApp() {
   function handleSubmit(e) {
     e.preventDefault();
     setFormError("");
+    if (linkedLoaded && LINKABLE_NETWORK_IDS.includes(net.id) && !linkedAccounts.some((a) => a.network === net.id)) {
+      setFormError(
+        agent?.role === "manager"
+          ? `Relie d'abord ton compte ${net.name} dans l'onglet « Comptes liés ».`
+          : `Ton chef d'agence n'a pas encore relié son compte ${net.name}. Demande-lui de le faire dans « Comptes liés ».`
+      );
+      return;
+    }
     if (!amtNum || !phone) {
       setFormError(
         idModeEff === "qr"
@@ -3952,6 +4067,7 @@ export default function GuichetApp() {
                         ...(agent?.role === "manager"
                           ? [
                               { id: "equipe", label: "Équipe", icon: Crown },
+                              { id: "comptes", label: "Comptes liés", icon: Link2 },
                               { id: "kyc-review", label: "Vérifications KYC équipe", icon: Fingerprint },
                             ]
                           : []),
@@ -4849,7 +4965,7 @@ export default function GuichetApp() {
               label: hasFullAccess ? "Abonnement" : "Abonnement ⚠",
               icon: hasFullAccess ? CreditCard : Lock,
             },
-            ...(agent?.role === "manager" ? [{ id: "equipe", label: "Équipe", icon: Crown }, { id: "kyc-review", label: "Vérifications KYC", icon: Fingerprint }] : []),
+            ...(agent?.role === "manager" ? [{ id: "equipe", label: "Équipe", icon: Crown }, { id: "comptes", label: "Comptes liés", icon: Link2 }, { id: "kyc-review", label: "Vérifications KYC", icon: Fingerprint }] : []),
             ...(agent?.isPlatformOwner
               ? [
                   { id: "kyc-review-managers", label: "Vérif. chefs d'agence", icon: ShieldCheck },
@@ -4867,7 +4983,7 @@ export default function GuichetApp() {
                 return !["dashboard", "kyc", "historique", "annonceur", "publicites", "parrainage", "abonnement", "parametres", "kyc-review-managers", "backoffice-pub", "backoffice-abonnements", "backoffice-parrainage"].includes(t.id);
               }
               if (["agent", "manager"].includes(agent?.role)) {
-                return !["dashboard", "kyc", "publicites", "parrainage", "abonnement", "parametres", "equipe", "kyc-review"].includes(t.id);
+                return !["dashboard", "kyc", "publicites", "parrainage", "abonnement", "parametres", "equipe", "comptes", "kyc-review"].includes(t.id);
               }
               return true;
             })
@@ -5450,6 +5566,31 @@ export default function GuichetApp() {
                 </>
               )}
 
+              {linkedLoaded && LINKABLE_NETWORK_IDS.includes(net.id) && (() => {
+                const acc = linkedAccounts.find((a) => a.network === net.id);
+                return (
+                  <div
+                    className="p-3 rounded-lg mb-4 text-xs"
+                    style={{
+                      background: acc ? "rgba(43,191,138,0.1)" : "rgba(226,104,94,0.1)",
+                      border: `1px solid ${acc ? COLORS.teal : COLORS.danger}`,
+                      color: COLORS.text,
+                    }}
+                  >
+                    {acc ? (
+                      <>
+                        Compte {net.name} de l'agence :{" "}
+                        <span className="gc-mono break-all">{acc.identifier}</span>
+                        {acc.crypto_network ? ` (${acc.crypto_network})` : ""}
+                      </>
+                    ) : agent?.role === "manager" ? (
+                      <>Compte {net.name} non relié. Relie-le dans l'onglet « Comptes liés » pour travailler sur ce réseau.</>
+                    ) : (
+                      <>Ton chef d'agence n'a pas encore relié son compte {net.name}. Tu pourras travailler sur ce réseau dès qu'il l'aura fait.</>
+                    )}
+                  </div>
+                );
+              })()}
               {supportsIdModes && (
                 <>
                   <label className="text-xs mb-2 block" style={{ color: COLORS.textMuted }}>Identifier le client par</label>
@@ -6759,6 +6900,148 @@ export default function GuichetApp() {
                   </div>
                 ))}
               </div>
+            )}
+          </div>
+        )}
+
+        {tab === "comptes" && agent?.role === "manager" && (
+          <div className="gc-fade-in">
+            <div className="p-4 rounded-xl mb-4" style={{ background: COLORS.surface, border: `1px solid ${COLORS.gold}` }}>
+              <div className="text-sm font-medium mb-1">Comptes liés de l'agence</div>
+              <div className="text-xs" style={{ color: COLORS.textMuted }}>
+                EmpireGuichet ne garde l'argent de personne. Relie ici tes comptes MTN, Orange, Moov, Wave, Djamo et crypto : ils servent à suivre le volume de chaque opérateur et permettent à tes agents de travailler sur l'application.
+              </div>
+            </div>
+            {(() => {
+              const volumeByNet = {};
+              let totalVolume = 0;
+              teamTransactions.forEach((t) => {
+                if (t.status !== "Terminé" || !LINKABLE_NETWORK_IDS.includes(t.net)) return;
+                volumeByNet[t.net] = (volumeByNet[t.net] || 0) + (Number(t.amount) || 0);
+                totalVolume += Number(t.amount) || 0;
+              });
+              return (
+                <>
+                  <div className="p-4 rounded-xl mb-4" style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}` }}>
+                    <div className="text-xs mb-1" style={{ color: COLORS.textMuted }}>
+                      Volume total des comptes liés (500 dernières transactions de l'agence)
+                    </div>
+                    <div className="text-xl font-medium gc-mono">{formatFCFA(totalVolume)}</div>
+                  </div>
+                  {linkMsg && (
+                    <div
+                      className="text-xs p-3 rounded-lg mb-4"
+                      style={{
+                        background: linkMsg.type === "success" ? "rgba(43,191,138,0.1)" : "rgba(226,104,94,0.1)",
+                        border: `1px solid ${linkMsg.type === "success" ? COLORS.teal : COLORS.danger}`,
+                        color: COLORS.text,
+                      }}
+                    >
+                      {linkMsg.text}
+                    </div>
+                  )}
+                  <div className="grid gap-4 md:grid-cols-2">
+                    {NETWORKS.filter((n) => LINKABLE_NETWORK_IDS.includes(n.id)).map((n) => {
+                      const linked = linkedAccounts.some((a) => a.network === n.id);
+                      const isCrypto = n.id === "crypto";
+                      const inputStyle = { background: COLORS.bgSoft, border: `1px solid ${COLORS.surfaceLine}`, color: COLORS.text };
+                      return (
+                        <div key={n.id} className="p-4 rounded-xl" style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}` }}>
+                          <div className="flex items-center gap-3 mb-3">
+                            <NetworkBadge net={n} size={36} colors={COLORS} />
+                            <div className="flex-1 min-w-0">
+                              <div className="text-sm font-medium">{n.name}</div>
+                              <div className="text-xs" style={{ color: linked ? COLORS.teal : COLORS.textMuted }}>
+                                {linked ? "Compte relié" : "Non relié"}
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <div className="text-[10px]" style={{ color: COLORS.textMuted }}>Volume</div>
+                              <div className="text-xs font-medium gc-mono">{formatFCFA(volumeByNet[n.id] || 0)}</div>
+                            </div>
+                          </div>
+                          <label className="text-xs mb-1 block" style={{ color: COLORS.textMuted }}>
+                            {isCrypto ? "Adresse du portefeuille" : "Numéro du compte"}
+                          </label>
+                          <input
+                            value={linkField(n.id, "identifier")}
+                            onChange={(e) => setLinkField(n.id, "identifier", e.target.value.replace(/\s/g, "").slice(0, isCrypto ? 200 : 20))}
+                            placeholder={isCrypto ? "Adresse USDT" : "Numéro (ex. 0700000000)"}
+                            className="w-full px-3 py-2 rounded-lg text-sm mb-2 outline-none gc-mono"
+                            style={inputStyle}
+                          />
+                          {isCrypto && (
+                            <input
+                              value={linkField(n.id, "cryptoNet")}
+                              onChange={(e) => setLinkField(n.id, "cryptoNet", e.target.value.slice(0, 20))}
+                              placeholder="Réseau (ex. BEP20, TRC20)"
+                              className="w-full px-3 py-2 rounded-lg text-sm mb-2 outline-none"
+                              style={inputStyle}
+                            />
+                          )}
+                          {!isCrypto && (
+                            <input
+                              value={linkField(n.id, "spi")}
+                              onChange={(e) => setLinkField(n.id, "spi", e.target.value.replace(/\s/g, "").slice(0, 80))}
+                              placeholder="Adresse PI-SPI (facultatif)"
+                              autoCapitalize="none"
+                              autoCorrect="off"
+                              className="w-full px-3 py-2 rounded-lg text-sm mb-2 outline-none gc-mono"
+                              style={inputStyle}
+                            />
+                          )}
+                          <div className="flex items-center gap-2 mb-3">
+                            <button
+                              type="button"
+                              onClick={() => setLinkScanFor(n.id)}
+                              className="gc-btn flex-1 py-2 rounded-lg text-xs flex items-center justify-center gap-1.5"
+                              style={{ background: COLORS.bgSoft, color: COLORS.text, border: `1px solid ${COLORS.surfaceLine}` }}
+                            >
+                              <QrCode size={13} /> {linkField(n.id, "qr") ? "QR code enregistré — rescanner" : "Scanner le QR code (facultatif)"}
+                            </button>
+                          </div>
+                          <div className="flex gap-2">
+                            <button
+                              type="button"
+                              disabled={linkBusy === n.id}
+                              onClick={() => saveLinkedAccount(n.id)}
+                              className="gc-btn flex-1 py-2.5 rounded-lg text-xs font-medium"
+                              style={{ background: COLORS.gold, color: "#052E36", opacity: linkBusy === n.id ? 0.6 : 1 }}
+                            >
+                              {linked ? "Mettre à jour" : "Relier ce compte"}
+                            </button>
+                            {linked && (
+                              <button
+                                type="button"
+                                disabled={linkBusy === n.id}
+                                onClick={() => unlinkAccount(n.id)}
+                                className="gc-btn px-3 py-2.5 rounded-lg text-xs"
+                                style={{ background: COLORS.bgSoft, color: COLORS.danger, border: `1px solid ${COLORS.surfaceLine}` }}
+                              >
+                                Délier
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </>
+              );
+            })()}
+            {linkScanFor && (
+              <QrScanModal
+                colors={COLORS}
+                onClose={() => setLinkScanFor(null)}
+                onResult={(value) => {
+                  const parsed = parseQrPayload(value);
+                  setLinkField(linkScanFor, "qr", parsed);
+                  if (!String(linkField(linkScanFor, "identifier")).trim() && /^\d{8,15}$/.test(parsed)) {
+                    setLinkField(linkScanFor, "identifier", parsed);
+                  }
+                  setLinkScanFor(null);
+                }}
+              />
             )}
           </div>
         )}
