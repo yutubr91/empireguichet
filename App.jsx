@@ -978,11 +978,124 @@ export default function GuichetApp() {
 
   // ===== Moyen de paiement : choix Wave ou USDT (BNB/BEP20) =====
   const [usdtCopiedFor, setUsdtCopiedFor] = useState(null); // clé unique du bloc où la copie vient d'avoir lieu
-  function copyUsdtAddress(key) {
-    navigator.clipboard?.writeText(USDT_BEP20_ADDRESS).then(() => {
+  function copyUsdtAddress(key, address = USDT_BEP20_ADDRESS) {
+    navigator.clipboard?.writeText(address).then(() => {
       setUsdtCopiedFor(key);
       setTimeout(() => setUsdtCopiedFor((k) => (k === key ? null : k)), 2000);
     });
+  }
+  // ===== Paiement USDT automatique (abonnement / déblocage de l'historique) =====
+  // Le serveur crée une demande avec un montant unique, puis vérifie la transaction sur la blockchain et active l'accès.
+  const [usdtAuto, setUsdtAuto] = useState({}); // par type : { payment, hash, busy, msg }
+  function patchUsdtAuto(type, patch) {
+    setUsdtAuto((prev) => ({ ...prev, [type]: { ...(prev[type] || {}), ...patch } }));
+  }
+  async function startUsdtPayment(type) {
+    patchUsdtAuto(type, { busy: true, msg: null });
+    const { data, error } = await supabase.functions.invoke("usdt-payment", { body: { action: "create", type } });
+    if (error || !data?.ok) {
+      patchUsdtAuto(type, { busy: false, msg: { type: "error", text: data?.error || "Service de paiement indisponible. Réessaie dans un instant." } });
+      return;
+    }
+    patchUsdtAuto(type, { busy: false, payment: data.payment, hash: "", msg: null });
+  }
+  async function verifyUsdtPayment(type) {
+    const st = usdtAuto[type];
+    if (!st?.payment) return;
+    patchUsdtAuto(type, { busy: true, msg: null });
+    const { data, error } = await supabase.functions.invoke("usdt-payment", {
+      body: { action: "verify", payment_id: st.payment.id, tx_hash: (st.hash || "").trim() },
+    });
+    if (error || !data?.ok) {
+      patchUsdtAuto(type, { busy: false, msg: { type: "error", text: data?.error || "Vérification impossible pour le moment. Réessaie dans un instant." } });
+      return;
+    }
+    patchUsdtAuto(type, { busy: false, payment: null, hash: "", msg: { type: "success", text: "Paiement confirmé ! Ton accès est activé." } });
+    if (agent) {
+      const sub = await fetchSubscription(agent.id);
+      if (sub) setSubscription(sub);
+      loadMyPayments();
+    }
+  }
+  function renderUsdtAuto(type) {
+    const st = usdtAuto[type] || {};
+    const p = st.payment;
+    return (
+      <div className="p-3 rounded-lg" style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}` }}>
+        <div className="text-xs font-medium mb-2" style={{ color: COLORS.textMuted }}>
+          Ou en USDT (réseau BNB — BEP20) — activation automatique
+        </div>
+        {!p ? (
+          <>
+            <p className="text-xs mb-2" style={{ color: COLORS.textMuted }}>
+              Tu reçois un montant exact à envoyer. Dès que ton paiement est confirmé sur la blockchain, ton accès s'active tout seul.
+            </p>
+            <button
+              type="button"
+              onClick={() => startUsdtPayment(type)}
+              disabled={st.busy}
+              className="gc-btn w-full py-2.5 rounded-lg text-sm font-medium"
+              style={{ background: COLORS.gold, color: "#052E36", opacity: st.busy ? 0.6 : 1 }}
+            >
+              {st.busy ? "Préparation…" : "Payer en USDT"}
+            </button>
+          </>
+        ) : (
+          <>
+            <div className="text-xs mb-1" style={{ color: COLORS.textMuted }}>Envoie exactement</div>
+            <div className="gc-mono text-xl font-semibold mb-1">{p.amount_usdt} USDT</div>
+            <div className="text-xs mb-3" style={{ color: COLORS.textMuted }}>
+              sur le réseau {p.network}, pas sur un autre réseau.
+            </div>
+            <div className="flex items-center gap-3 mb-2">
+              <img
+                src={`https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${p.address}`}
+                alt="QR code adresse USDT BEP20"
+                width={90}
+                height={90}
+                className="rounded-lg flex-shrink-0"
+                style={{ background: "#fff", padding: 4 }}
+              />
+              <span className="gc-mono text-xs break-all flex-1" style={{ color: COLORS.text }}>{p.address}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => copyUsdtAddress(type, p.address)}
+              className="gc-btn w-full px-2.5 py-1.5 rounded-lg text-xs flex items-center justify-center gap-1 mb-3"
+              style={{ background: COLORS.gold, color: "#052E36" }}
+            >
+              <Copy size={12} /> {usdtCopiedFor === type ? "Copié !" : "Copier l'adresse"}
+            </button>
+            <p className="text-xs mb-2" style={{ color: COLORS.textMuted }}>
+              Le montant doit être exact, décimales comprises. Une fois payé, colle ici le numéro de transaction (« hash »).
+            </p>
+            <input
+              value={st.hash || ""}
+              onChange={(e) => patchUsdtAuto(type, { hash: e.target.value })}
+              placeholder="Numéro de transaction (0x…)"
+              autoCapitalize="none"
+              autoCorrect="off"
+              className="w-full px-3 py-2 rounded-lg text-xs outline-none gc-mono mb-2"
+              style={{ background: COLORS.bgSoft, border: `1px solid ${COLORS.surfaceLine}`, color: COLORS.text }}
+            />
+            <button
+              type="button"
+              onClick={() => verifyUsdtPayment(type)}
+              disabled={st.busy || !(st.hash || "").trim()}
+              className="gc-btn w-full py-2.5 rounded-lg text-sm font-medium"
+              style={{ background: COLORS.gold, color: "#052E36", opacity: st.busy || !(st.hash || "").trim() ? 0.6 : 1 }}
+            >
+              {st.busy ? "Vérification…" : "Vérifier mon paiement"}
+            </button>
+          </>
+        )}
+        {st.msg && (
+          <p className="text-xs mt-2" style={{ color: st.msg.type === "success" ? COLORS.teal : COLORS.danger }}>
+            {st.msg.text}
+          </p>
+        )}
+      </div>
+    );
   }
   function renderPaymentOptions(fcfaAmount, blockKey) {
     return (
@@ -997,31 +1110,35 @@ export default function GuichetApp() {
         >
           <Send size={14} /> Payer {formatFCFA(getWaveAmount(fcfaAmount))} avec Wave
         </a>
-        <div className="p-3 rounded-lg" style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}` }}>
-          <div className="text-xs font-medium mb-2" style={{ color: COLORS.textMuted }}>
-            Ou en USDT (réseau BNB — BEP20) — {getUsdtAmount(fcfaAmount, liveXofPerUsdt)} USD
+        {blockKey === "abonnement" || blockKey === "historique" ? (
+          renderUsdtAuto(blockKey)
+        ) : (
+          <div className="p-3 rounded-lg" style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}` }}>
+            <div className="text-xs font-medium mb-2" style={{ color: COLORS.textMuted }}>
+              Ou en USDT (réseau BNB — BEP20) — {getUsdtAmount(fcfaAmount, liveXofPerUsdt)} USD
+            </div>
+            <div className="flex items-center gap-3 mb-2">
+              <img
+                src={`https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${USDT_BEP20_ADDRESS}`}
+                alt="QR code adresse USDT BEP20"
+                width={90}
+                height={90}
+                className="rounded-lg flex-shrink-0"
+                style={{ background: "#fff", padding: 4 }}
+              />
+              <span className="gc-mono text-xs break-all flex-1" style={{ color: COLORS.text }}>{USDT_BEP20_ADDRESS}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => copyUsdtAddress(blockKey)}
+                className="gc-btn w-full px-2.5 py-1.5 rounded-lg text-xs flex items-center justify-center gap-1"
+                style={{ background: COLORS.gold, color: "#052E36" }}
+              >
+                <Copy size={12} /> {usdtCopiedFor === blockKey ? "Copié !" : "Copier l'adresse"}
+              </button>
+            </div>
           </div>
-          <div className="flex items-center gap-3 mb-2">
-            <img
-              src={`https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${USDT_BEP20_ADDRESS}`}
-              alt="QR code adresse USDT BEP20"
-              width={90}
-              height={90}
-              className="rounded-lg flex-shrink-0"
-              style={{ background: "#fff", padding: 4 }}
-            />
-            <span className="gc-mono text-xs break-all flex-1" style={{ color: COLORS.text }}>{USDT_BEP20_ADDRESS}</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => copyUsdtAddress(blockKey)}
-              className="gc-btn w-full px-2.5 py-1.5 rounded-lg text-xs flex items-center justify-center gap-1"
-              style={{ background: COLORS.gold, color: "#052E36" }}
-            >
-              <Copy size={12} /> {usdtCopiedFor === blockKey ? "Copié !" : "Copier l'adresse"}
-            </button>
-          </div>
-        </div>
+        )}
       </div>
     );
   }
@@ -1400,7 +1517,7 @@ export default function GuichetApp() {
       .insert({
         agent_id: agentId,
         plan,
-        monthly_amount: SUBSCRIPTION_PRICING[plan].total,
+        monthly_amount: SUBSCRIPTION_PRICING[plan],
         status: "pending_payment",
       })
       .select()
