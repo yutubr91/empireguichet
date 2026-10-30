@@ -17,3 +17,14 @@ Retire la suppression anonyme, autorise les connectés pour les annonces expiré
 
 ## 4. Secret à définir (Supabase → Edge Functions → Secrets)
 `USDT_RECEIVE_ADDRESS` = adresse BNB Chain (BEP20) de réception.
+
+## 5. Droits du rôle serveur (paiement USDT : « permission denied for table subscription_payments »)
+Fichier : `supabase_migration_grants_service_role.sql` — à exécuter une fois dans le SQL Editor.
+
+## Ordre de mise en ligne
+1. SQL Editor : exécuter `supabase_migration_usdt_auto.sql` (déjà fait si les 5 colonnes existent),
+   puis `supabase_migration_grants_service_role.sql` et `supabase_migration_ads_delete_fix.sql`.
+2. Edge Functions : déployer les 4 fonctions (usdt-payment, login-by-phone, set-pin, verify-pin).
+3. Secrets : `USDT_RECEIVE_ADDRESS`.
+4. GitHub -> Vercel : pousser le code (App.jsx).
+5. Test avec un compte agent non propriétaire : Abonnement -> Payer en USDT.
