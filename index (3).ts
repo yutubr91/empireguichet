@@ -33,6 +33,7 @@ import bcrypt from "npm:bcryptjs@3.0.3";
 // Ajoute ton domaine personnalisé ici si tu en configures un plus tard.
 const ALLOWED_ORIGINS = new Set([
   "https://empireguichet.vercel.app",
+  "https://empireguichet-w7xs.vercel.app",
   "http://localhost:5173",
   "http://localhost:3000",
 ]);
@@ -42,7 +43,8 @@ function getCorsHeaders(req) {
   const allowOrigin = ALLOWED_ORIGINS.has(origin) ? origin : "https://empireguichet.vercel.app";
   return {
     "Access-Control-Allow-Origin": allowOrigin,
-    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-api-version",
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
     "Vary": "Origin",
   };
 }

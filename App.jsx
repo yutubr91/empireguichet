@@ -3493,6 +3493,12 @@ export default function GuichetApp() {
         const remaining = [];
         let syncedCount = 0;
         for (const tx of current) {
+          // Une transaction appartient à l'agent qui l'a créée : on ne tente pas
+          // de l'envoyer depuis le compte d'un autre agent (refusé par la sécurité de la base).
+          if (!agent?.id || (tx.agent_id && tx.agent_id !== agent.id)) {
+            remaining.push(tx);
+            continue;
+          }
           const { error } = await supabase.from("transactions").insert({ network: tx.net, ...tx });
           if (error) {
             // On journalise l'erreur exacte : sans ça, une transaction qui
