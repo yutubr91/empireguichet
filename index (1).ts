@@ -243,6 +243,12 @@ export async function handler(req: Request): Promise<Response> {
       return json({ ok: false, error: "Le paiement USDT n'est pas encore configuré. Contacte l'équipe EmpireGuichet." });
     }
 
+    if (body?.action === "create" && body?.type === "publicite") {
+      return await createAdPayment(admin, userId, String(body.ad_id || ""), address, json);
+    }
+    if (body?.action === "verify" && body?.type === "publicite") {
+      return await verifyAdPayment(admin, userId, String(body.payment_id || ""), String(body.tx_hash || ""), json);
+    }
     if (body?.action === "create") return await createPayment(admin, userId, String(body.type || ""), address, json);
     if (body?.action === "verify") {
       return await verifyPayment(admin, userId, String(body.payment_id || ""), String(body.tx_hash || ""), json);
@@ -315,7 +321,8 @@ export async function createPayment(admin: any, userId: string, type: string, ad
     if (!error && data) return json({ ok: true, payment: publicPayment(data.id, type, expected, address, data.created_at) });
     if (error?.code !== "23505") {
       console.error("[usdt-payment] création impossible :", error?.message);
-      return json({ ok: false, error: "Impossible de créer la demande de paiement. Vérifie que la migration SQL « USDT automatique » a bien été exécutée." });
+      // DIAGNOSTIC : affiche la raison technique à l'écran (à retirer une fois tout stabilisé).
+      return json({ ok: false, error: `Impossible de créer la demande de paiement. [Détail technique : ${error?.code || "?"} — ${error?.message || "inconnu"}]` });
     }
   }
   return json({ ok: false, error: "Trop de demandes en cours. Réessaie dans quelques minutes." });
@@ -411,6 +418,169 @@ export async function verifyPayment(admin: any, userId: string, paymentId: strin
   if (rpcErr) {
     console.error("[usdt-payment] activation impossible :", rpcErr.message);
     return json({ ok: false, error: "Paiement vérifié, mais l'activation a échoué. Réessaie dans un instant ; si le problème continue, contacte l'équipe." });
+  }
+  return json({ ok: true, status: "validated", confirmations: evaluation.confirmations });
+}
+
+// ===== Publicités : paiement USDT automatique =====
+// Le prix vient de la base (fonction SQL ad_price_fcfa) : jamais du navigateur.
+const UUID_RE = /^[0-9a-fA-F-]{36}$/;
+
+async function adPriceFcfa(admin: any, days: number): Promise<number | null> {
+  const { data, error } = await admin.rpc("ad_price_fcfa", { p_days: days });
+  if (error || typeof data !== "number") return null;
+  return data;
+}
+
+export async function createAdPayment(admin: any, userId: string, adId: string, address: string, json: JsonFn) {
+  if (!UUID_RE.test(adId)) return json({ ok: false, error: "Publicité invalide." });
+  const { data: ad } = await admin
+    .from("ads")
+    .select("id, created_by, kind, status, duration_days")
+    .eq("id", adId)
+    .maybeSingle();
+  if (!ad || ad.created_by !== userId) return json({ ok: false, error: "Publicité introuvable." });
+  if (ad.kind !== "publicite" || ad.status !== "pending_payment") {
+    return json({ ok: false, error: "Cette publicité n'attend pas de paiement." });
+  }
+  const fcfa = await adPriceFcfa(admin, Number(ad.duration_days));
+  if (!fcfa) return json({ ok: false, error: "Durée de diffusion non tarifée." });
+
+  // Libère les montants réservés par d'anciennes demandes jamais payées (plus de 7 jours, sans numéro de transaction).
+  await admin
+    .from("ad_payments")
+    .update({ status: "rejected", rejected_reason: "Expiré : aucun paiement détecté", decided_at: new Date().toISOString() })
+    .eq("method", "usdt_bep20")
+    .eq("status", "pending")
+    .is("tx_hash", null)
+    .lt("created_at", new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString());
+
+  // Demande déjà en attente pour cette publicité : on la réutilise (même montant).
+  const { data: existing } = await admin
+    .from("ad_payments")
+    .select("id, usdt_expected, created_at")
+    .eq("ad_id", adId)
+    .eq("agent_id", userId)
+    .eq("method", "usdt_bep20")
+    .eq("status", "pending")
+    .is("tx_hash", null)
+    .eq("pay_to_address", address)
+    .order("created_at", { ascending: false })
+    .limit(1);
+  if (existing && existing[0]) {
+    const p = existing[0];
+    return json({ ok: true, payment: publicPayment(p.id, "publicite", String(p.usdt_expected), address, p.created_at) });
+  }
+
+  const rate = envNumber("XOF_PER_USDT", 600);
+  const base = baseUnits4(fcfa, rate);
+  const bytes = new Uint32Array(1);
+  for (let attempt = 0; attempt < 15; attempt++) {
+    crypto.getRandomValues(bytes);
+    const suffix = BigInt((bytes[0] % 500) + 1);
+    const expected = formatUnits4(base + suffix);
+    const { data, error } = await admin
+      .from("ad_payments")
+      .insert({
+        ad_id: adId,
+        agent_id: userId,
+        amount: fcfa,
+        method: "usdt_bep20",
+        status: "pending",
+        payment_reference: "USDT BEP20 — en attente du paiement",
+        usdt_expected: expected,
+        pay_to_address: address,
+      })
+      .select("id, created_at")
+      .single();
+    if (!error && data) return json({ ok: true, payment: publicPayment(data.id, "publicite", expected, address, data.created_at) });
+    if (error?.code !== "23505") {
+      console.error("[usdt-payment] création paiement pub impossible :", error?.message);
+      return json({ ok: false, error: `Impossible de créer la demande de paiement. [Détail technique : ${error?.code || "?"} — ${error?.message || "inconnu"}]` });
+    }
+  }
+  return json({ ok: false, error: "Trop de demandes en cours. Réessaie dans quelques minutes." });
+}
+
+/** Lecture blockchain + décision (mêmes règles de sécurité que l'abonnement). */
+async function checkOnChain(txHash: string, payTo: string, expectedUnits4: bigint, createdAtMs: number): Promise<VerifyResult> {
+  const receipt = (await rpcCall("eth_getTransactionReceipt", [txHash])) as VerifyInputs["receipt"];
+  let blockTimestampSec: number | null = null;
+  let latestBlock = 0n;
+  if (receipt) {
+    latestBlock = BigInt((await rpcCall("eth_blockNumber", [])) as string);
+    const block = (await rpcCall("eth_getBlockByNumber", [receipt.blockNumber, false])) as { timestamp?: string } | null;
+    blockTimestampSec = block?.timestamp ? Number(BigInt(block.timestamp)) : null;
+  }
+  return evaluateTransaction({ receipt, latestBlock, blockTimestampSec, payToAddress: payTo, expectedUnits4, paymentCreatedAtMs: createdAtMs });
+}
+
+export async function verifyAdPayment(admin: any, userId: string, paymentId: string, txHashRaw: string, json: JsonFn) {
+  if (!UUID_RE.test(paymentId)) return json({ ok: false, error: "Demande de paiement invalide." });
+  const txHash = txHashRaw.trim().toLowerCase();
+  if (!/^0x[0-9a-f]{64}$/.test(txHash)) {
+    return json({ ok: false, reason: "bad_hash", error: "Numéro de transaction invalide : il doit commencer par 0x et faire 66 caractères." });
+  }
+
+  const { data: payment } = await admin.from("ad_payments").select("*").eq("id", paymentId).eq("agent_id", userId).maybeSingle();
+  if (!payment || payment.method !== "usdt_bep20") return json({ ok: false, error: "Demande de paiement introuvable." });
+  if (payment.status === "validated") return json({ ok: true, status: "validated" });
+  if (payment.status !== "pending") return json({ ok: false, error: "Cette demande n'est plus active. Fais une nouvelle demande." });
+  if (payment.tx_hash && String(payment.tx_hash).toLowerCase() !== txHash) {
+    return json({ ok: false, error: "Cette demande est déjà associée à une autre transaction." });
+  }
+
+  // Garde-fou : le montant demandé ne peut pas être inférieur au prix réel de la publicité.
+  const { data: ad } = await admin.from("ads").select("duration_days, status").eq("id", payment.ad_id).maybeSingle();
+  if (!ad || ad.status !== "pending_payment") return json({ ok: false, error: "Cette publicité n'attend plus de paiement." });
+  const fcfa = await adPriceFcfa(admin, Number(ad.duration_days));
+  const rate = envNumber("XOF_PER_USDT", 600);
+  const expectedUnits4 = parseUnits4(String(payment.usdt_expected));
+  const payTo = String(payment.pay_to_address || "").toLowerCase();
+  if (!fcfa || fcfa !== payment.amount || expectedUnits4 === null || expectedUnits4 < (baseUnits4(fcfa, rate) * 95n) / 100n || !allowedAddresses().includes(payTo)) {
+    console.error("[usdt-payment] demande pub incohérente, vérification refusée :", paymentId);
+    return json({ ok: false, error: "Cette demande de paiement est invalide. Fais-en une nouvelle." });
+  }
+
+  // Ce numéro de transaction ne doit servir qu'une seule fois, tous types de paiement confondus.
+  const { data: usedAd } = await admin.from("ad_payments").select("id").eq("tx_hash", txHash).neq("id", payment.id).limit(1);
+  const { data: usedSub } = await admin.from("subscription_payments").select("id").eq("tx_hash", txHash).limit(1);
+  if ((usedAd && usedAd.length > 0) || (usedSub && usedSub.length > 0)) {
+    return json({ ok: false, reason: "used", error: "Ce numéro de transaction a déjà été utilisé." });
+  }
+
+  let evaluation: VerifyResult;
+  try {
+    evaluation = await checkOnChain(txHash, payTo, expectedUnits4, new Date(payment.created_at).getTime());
+  } catch (e) {
+    console.error("[usdt-payment] blockchain injoignable :", e);
+    return json({ ok: false, reason: "rpc", error: "La blockchain ne répond pas pour le moment. Réessaie dans une minute." });
+  }
+  if (!evaluation.ok) {
+    if (evaluation.reason === "amount_mismatch") {
+      await admin
+        .from("ad_payments")
+        .update({ payment_reference: `USDT BEP20 — montant différent (reçu ${evaluation.extra?.received}, attendu ${evaluation.extra?.expected}) — tx ${txHash}` })
+        .eq("id", payment.id)
+        .eq("status", "pending");
+    }
+    return json({ ok: false, reason: evaluation.reason, error: evaluation.message, ...(evaluation.extra || {}) });
+  }
+
+  const { error: updErr } = await admin
+    .from("ad_payments")
+    .update({ tx_hash: txHash, verified_at: new Date().toISOString(), payment_reference: `USDT BEP20 — tx ${txHash}` })
+    .eq("id", payment.id)
+    .eq("status", "pending");
+  if (updErr) {
+    if (updErr.code === "23505") return json({ ok: false, reason: "used", error: "Ce numéro de transaction a déjà été utilisé." });
+    console.error("[usdt-payment] enregistrement du hash pub impossible :", updErr.message);
+    return json({ ok: false, error: `Paiement vérifié, mais l'enregistrement a échoué. [Détail technique : ${updErr.code || "?"} — ${updErr.message}]` });
+  }
+  const { error: actErr } = await admin.rpc("activate_ad_after_payment", { p_payment_id: payment.id });
+  if (actErr) {
+    console.error("[usdt-payment] activation pub impossible :", actErr.message);
+    return json({ ok: false, error: `Paiement vérifié, mais l'activation a échoué. Réessaie dans un instant. [Détail technique : ${actErr.code || "?"} — ${actErr.message}]` });
   }
   return json({ ok: true, status: "validated", confirmations: evaluation.confirmations });
 }

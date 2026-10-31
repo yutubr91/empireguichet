@@ -28,3 +28,13 @@ Fichier : `supabase_migration_grants_service_role.sql` — à exécuter une fois
 3. Secrets : `USDT_RECEIVE_ADDRESS`.
 4. GitHub -> Vercel : pousser le code (App.jsx).
 5. Test avec un compte agent non propriétaire : Abonnement -> Payer en USDT.
+
+## 6. Paiement réel des publicités (USDT BEP20 automatique + Wave validé par le propriétaire)
+- `supabase_migration_publicites_paiement.sql` : table `ad_payments`, prix côté base (`ad_price_fcfa` : 7 j 15 000 / 15 j 25 000 / 30 j 40 000 FCFA),
+  fonctions `declare_ad_wave_payment`, `validate_ad_payment`, `activate_ad_after_payment`, et correction de la faille
+  (un agent ne peut plus créer une publicité « active » ou « payée » : seulement `pending_payment`).
+- `supabase/functions/usdt-payment/index.ts` : nouveau type `publicite` (create / verify), même vérification blockchain.
+- `App.jsx` : la publicité d'un agent est créée « en attente de paiement » ; panneau de paiement Wave + USDT dans « Mes publicités » ;
+  le propriétaire valide les paiements Wave dans « Backoffice publicité ».
+- Le compte principal continue de publier gratuitement.
+- Version avec « Détail technique » affiché en cas d'erreur (diagnostic) : à simplifier une fois tout stabilisé.

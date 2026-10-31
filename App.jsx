@@ -1017,7 +1017,7 @@ export default function GuichetApp() {
       loadMyPayments();
     }
   }
-  function renderUsdtAuto(type) {
+  function renderUsdtAuto(type, handlers) {
     const st = usdtAuto[type] || {};
     const p = st.payment;
     return (
@@ -1028,11 +1028,11 @@ export default function GuichetApp() {
         {!p ? (
           <>
             <p className="text-xs mb-2" style={{ color: COLORS.textMuted }}>
-              Tu reçois un montant exact à envoyer. Dès que ton paiement est confirmé sur la blockchain, ton accès s'active tout seul.
+              {handlers?.intro || "Tu reçois un montant exact à envoyer. Dès que ton paiement est confirmé sur la blockchain, ton accès s'active tout seul."}
             </p>
             <button
               type="button"
-              onClick={() => startUsdtPayment(type)}
+              onClick={() => (handlers?.start ? handlers.start() : startUsdtPayment(type))}
               disabled={st.busy}
               className="gc-btn w-full py-2.5 rounded-lg text-sm font-medium"
               style={{ background: COLORS.gold, color: "#052E36", opacity: st.busy ? 0.6 : 1 }}
@@ -1080,7 +1080,7 @@ export default function GuichetApp() {
             />
             <button
               type="button"
-              onClick={() => verifyUsdtPayment(type)}
+              onClick={() => (handlers?.verify ? handlers.verify() : verifyUsdtPayment(type))}
               disabled={st.busy || !(st.hash || "").trim()}
               className="gc-btn w-full py-2.5 rounded-lg text-sm font-medium"
               style={{ background: COLORS.gold, color: "#052E36", opacity: st.busy || !(st.hash || "").trim() ? 0.6 : 1 }}
@@ -2736,6 +2736,153 @@ export default function GuichetApp() {
     if (!error) setMyAds(data || []);
   }
 
+  // ===== Paiement des publicités : USDT BEP20 (automatique) ou Wave (validé par le propriétaire) =====
+  const [myAdPayments, setMyAdPayments] = useState([]);
+  const [payingAdId, setPayingAdId] = useState(null);
+  const [adWaveRefs, setAdWaveRefs] = useState({});
+  const [adWaveMsgs, setAdWaveMsgs] = useState({});
+  const [adWaveBusy, setAdWaveBusy] = useState(null);
+  const [pendingAdPayments, setPendingAdPayments] = useState([]);
+
+  async function loadMyAdPayments() {
+    if (!agent) return;
+    const { data, error } = await supabase
+      .from("ad_payments")
+      .select("id, ad_id, method, status, amount, rejected_reason, created_at")
+      .eq("agent_id", agent.id)
+      .order("created_at", { ascending: false });
+    if (!error) setMyAdPayments(data || []);
+  }
+
+  async function loadPendingAdPayments() {
+    const { data, error } = await supabase
+      .from("ad_payments")
+      .select("*, ads:ad_id(title, duration_days), agents:agent_id(full_name, phone)")
+      .eq("status", "pending")
+      .eq("method", "wave")
+      .order("created_at", { ascending: true });
+    if (!error) setPendingAdPayments(data || []);
+  }
+
+  async function decideAdPayment(payment, approve) {
+    const { error } = await supabase.rpc("validate_ad_payment", {
+      p_payment_id: payment.id,
+      p_approve: approve,
+      p_reject_reason: approve ? null : "Référence de paiement non valide",
+    });
+    if (error) {
+      console.error("[decideAdPayment] échec :", error);
+      return;
+    }
+    loadPendingAdPayments();
+    loadAllAdsForBackoffice();
+  }
+
+  async function startAdUsdtPayment(ad) {
+    const key = `pub:${ad.id}`;
+    patchUsdtAuto(key, { busy: true, msg: null });
+    const { data, error } = await supabase.functions.invoke("usdt-payment", {
+      body: { action: "create", type: "publicite", ad_id: ad.id },
+    });
+    if (error || !data?.ok) {
+      patchUsdtAuto(key, { busy: false, msg: { type: "error", text: data?.error || "Service de paiement indisponible. Réessaie dans un instant." } });
+      return;
+    }
+    patchUsdtAuto(key, { busy: false, payment: data.payment, hash: "", msg: null });
+  }
+
+  async function verifyAdUsdtPayment(ad) {
+    const key = `pub:${ad.id}`;
+    const st = usdtAuto[key];
+    if (!st?.payment) return;
+    patchUsdtAuto(key, { busy: true, msg: null });
+    const { data, error } = await supabase.functions.invoke("usdt-payment", {
+      body: { action: "verify", type: "publicite", payment_id: st.payment.id, tx_hash: (st.hash || "").trim() },
+    });
+    if (error || !data?.ok) {
+      patchUsdtAuto(key, { busy: false, msg: { type: "error", text: data?.error || "Vérification impossible pour le moment. Réessaie dans un instant." } });
+      return;
+    }
+    patchUsdtAuto(key, { busy: false, payment: null, hash: "", msg: { type: "success", text: "Paiement confirmé ! Ta publicité est en ligne. ✅" } });
+    setPayingAdId(null);
+    loadMyAds();
+    loadMyAdPayments();
+    loadActivePublicites();
+    pushNotification("Publicité payée et mise en ligne 📣");
+  }
+
+  async function declareAdWavePayment(ad) {
+    const ref = (adWaveRefs[ad.id] || "").trim();
+    if (!ref) {
+      setAdWaveMsgs((m) => ({ ...m, [ad.id]: { type: "error", text: "Indique la référence de ton paiement Wave." } }));
+      return;
+    }
+    setAdWaveBusy(ad.id);
+    const { error } = await supabase.rpc("declare_ad_wave_payment", { p_ad_id: ad.id, p_reference: ref });
+    setAdWaveBusy(null);
+    if (error) {
+      setAdWaveMsgs((m) => ({ ...m, [ad.id]: { type: "error", text: error.message } }));
+      return;
+    }
+    setAdWaveRefs((r) => ({ ...r, [ad.id]: "" }));
+    setAdWaveMsgs((m) => ({ ...m, [ad.id]: { type: "success", text: "Déclaration envoyée ✔ En attente de validation par l'équipe EmpireGuichet." } }));
+    loadMyAdPayments();
+  }
+
+  function renderAdPaymentPanel(ad) {
+    const plan = AD_PRICING.find((x) => x.days === ad.duration_days);
+    const price = plan ? plan.price : 0;
+    const waitingWave = myAdPayments.some((x) => x.ad_id === ad.id && x.method === "wave" && x.status === "pending");
+    const msg = adWaveMsgs[ad.id];
+    return (
+      <div className="mt-3 p-3 rounded-lg" style={{ background: COLORS.bgSoft, border: `1px solid ${COLORS.surfaceLine}` }}>
+        <div className="text-xs font-medium mb-2" style={{ color: COLORS.textMuted }}>Choisis ton moyen de paiement :</div>
+        <a
+          href={getWaveLink(price)}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="gc-btn w-full flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-medium mb-2"
+          style={{ background: "#1DC8E0", color: "#052E36" }}
+        >
+          <Send size={14} /> Payer {formatFCFA(getWaveAmount(price))} avec Wave
+        </a>
+        {renderUsdtAuto(`pub:${ad.id}`, {
+          start: () => startAdUsdtPayment(ad),
+          verify: () => verifyAdUsdtPayment(ad),
+          intro: "Tu reçois un montant exact à envoyer. Dès que ton paiement est confirmé sur la blockchain, ta publicité se met en ligne toute seule.",
+        })}
+        <div className="mt-3">
+          {waitingWave ? (
+            <p className="text-xs" style={{ color: COLORS.teal }}>Paiement Wave déclaré — en attente de validation par l'équipe EmpireGuichet.</p>
+          ) : (
+            <>
+              <div className="text-xs mb-1.5" style={{ color: COLORS.textMuted }}>Déjà payé par Wave ? Indique la référence de la transaction :</div>
+              <input
+                value={adWaveRefs[ad.id] || ""}
+                onChange={(e) => setAdWaveRefs((r) => ({ ...r, [ad.id]: e.target.value }))}
+                placeholder="Référence de la transaction Wave"
+                className="w-full px-3 py-2 rounded-lg text-xs outline-none mb-2"
+                style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}`, color: COLORS.text }}
+              />
+              <button
+                type="button"
+                onClick={() => declareAdWavePayment(ad)}
+                disabled={adWaveBusy === ad.id}
+                className="gc-btn w-full py-2.5 rounded-lg text-sm font-medium"
+                style={{ background: COLORS.gold, color: "#052E36", opacity: adWaveBusy === ad.id ? 0.6 : 1 }}
+              >
+                {adWaveBusy === ad.id ? "Envoi…" : "Déclarer mon paiement Wave"}
+              </button>
+            </>
+          )}
+          {msg && (
+            <p className="text-xs mt-2" style={{ color: msg.type === "success" ? COLORS.teal : COLORS.danger }}>{msg.text}</p>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   // Backoffice — toutes les pubs, réservé au propriétaire de la plateforme
   const [allAds, setAllAds] = useState([]);
   const [allAdsLoading, setAllAdsLoading] = useState(false);
@@ -2778,12 +2925,14 @@ export default function GuichetApp() {
         loadActivePublicites();
         loadMyAds();
       });
+      loadMyAdPayments();
     }
     if (tab === "annonceur" && agent?.isPlatformOwner) {
       cleanupExpiredAds().then(() => loadMyAds());
     }
     if (tab === "backoffice-pub" && agent?.isPlatformOwner) {
       cleanupExpiredAds().then(() => loadAllAdsForBackoffice());
+      loadPendingAdPayments();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab]);
@@ -2835,10 +2984,6 @@ export default function GuichetApp() {
     }
     const isFree = !!agent?.isPlatformOwner;
     const amountToCharge = isFree ? 0 : price;
-    if (!isFree && amountToCharge > floatBalance) {
-      setAdFormError(`Solde insuffisant. Solde disponible : ${formatFCFA(floatBalance)}.`);
-      return;
-    }
     setAdSubmitting(true);
     let imageUrl = null;
     if (adImageFile) {
@@ -2850,10 +2995,10 @@ export default function GuichetApp() {
         return;
       }
     }
-    // Paiement simulé — en production, appel réel à l'agrégateur de paiement ici
+    // La publicité d'un agent est créée « en attente de paiement » : elle n'est mise en ligne qu'après un vrai paiement confirmé (USDT ou Wave).
     const now = new Date();
     const endsAt = new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
-    const { error } = await supabase.from("ads").insert({
+    const { data: newAd, error } = await supabase.from("ads").insert({
       created_by: agent.id,
       agency_id: agent.agencyId,
       agency_name: agent.agency,
@@ -2863,13 +3008,13 @@ export default function GuichetApp() {
       contact_phone: adForm.contactPhone.trim(),
       image_url: imageUrl,
       duration_days: days,
-      amount_paid: amountToCharge,
-      status: "active",
+      amount_paid: 0,
+      status: isFree ? "active" : "pending_payment",
       starts_at: now.toISOString(),
       ends_at: endsAt.toISOString(),
       impressions: 0,
       clicks: 0,
-    });
+    }).select("id").single();
     setAdSubmitting(false);
     if (error) {
       setAdFormError("Erreur lors de la publication : " + error.message);
@@ -2878,19 +3023,20 @@ export default function GuichetApp() {
     setAdSuccessMsg(
       isFree
         ? `${isAnnonce ? "Annonce" : "Publicité"} publiée gratuitement et en ligne pour ${days} jour${days > 1 ? "s" : ""} ✅`
-        : `Publicité payée (${formatFCFA(price)}) et en ligne pour ${days} jours ✅`
+        : `Publicité créée. Choisis ton moyen de paiement ci-dessous : elle sera mise en ligne dès que le paiement de ${formatFCFA(price)} est confirmé.`
     );
-    if (!isFree) setAdSpend((s) => s + price);
+    if (!isFree && newAd?.id) setPayingAdId(newAd.id);
     setAdImageFile(null);
     setAdImagePreview("");
     setAdForm({ title: "", description: "", contactPhone: "", planIndex: 0, customDays: 7 });
-    pushNotification(`${isAnnonce ? "Annonce" : "Publicité"} publiée avec succès 📣`);
+    pushNotification(isFree ? `${isAnnonce ? "Annonce" : "Publicité"} publiée avec succès 📣` : "Publicité créée — en attente de paiement");
     if (isAnnonce) {
       loadActiveAds();
     } else {
       loadActivePublicites();
     }
     loadMyAds();
+    loadMyAdPayments();
   }
 
   // PIN confirmation modal state
@@ -6329,12 +6475,12 @@ export default function GuichetApp() {
                     ? "Publication en cours…"
                     : agent?.isPlatformOwner
                     ? "Publier gratuitement"
-                    : `Payer ${formatFCFA(AD_PRICING[adForm.planIndex].price)} et publier`}
+                    : `Créer et payer ${formatFCFA(AD_PRICING[adForm.planIndex].price)}`}
                 </button>
                 <p className="text-xs" style={{ color: COLORS.textMuted }}>
                   {agent?.isPlatformOwner
                     ? "En tant que compte principal, tes publicités sont gratuites."
-                    : "Paiement simulé pour cette démo — l'annonce passe en ligne immédiatement après confirmation."}
+                    : "Paiement par Wave ou en USDT (BNB — BEP20) : ta publicité passe en ligne dès que le paiement est confirmé."}
                 </p>
               </form>
             </div>
@@ -6346,8 +6492,12 @@ export default function GuichetApp() {
                 <div className="flex flex-col gap-2">
                   {myAds.filter((a) => a.kind === "publicite").map((ad) => {
                     const isActive = ad.status === "active" && new Date(ad.ends_at) > new Date();
+                    const isPending = ad.status === "pending_payment";
+                    const waitingWave = myAdPayments.some((x) => x.ad_id === ad.id && x.method === "wave" && x.status === "pending");
+                    const adPlan = AD_PRICING.find((x) => x.days === ad.duration_days);
                     return (
-                      <div key={ad.id} className="p-3.5 rounded-lg flex items-center gap-3" style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}` }}>
+                      <div key={ad.id} className="p-3.5 rounded-lg" style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}` }}>
+                        <div className="flex items-center gap-3">
                         {ad.image_url ? (
                           <img src={ad.image_url} alt={ad.title} className="w-11 h-11 rounded-lg object-cover flex-shrink-0" />
                         ) : (
@@ -6359,7 +6509,9 @@ export default function GuichetApp() {
                           <div className="min-w-0">
                             <div className="text-sm font-medium truncate">{ad.title}</div>
                             <div className="text-xs" style={{ color: COLORS.textMuted }}>
-                              {formatFCFA(ad.amount_paid)} · {ad.duration_days} jours · expire le {new Date(ad.ends_at).toLocaleDateString("fr-FR")}
+                              {isPending
+                                ? `${formatFCFA(adPlan?.price || 0)} · ${ad.duration_days} jours · non payée`
+                                : `${formatFCFA(ad.amount_paid)} · ${ad.duration_days} jours · expire le ${new Date(ad.ends_at).toLocaleDateString("fr-FR")}`}
                             </div>
                           </div>
                           <span
@@ -6370,9 +6522,23 @@ export default function GuichetApp() {
                                 : { background: COLORS.bgSoft, color: COLORS.textMuted }
                             }
                           >
-                            {isActive ? "En ligne" : "Expirée"}
+                            {isPending ? (waitingWave ? "Wave en validation" : "En attente de paiement") : isActive ? "En ligne" : "Expirée"}
                           </span>
                         </div>
+                        </div>
+                        {isPending && (
+                          <div className="mt-3">
+                            <button
+                              type="button"
+                              onClick={() => setPayingAdId(payingAdId === ad.id ? null : ad.id)}
+                              className="gc-btn w-full py-2.5 rounded-lg text-sm font-medium"
+                              style={{ background: COLORS.gold, color: "#052E36" }}
+                            >
+                              {payingAdId === ad.id ? "Masquer le paiement" : `Payer ${formatFCFA(adPlan?.price || 0)} pour mettre en ligne`}
+                            </button>
+                            {payingAdId === ad.id && renderAdPaymentPanel(ad)}
+                          </div>
+                        )}
                       </div>
                     );
                   })}
@@ -6564,6 +6730,28 @@ export default function GuichetApp() {
               <h2 className="text-lg font-semibold mb-1">Backoffice publicité</h2>
               <p className="text-xs" style={{ color: COLORS.textMuted }}>Visible uniquement par toi.</p>
             </div>
+
+            {pendingAdPayments.length > 0 && (
+              <div className="mb-6 p-5 rounded-xl" style={{ background: COLORS.surface, border: `1px solid ${COLORS.gold}` }}>
+                <div className="text-sm font-medium mb-3">Paiements Wave de publicités à valider ({pendingAdPayments.length})</div>
+                <div className="flex flex-col gap-2">
+                  {pendingAdPayments.map((pay) => (
+                    <div key={pay.id} className="flex items-center justify-between gap-3 p-3 rounded-lg" style={{ background: COLORS.bgSoft }}>
+                      <div className="min-w-0 text-xs">
+                        <div className="font-medium truncate">{pay.ads?.title || "Publicité"} · {formatFCFA(pay.amount)} · {pay.ads?.duration_days} jours</div>
+                        <div style={{ color: COLORS.textMuted }}>
+                          {pay.agents?.full_name} · réf. <span className="gc-mono">{pay.payment_reference}</span>
+                        </div>
+                      </div>
+                      <div className="flex gap-2 flex-shrink-0">
+                        <button type="button" onClick={() => decideAdPayment(pay, true)} className="gc-btn px-3 py-1.5 rounded-lg text-xs font-medium" style={{ background: COLORS.teal, color: "#052E36" }}>Valider</button>
+                        <button type="button" onClick={() => decideAdPayment(pay, false)} className="gc-btn px-3 py-1.5 rounded-lg text-xs font-medium" style={{ background: COLORS.bgSoft, color: COLORS.danger, border: `1px solid ${COLORS.surfaceLine}` }}>Refuser</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {allAdsLoading ? (
               <div className="text-xs" style={{ color: COLORS.textMuted }}>Chargement…</div>
