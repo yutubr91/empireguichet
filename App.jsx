@@ -6829,7 +6829,7 @@ export default function GuichetApp() {
                                     : { background: COLORS.bgSoft, color: COLORS.textMuted }
                                 }
                               >
-                                {isActive ? "En ligne" : "Expirée"}
+                                {ad.status === "pending_payment" ? "En attente de paiement" : isActive ? "En ligne" : "Expirée"}
                               </span>
                             </td>
                             <td className="px-3 py-2.5" style={{ color: COLORS.textMuted }}>{new Date(ad.ends_at).toLocaleDateString("fr-FR")}</td>
@@ -6870,7 +6870,7 @@ export default function GuichetApp() {
                                 : { background: COLORS.bgSoft, color: COLORS.textMuted }
                             }
                           >
-                            {isActive ? "En ligne" : "Expirée"}
+                            {ad.status === "pending_payment" ? "En attente de paiement" : isActive ? "En ligne" : "Expirée"}
                           </span>
                         </div>
                         <div className="text-xs mb-3" style={{ color: COLORS.textMuted }}>{ad.agency_name || "—"}</div>
