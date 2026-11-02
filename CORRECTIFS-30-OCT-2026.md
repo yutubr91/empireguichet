@@ -38,3 +38,8 @@ Fichier : `supabase_migration_grants_service_role.sql` — à exécuter une fois
   le propriétaire valide les paiements Wave dans « Backoffice publicité ».
 - Le compte principal continue de publier gratuitement.
 - Version avec « Détail technique » affiché en cas d'erreur (diagnostic) : à simplifier une fois tout stabilisé.
+
+## 7. Solde calculé des puces + rapprochement (2 nov. 2026)
+- `supabase_migration_solde_puces_rapprochement.sql` : à exécuter une fois dans le SQL Editor (après `supabase_migration_comptes_agents.sql`).
+- `App.jsx` : solde de départ obligatoire à la liaison d'une puce, solde calculé affiché, bouton « Rapprocher » (écart + ajustement tracé).
+- Le solde est calculé d'après les opérations enregistrées : ce n'est pas une lecture directe de l'opérateur.

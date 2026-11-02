@@ -1166,6 +1166,14 @@ export default function GuichetApp() {
   const [linkMsg, setLinkMsg] = useState(null);
   const [linkBusy, setLinkBusy] = useState("");
   const [linkScanFor, setLinkScanFor] = useState(null);
+  // Solde calculé des puces (d'après les opérations enregistrées) : { [account_id]: { opening_balance, tx_net, adjustments, calculated_balance } }
+  const [linkBalances, setLinkBalances] = useState({});
+  const [balancesReady, setBalancesReady] = useState(true); // false si la migration SQL « solde des puces » n'est pas exécutée
+  const [openingDraft, setOpeningDraft] = useState({}); // solde de départ à saisir pour les puces déjà reliées : { [account_id]: "1000" }
+  const [recoFor, setRecoFor] = useState(null); // puce en cours de rapprochement
+  const [recoReal, setRecoReal] = useState("");
+  const [recoNote, setRecoNote] = useState("");
+  const [recoResult, setRecoResult] = useState(null); // { accountId, calculated, real, gap }
   // Attribution des numéros aux agents : lignes { account_id, agent_id }. Un numéro sans ligne = utilisable par tous les agents.
   const [linkAssignments, setLinkAssignments] = useState([]);
   const [assignOpenFor, setAssignOpenFor] = useState(null);
@@ -2057,6 +2065,74 @@ export default function GuichetApp() {
       } else {
         setLinkAssignments([]);
       }
+      if (agent?.role === "manager") loadLinkBalances();
+    }
+  }
+
+  // Solde CALCULÉ de chaque puce : solde de départ + retraits − dépôts + ajustements validés. Ce n'est jamais une lecture directe de l'opérateur.
+  async function loadLinkBalances() {
+    if (!agent?.agencyId || agent.role !== "manager") return;
+    const { data, error } = await supabase.rpc("get_linked_account_balances", { p_agency: agent.agencyId });
+    if (error) {
+      setBalancesReady(false);
+      return;
+    }
+    setBalancesReady(true);
+    const map = {};
+    (data || []).forEach((r) => { map[r.account_id] = r; });
+    setLinkBalances(map);
+  }
+
+  async function saveOpeningBalance(accountId) {
+    const raw = String(openingDraft[accountId] ?? "").replace(/\s/g, "");
+    if (!/^\d{1,12}$/.test(raw)) {
+      setLinkMsg({ type: "error", text: "Solde de départ invalide : entre un montant en FCFA (chiffres uniquement, 0 si la puce est vide)." });
+      return;
+    }
+    if (!window.confirm(`Confirmer ${formatFCFA(Number(raw))} comme solde de départ ? Il ne pourra plus être modifié (seul un rapprochement pourra corriger l'écart).`)) return;
+    setLinkBusy(accountId);
+    const { error } = await supabase.rpc("set_linked_account_opening_balance", { p_account: accountId, p_amount: Number(raw) });
+    setLinkBusy("");
+    if (error) {
+      setLinkMsg({ type: "error", text: "Impossible d'enregistrer le solde de départ. Vérifie que la migration SQL « solde des puces et rapprochement » a bien été exécutée." });
+      return;
+    }
+    setOpeningDraft((d) => { const n = { ...d }; delete n[accountId]; return n; });
+    setLinkMsg({ type: "success", text: "Solde de départ enregistré." });
+    loadLinkedAccounts();
+  }
+
+  function openReconciliation(accountId) {
+    setRecoFor(recoFor === accountId ? null : accountId);
+    setRecoReal("");
+    setRecoNote("");
+    setRecoResult(null);
+  }
+
+  // Étape 1 : enregistre le rapprochement (écart tracé). Étape 2 (apply=true) : valide l'ajustement.
+  async function runReconciliation(accountId, apply) {
+    const raw = String(recoReal).replace(/\s/g, "");
+    if (!/^\d{1,12}$/.test(raw)) {
+      setLinkMsg({ type: "error", text: "Entre le solde réel affiché sur ton téléphone (FCFA, chiffres uniquement)." });
+      return;
+    }
+    setLinkBusy("reco");
+    const { data, error } = await supabase.rpc("reconcile_linked_account", {
+      p_account: accountId,
+      p_real_balance: Number(raw),
+      p_apply: apply,
+      p_note: recoNote.trim() || null,
+    });
+    setLinkBusy("");
+    const row = Array.isArray(data) ? data[0] : data;
+    if (error || !row) {
+      setLinkMsg({ type: "error", text: "Rapprochement impossible. Vérifie que la migration SQL « solde des puces et rapprochement » a bien été exécutée." });
+      return;
+    }
+    setRecoResult({ accountId, calculated: Number(row.calculated_balance), real: Number(row.real_balance), gap: Number(row.gap), applied: !!row.applied });
+    if (apply) {
+      setLinkMsg({ type: "success", text: "Ajustement enregistré. Le solde calculé correspond maintenant au solde réel saisi." });
+      loadLinkBalances();
     }
   }
 
@@ -2143,8 +2219,14 @@ export default function GuichetApp() {
       setLinkMsg({ type: "error", text: "Ce numéro est déjà relié à cette agence." });
       return;
     }
+    const openingRaw = String(linkField(netId, "opening")).replace(/\s/g, "");
+    if (!/^\d{1,12}$/.test(openingRaw)) {
+      setLinkMsg({ type: "error", text: "Entre le solde de départ de cette puce (montant en FCFA affiché maintenant sur ton téléphone ; 0 si elle est vide)." });
+      return;
+    }
     setLinkBusy(netId);
     const { error } = await supabase.from("agency_linked_accounts").insert({
+      opening_balance: Number(openingRaw),
       agency_id: agent.agencyId,
       network: netId,
       label: label || null,
@@ -7324,6 +7406,14 @@ export default function GuichetApp() {
               <div className="text-sm font-medium mb-1">Comptes liés de l'agence</div>
               <div className="text-xs" style={{ color: COLORS.textMuted }}>
                 EmpireGuichet ne garde l'argent de personne. Relie ici tes comptes MTN, Orange, Moov, Wave, Djamo et crypto : ils servent à suivre le volume de chaque opérateur et permettent à tes agents de travailler sur l'application.
+                <div className="mt-1">
+                  Les soldes affichés sont des <b>soldes calculés d'après les opérations enregistrées</b> (solde de départ + retraits − dépôts + ajustements), pas une lecture directe de tes comptes. Utilise « Rapprocher » pour les comparer à ton solde réel.
+                </div>
+                {!balancesReady && (
+                  <div className="mt-1" style={{ color: COLORS.danger }}>
+                    Soldes indisponibles : exécute la migration SQL « supabase_migration_solde_puces_rapprochement.sql ».
+                  </div>
+                )}
               </div>
             </div>
             {(() => {
@@ -7415,6 +7505,121 @@ export default function GuichetApp() {
                                         Délier
                                       </button>
                                     </div>
+                                    {balancesReady && (() => {
+                                      const b = linkBalances[a.id];
+                                      const hasOpening = b && b.opening_balance !== null && b.opening_balance !== undefined;
+                                      return (
+                                        <div className="mt-2 p-2 rounded-lg" style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}` }}>
+                                          {hasOpening ? (
+                                            <>
+                                              <div className="flex items-center justify-between gap-2">
+                                                <div>
+                                                  <div className="text-[10px]" style={{ color: COLORS.textMuted }}>Solde calculé</div>
+                                                  <div className="text-sm font-medium gc-mono">{formatFCFA(Number(b.calculated_balance))}</div>
+                                                </div>
+                                                <button
+                                                  type="button"
+                                                  onClick={() => openReconciliation(a.id)}
+                                                  className="gc-btn px-2.5 py-1.5 rounded-lg text-[11px]"
+                                                  style={{ background: COLORS.gold, color: "#052E36" }}
+                                                >
+                                                  {recoFor === a.id ? "Fermer" : "Rapprocher"}
+                                                </button>
+                                              </div>
+                                              <div className="text-[10px] mt-1" style={{ color: COLORS.textMuted }}>
+                                                Solde calculé d'après les opérations enregistrées dans EmpireGuichet — ce n'est pas une lecture directe de ton compte {n.name}.
+                                                Départ {formatFCFA(Number(b.opening_balance))} · opérations {Number(b.tx_net) >= 0 ? "+" : "−"}{formatFCFA(Math.abs(Number(b.tx_net)))}
+                                                {Number(b.adjustments) !== 0 ? ` · ajustements ${Number(b.adjustments) > 0 ? "+" : "−"}${formatFCFA(Math.abs(Number(b.adjustments)))}` : ""}
+                                              </div>
+                                              {recoFor === a.id && (
+                                                <div className="mt-2 pt-2" style={{ borderTop: `1px solid ${COLORS.surfaceLine}` }}>
+                                                  <div className="text-[11px] mb-1.5" style={{ color: COLORS.textMuted }}>
+                                                    Entre le solde réel que tu vois sur ton téléphone (compte {n.name}) pour le comparer au calcul.
+                                                  </div>
+                                                  <input
+                                                    inputMode="numeric"
+                                                    value={recoReal}
+                                                    onChange={(e) => { setRecoReal(e.target.value.replace(/[^\d]/g, "").slice(0, 12)); setRecoResult(null); }}
+                                                    placeholder="Solde réel (FCFA)"
+                                                    className="w-full px-3 py-2 rounded-lg text-sm mb-2 outline-none gc-mono"
+                                                    style={{ background: COLORS.bgSoft, border: `1px solid ${COLORS.surfaceLine}`, color: COLORS.text }}
+                                                  />
+                                                  <input
+                                                    value={recoNote}
+                                                    onChange={(e) => setRecoNote(e.target.value.slice(0, 200))}
+                                                    placeholder="Note (facultatif, ex. frais opérateur non saisis)"
+                                                    className="w-full px-3 py-2 rounded-lg text-xs mb-2 outline-none"
+                                                    style={{ background: COLORS.bgSoft, border: `1px solid ${COLORS.surfaceLine}`, color: COLORS.text }}
+                                                  />
+                                                  {recoResult && recoResult.accountId === a.id ? (
+                                                    <div className="text-xs p-2 rounded-lg mb-2" style={{ background: COLORS.bgSoft, border: `1px solid ${recoResult.gap === 0 ? COLORS.teal : COLORS.danger}` }}>
+                                                      <div>Calculé : <span className="gc-mono">{formatFCFA(recoResult.calculated)}</span></div>
+                                                      <div>Réel : <span className="gc-mono">{formatFCFA(recoResult.real)}</span></div>
+                                                      <div className="font-medium mt-1" style={{ color: recoResult.gap === 0 ? COLORS.teal : COLORS.danger }}>
+                                                        {recoResult.gap === 0
+                                                          ? "Aucun écart : le calcul correspond à ton solde réel."
+                                                          : `Écart : ${recoResult.gap > 0 ? "+" : "−"}${formatFCFA(Math.abs(recoResult.gap))} (${recoResult.gap > 0 ? "il y a plus d'argent que calculé" : "il y a moins d'argent que calculé"})`}
+                                                      </div>
+                                                      {recoResult.gap !== 0 && !recoResult.applied && (
+                                                        <button
+                                                          type="button"
+                                                          disabled={linkBusy === "reco"}
+                                                          onClick={() => {
+                                                            if (window.confirm(`Ajuster le solde calculé de ${recoResult.gap > 0 ? "+" : "−"}${formatFCFA(Math.abs(recoResult.gap))} ? L'ajustement sera enregistré dans le journal.`)) runReconciliation(a.id, true);
+                                                          }}
+                                                          className="gc-btn mt-2 w-full py-2 rounded-lg text-xs font-medium"
+                                                          style={{ background: COLORS.gold, color: "#052E36", opacity: linkBusy === "reco" ? 0.6 : 1 }}
+                                                        >
+                                                          Ajuster le solde calculé
+                                                        </button>
+                                                      )}
+                                                      {recoResult.applied && (
+                                                        <div className="text-[11px] mt-1" style={{ color: COLORS.textMuted }}>Ajustement tracé dans le journal des rapprochements.</div>
+                                                      )}
+                                                    </div>
+                                                  ) : (
+                                                    <button
+                                                      type="button"
+                                                      disabled={linkBusy === "reco"}
+                                                      onClick={() => runReconciliation(a.id, false)}
+                                                      className="gc-btn w-full py-2 rounded-lg text-xs font-medium"
+                                                      style={{ background: COLORS.bgSoft, color: COLORS.text, border: `1px solid ${COLORS.surfaceLine}`, opacity: linkBusy === "reco" ? 0.6 : 1 }}
+                                                    >
+                                                      Comparer avec le calcul
+                                                    </button>
+                                                  )}
+                                                </div>
+                                              )}
+                                            </>
+                                          ) : (
+                                            <>
+                                              <div className="text-[11px] mb-1.5" style={{ color: COLORS.textMuted }}>
+                                                Solde de départ à saisir pour suivre le solde calculé de cette puce (montant affiché maintenant sur ton téléphone).
+                                              </div>
+                                              <div className="flex gap-2">
+                                                <input
+                                                  inputMode="numeric"
+                                                  value={openingDraft[a.id] ?? ""}
+                                                  onChange={(e) => setOpeningDraft((d) => ({ ...d, [a.id]: e.target.value.replace(/[^\d]/g, "").slice(0, 12) }))}
+                                                  placeholder="Solde de départ (FCFA)"
+                                                  className="flex-1 min-w-0 px-3 py-2 rounded-lg text-sm outline-none gc-mono"
+                                                  style={{ background: COLORS.bgSoft, border: `1px solid ${COLORS.surfaceLine}`, color: COLORS.text }}
+                                                />
+                                                <button
+                                                  type="button"
+                                                  disabled={linkBusy === a.id}
+                                                  onClick={() => saveOpeningBalance(a.id)}
+                                                  className="gc-btn px-3 rounded-lg text-xs font-medium"
+                                                  style={{ background: COLORS.gold, color: "#052E36", opacity: linkBusy === a.id ? 0.6 : 1 }}
+                                                >
+                                                  Valider
+                                                </button>
+                                              </div>
+                                            </>
+                                          )}
+                                        </div>
+                                      );
+                                    })()}
                                     <div className="mt-2 flex items-center justify-between gap-2">
                                       <div className="text-[11px]" style={{ color: COLORS.textMuted }}>
                                         {assigned.length === 0 ? "Utilisable par : tous les agents" : `Utilisable par : ${assignedNames.join(", ")}`}
@@ -7492,6 +7697,17 @@ export default function GuichetApp() {
                               style={inputStyle}
                             />
                           )}
+                          <input
+                            inputMode="numeric"
+                            value={linkField(n.id, "opening")}
+                            onChange={(e) => setLinkField(n.id, "opening", e.target.value.replace(/[^\d]/g, "").slice(0, 12))}
+                            placeholder="Solde de départ (FCFA) — obligatoire"
+                            className="w-full px-3 py-2 rounded-lg text-sm mb-1 outline-none gc-mono"
+                            style={inputStyle}
+                          />
+                          <div className="text-[10px] mb-2" style={{ color: COLORS.textMuted }}>
+                            Montant affiché maintenant sur ton téléphone (0 si vide). Le solde de cette puce sera ensuite calculé d'après les opérations enregistrées.
+                          </div>
                           <button
                             type="button"
                             onClick={() => setLinkScanFor(n.id)}
