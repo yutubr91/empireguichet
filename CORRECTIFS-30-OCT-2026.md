@@ -47,3 +47,10 @@ Fichier : `supabase_migration_grants_service_role.sql` — à exécuter une fois
 ## 8. Solde des puces visible par les agents (3 nov. 2026)
 - `supabase_migration_solde_puces_visible_agents.sql` : à exécuter une fois (après la migration « solde des puces »).
 - `App.jsx` : l'agent simple voit, en lecture seule, le solde des puces qui lui sont attribuées (ou partagées).
+
+## 9. Commission de l'agent par réseau (3 nov. 2026)
+- `App.jsx` : tableau `AGENT_COMMISSION_BY_NETWORK` (haut du fichier) = taux de commission par réseau et par opération (dépôt / retrait).
+- Pré-rempli : Wave ≈ 0,27 % (barème Wave CI de juin 2022, à vérifier). MTN / Orange / Moov : ESTIMATION dépôt 0,5 % / retrait 1 % (blog non officiel), affichée « (estimation) ». Djamo, crypto, factures, péage : `null` (ancien calcul simulé).
+- Pour renseigner un taux réel : remplacer `null` par le taux (0.005 = 0,5 %).
+- Djamo : ESTIMATION dépôt 0,5 % / retrait 1 %.
+- USDT : commission = écart entre le cours du dollar (lu en direct, `open.er-api.com`, repli 615) et les taux clients `USDT_CLIENT_SELL_RATE` (625) / `USDT_CLIENT_BUY_RATE` (605) — ESTIMATIONS à remplacer par tes taux réels. Le gain varie avec le dollar.

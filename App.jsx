@@ -700,6 +700,46 @@ const LOGO_DATA_URI = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAWgAAAFQCAY
 const MAX_TRANSACTION = 1000000;
 const INITIAL_FLOAT = 500000;
 const AGENT_COMMISSION_RATE = 0.35;
+
+// Commission de l'agent par réseau et par type d'opération (part du MONTANT de l'opération).
+// À COMPLÉTER avec les taux réels de ton contrat de distributeur (ex. 0.005 = 0,5 %).
+//  - Un taux renseigné est utilisé tel quel.
+//  - null = taux non renseigné : l'application utilise alors l'ESTIMATION (frais simulés × AGENT_COMMISSION_RATE).
+// Source des taux pré-remplis :
+//  - Wave CI : barème de commissions Wave (juin 2022) = 2 675 FCFA par million de FCFA de volume, soit ≈ 0,27 % (peut avoir changé).
+const AGENT_COMMISSION_BY_NETWORK = {
+  mtn: { depot: 0.005, retrait: 0.01 }, // ESTIMATION (copiée d'Orange, aucune source publique MTN)
+  orange: { depot: 0.005, retrait: 0.01 }, // ESTIMATION : bas de la fourchette d'un blog (dépôt 0,5-1 %, retrait 1-1,5 %), non officiel
+  moov: { depot: 0.005, retrait: 0.01 }, // ESTIMATION (copiée d'Orange, aucune source publique Moov)
+  wave: { depot: 0.0027, retrait: 0.0027 }, // sourcé (barème Wave 2022)
+  djamo: { depot: 0.005, retrait: 0.01 }, // ESTIMATION (copiée d'Orange, aucune source publique Djamo)
+  crypto: { depot: null, retrait: null },
+  cie: { depot: null, retrait: null },
+  sodeci: { depot: null, retrait: null },
+  peage: { depot: null, retrait: null },
+};
+// USDT : le gain de l'agent vient de l'écart entre le COURS DU DOLLAR (marché) et les taux qu'il applique à ses clients.
+//  - Dépôt  (le client donne du cash, l'agent envoie des USDT) : gain par USDT = taux de VENTE client − cours du marché.
+//  - Retrait (le client envoie des USDT, l'agent paie en cash)  : gain par USDT = cours du marché − taux d'ACHAT client.
+// Quand le dollar varie, le gain varie : le cours du marché est lu en direct (repli : FCFA_PER_USDT).
+// Les deux taux clients ci-dessous sont des ESTIMATIONS : remplace-les par ceux que tu appliques réellement (FCFA pour 1 USDT).
+const USDT_CLIENT_SELL_RATE = 625; // taux auquel l'agent VEND des USDT à un client (dépôt)
+const USDT_CLIENT_BUY_RATE = 605; // taux auquel l'agent ACHÈTE des USDT à un client (retrait)
+// Réseaux dont le taux ci-dessus est une estimation non officielle (affichée « estimation » dans l'application).
+const AGENT_COMMISSION_ESTIMATED = new Set(["mtn", "orange", "moov", "djamo"]);
+// Retourne { amount, estimated } : commission de l'agent pour une opération.
+function agentCommissionFor(netId, direction, amount, usdtMarketRate) {
+  const net = NETWORKS.find((n) => n.id === netId);
+  if (netId === "crypto") {
+    const market = usdtMarketRate > 0 ? usdtMarketRate : FCFA_PER_USDT;
+    const clientRate = direction === "retrait" ? USDT_CLIENT_BUY_RATE : USDT_CLIENT_SELL_RATE;
+    const gainPerUsdt = direction === "retrait" ? market - clientRate : clientRate - market;
+    return { amount: (amount / clientRate) * gainPerUsdt, estimated: true };
+  }
+  const rate = AGENT_COMMISSION_BY_NETWORK[netId]?.[direction === "retrait" ? "retrait" : "depot"];
+  if (typeof rate === "number") return { amount: amount * rate, estimated: AGENT_COMMISSION_ESTIMATED.has(netId) };
+  return { amount: net ? amount * net.fee * AGENT_COMMISSION_RATE : 0, estimated: true };
+}
 const PAST_DAYS = [
   { day: "Lun", volume: 420000 },
   { day: "Mar", volume: 380000 },
@@ -4036,10 +4076,26 @@ export default function GuichetApp() {
   }
 
   const todayVolume = history.reduce((sum, h) => sum + h.amount, 0);
-  const todayCommission = history.reduce((sum, h) => {
-    const hNet = NETWORKS.find((n) => n.id === h.net);
-    return sum + h.amount * hNet.fee * AGENT_COMMISSION_RATE;
-  }, 0);
+  // Cours du dollar (USDT ≈ USD) en FCFA, lu en direct ; repli sur la valeur fixe si le service est injoignable.
+  const [usdtMarketRate, setUsdtMarketRate] = useState(FCFA_PER_USDT);
+  useEffect(() => {
+    let cancelled = false;
+    async function loadUsdRate() {
+      try {
+        const res = await fetch("https://open.er-api.com/v6/latest/USD");
+        const json = await res.json();
+        const r = json?.rates?.XOF;
+        if (!cancelled && typeof r === "number" && r > 300 && r < 1000) setUsdtMarketRate(r);
+      } catch (e) {
+        /* repli sur FCFA_PER_USDT */
+      }
+    }
+    loadUsdRate();
+    const t = setInterval(loadUsdRate, 30 * 60 * 1000);
+    return () => { cancelled = true; clearInterval(t); };
+  }, []);
+  const todayCommission = history.reduce((sum, h) => sum + agentCommissionFor(h.net, h.direction, h.amount, usdtMarketRate).amount, 0);
+  const todayCommissionEstimated = history.some((h) => agentCommissionFor(h.net, h.direction, h.amount, usdtMarketRate).estimated);
   const [adSpend, setAdSpend] = useState(0); // total dépensé en publicités par cet agent (simulé)
   const floatChange = history.reduce((sum, h) => sum + (h.direction === "retrait" ? h.amount : -h.amount), 0);
   const floatBalance = Math.max(INITIAL_FLOAT + floatChange - adSpend + ownerAdRevenue, 0);
@@ -5475,7 +5531,7 @@ export default function GuichetApp() {
                 { label: "Transactions aujourd'hui", value: history.length },
                 { label: "Volume traité", value: formatFCFA(todayVolume) },
                 { label: "Solde disponible", value: formatFCFA(floatBalance), warn: floatBalance < 50000 },
-                { label: "Commissions du jour", value: formatFCFA(todayCommission), teal: true },
+                { label: todayCommissionEstimated ? "Commissions du jour (estim.)" : "Commissions du jour", value: formatFCFA(todayCommission), teal: true },
               ].map((s) => (
                 <div key={s.label} className="p-4 rounded-xl" style={{ background: COLORS.surface, border: `1px solid ${COLORS.surfaceLine}` }}>
                   <div className="text-xs mb-1.5" style={{ color: COLORS.textMuted }}>{s.label}</div>
@@ -6216,7 +6272,7 @@ export default function GuichetApp() {
                   </div>
                 </div>
                 <div style={{ borderTop: `1px dashed ${COLORS.surfaceLine}` }} className="pt-3">
-                  <div className="text-xs mb-1" style={{ color: COLORS.textMuted }}>Commissions du jour</div>
+                  <div className="text-xs mb-1" style={{ color: COLORS.textMuted }}>Commissions du jour{todayCommissionEstimated ? " (estimation)" : ""}</div>
                   <div className="gc-display gc-mono text-xl font-semibold" style={{ color: COLORS.teal }}>
                     {formatFCFA(todayCommission)}
                   </div>
