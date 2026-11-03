@@ -43,3 +43,7 @@ Fichier : `supabase_migration_grants_service_role.sql` — à exécuter une fois
 - `supabase_migration_solde_puces_rapprochement.sql` : à exécuter une fois dans le SQL Editor (après `supabase_migration_comptes_agents.sql`).
 - `App.jsx` : solde de départ obligatoire à la liaison d'une puce, solde calculé affiché, bouton « Rapprocher » (écart + ajustement tracé).
 - Le solde est calculé d'après les opérations enregistrées : ce n'est pas une lecture directe de l'opérateur.
+
+## 8. Solde des puces visible par les agents (3 nov. 2026)
+- `supabase_migration_solde_puces_visible_agents.sql` : à exécuter une fois (après la migration « solde des puces »).
+- `App.jsx` : l'agent simple voit, en lecture seule, le solde des puces qui lui sont attribuées (ou partagées).

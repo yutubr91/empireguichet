@@ -2065,13 +2065,13 @@ export default function GuichetApp() {
       } else {
         setLinkAssignments([]);
       }
-      if (agent?.role === "manager") loadLinkBalances();
+      loadLinkBalances();
     }
   }
 
   // Solde CALCULÉ de chaque puce : solde de départ + retraits − dépôts + ajustements validés. Ce n'est jamais une lecture directe de l'opérateur.
   async function loadLinkBalances() {
-    if (!agent?.agencyId || agent.role !== "manager") return;
+    if (!agent?.agencyId) return;
     const { data, error } = await supabase.rpc("get_linked_account_balances", { p_agency: agent.agencyId });
     if (error) {
       setBalancesReady(false);
@@ -6032,6 +6032,19 @@ export default function GuichetApp() {
                             ))}
                           </select>
                         )}
+                        {agent?.role !== "manager" && (() => {
+                          const bal = linkBalances[chosenAccountId];
+                          if (!chosenAccountId || !bal || bal.calculated_balance === null || bal.calculated_balance === undefined) return null;
+                          return (
+                            <div className="mt-2 pt-2" style={{ borderTop: `1px solid ${COLORS.surfaceLine}` }}>
+                              <div style={{ color: COLORS.textMuted }}>Solde de cette puce (défini par ton chef)</div>
+                              <div className="gc-mono text-sm font-medium">{formatFCFA(Number(bal.calculated_balance))}</div>
+                              <div className="text-[10px]" style={{ color: COLORS.textMuted }}>
+                                Calculé d'après les opérations enregistrées — pas une lecture directe de l'opérateur.
+                              </div>
+                            </div>
+                          );
+                        })()}
                       </>
                     ) : allAccs.length === 0 ? (
                       agent?.role === "manager" ? (
